@@ -1,0 +1,463 @@
+
+QWidget
+{
+    font-family: "Microsoft YaHei";
+}
+QLabel
+{
+    
+}
+TACNavigationBarWidget QPushButton {
+    border: none;
+    border-radius: 30px;
+    
+}
+TACNavigationBarWidget QPushButton:hover {
+    border: 1px solid rgba(255,255,255,0.1);
+    background-color:rgba(255,255,255,0.2);
+}
+
+TACNavigationBarWidget #classNameButton
+{
+    background-color:rgba(11,11,11);
+    font-size: 20px;
+    color: #ffffff;
+    padding: 16px 25px;
+    border-radius:25px;
+    border: none;
+    
+}
+TACNavigationBarWidget #classNameButton:hover
+{
+    background-color:rgba(11,11,11);
+    border: none;
+}
+TACNavigationBarWidget #separatorLineLabel
+{
+    background-color:rgba(255,255,255,25);
+    border: none;
+}
+TACCountDownWidget QLabel
+{
+    color: #F35E5B;
+    font-size: 23px;
+}
+QPushButton#closeButton {
+    qproperty-icon: url(:/res/img/close-normal.png);
+    qproperty-iconSize: 22px 22px;
+    border: none;
+    background-color: transparent;
+    padding: 0px;
+}
+
+QPushButton#closeButton:hover {
+    qproperty-icon: url(:/res/img/close-hover.png);
+}
+QPushButton#closeButton {
+    qproperty-icon: url(:/res/img/close-normal.png);
+    qproperty-iconSize: 22px 22px;
+    border: none;
+    background-color: transparent;
+    padding: 0px;
+}
+TACFolderWidget #homeButton {
+    qproperty-icon: url(:/res/img/home_file_nor.png);
+}
+
+#titleBar  QLabel
+{
+    font-weight: 600;
+    font-size: 23px;
+    color: #FFFFFF;
+}
+#buttonWidget QPushButton
+{
+    background: #464646;
+    border-radius: 20px;
+    font-weight: 500;
+    font-size: 20px;
+    color: #FFFFFF;
+    padding: 18px 25px;
+}
+#buttonWidget #enterButton
+{ 
+    background-color: #5079F6;
+}
+TACDateTimeDialog #contentWidget #upContentLabel
+{
+    font-weight: 500;
+    font-size: 64px;
+    color: #FFFFFF;
+}
+TACDateTimeDialog #contentWidget #downContentLabel
+{
+    font-weight: 500;
+font-size: 20px;
+color: #FFFFFF;
+}
+TACDateTimeWidget #upContentLabel
+{
+    font-weight: 500;
+    font-size: 64px;
+    color: #FFFFFF;
+}
+TACDateTimeWidget #downContentLabel
+{
+    font-weight: 500;
+font-size: 20px;
+color: #FFFFFF;
+}
+TACDateTimeDialog #contentWidget
+{
+    background: rgba(255,255,255,0.1);
+    border-radius: 20px;
+}
+TACTypeButton
+{
+    background: rgba(255,255,255,0.1);
+    border-radius: 10px;
+    font-weight: 500;
+    font-size: 20px;
+    color: #FFFFFF;
+    padding-top:16px;
+    padding-bottom:16px;
+}
+TACTypeButton:checked
+{
+    background: rgba(255,255,255);
+    border-radius: 10px;
+    font-weight: 500;
+    font-size: 20px;
+    color: #5079F6;
+    border: 2px solid #5079F6;
+}
+TACLogoDialog QLabel
+{
+    font-weight: 600;
+font-size: 20px;
+color: #FFFFFF;
+}
+TACLogoDialog QLineEdit
+{
+    background: rgba(255,255,255,0.1);
+border-radius: 10px;
+font-weight: 500;
+font-size: 20px;
+color: #FFFFFF;
+padding: 16px;
+}
+TACLogoDialog QToolButton {
+   
+    border: none;
+    background: rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding-top: 30px;
+    font-weight: 500;
+font-size: 16px;
+color: #FFFFFF;
+}
+TACClassLabelWidget QLabel
+{
+    font-weight: 500;
+font-size: 20px;
+color: #FFFFFF;
+}
+TACSchoolLabelWidget QLabel
+{
+    font-weight: 500;
+font-size: 20px;
+color: #FFFFFF;
+}
+ 
+TACFolderWidget QPushButton {
+    background-color: #2C2C2C;
+    border-radius: 40px;
+}
+TACCourseSchedule QPushButton
+{
+    background: rgba(255,255,255,0.2);
+    border-radius: 20px;
+    font-weight: 500;
+font-size: 20px;
+color: #FFFFFF;
+padding-top: 20px;
+padding-bottom: 20px;
+}
+TACCourseSchedule QLabel
+{
+    font-weight: 500;
+font-size: 20px;
+color: #FFFFFF;
+padding-top: 20px;
+padding-bottom: 20px;
+}
+TACFolderDialog QScrollArea
+{
+    background: transparent;
+    border: none;
+}
+TACFolderDialog QScrollArea QWidget
+{
+    background: transparent;
+    border: none;
+}
+TACFolderDialog QToolButton
+{
+    font-weight: 500;
+font-size: 14px;
+color: #FFFFFF;
+}
+TACCountDownDialog QLabel
+{
+    font-weight: 600;
+font-size: 20px;
+color: #FFFFFF;
+}
+TACCountDownDialog #calendarButton{
+    background: rgba(255,255,255,0.1);
+border-radius: 10px;
+    font-weight: 600;
+font-size: 20px;
+color: #FFFFFF;
+    padding: 16px 25px;
+    border: none;
+    text-align: left;
+    icon-position: right;
+    
+}
+TACCountDownDialog QLineEdit
+{
+    background: rgba(255,255,255,0.1);
+border-radius: 10px;
+font-weight: 500;
+font-size: 20px;
+color: #FFFFFF;
+padding: 16px;
+}
+TACCountDownDialog #countDownLabel
+{
+    font-size: 60px;
+    font-weight:900;
+color: #FFFFFF;
+background-image: url(:/res/img/countdown_popup_bg.png);
+background-repeat: no-repeat;
+background-position: center;
+background-size: cover;
+}
+TACWallpaperLibraryDialog QScrollArea
+{
+    background: transparent;
+    border: none;
+}
+TACWallpaperLibraryDialog QScrollArea QWidget
+{
+    background: transparent;
+    border: none;
+}
+TACWallpaperLibraryDialog QPushButton
+{
+    background: rgba(255,255,255,0.05);
+border-radius: 10px;
+font-weight: 500;
+font-size: 18px;
+color: #FFFFFF;
+padding: 8px 20px;
+}
+
+
+/* 水平滚动条整体 */
+QScrollBar:horizontal {
+    border: none;
+    background: transparent;
+    height: 10px;
+    margin: 0px 0px 0px 0px;
+}
+
+QScrollBar::handle:horizontal {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    min-width: 10px;
+    border-radius: 3px;
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    border: none;
+    background: transparent;
+    width: 0px;
+}
+
+QScrollBar::add-page:horizontal,
+QScrollBar::sub-page:horizontal {
+    background: none;
+}
+
+/* 垂直滚动条整体 */
+QScrollBar:vertical {
+    border: none;
+    background: transparent;
+    width: 10px;
+    margin: 0px 0px 0px 0px;
+}
+
+QScrollBar::handle:vertical {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    min-height: 10px;
+    border-radius: 3px;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    border: none;
+    background: transparent;
+    height: 0px;
+}
+
+QScrollBar::up-arrow:vertical,
+QScrollBar::down-arrow:vertical {
+    border: none;
+    background: transparent;
+    color: transparent;
+}
+
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {
+    background: none;
+}
+TACHomeworkDialog #contentLabel
+{
+    font-weight: 600;
+font-size: 22px;
+color: #FFFFFF;
+background: rgba(255,255,255,0.1);
+border-radius: 25px;
+padding: 10px;
+}
+TACalendarWidget #yearButton,#monthButton
+{
+    background: rgba(255,255,255,0.05);
+border-radius: 10px;
+font-weight: 500;
+font-size: 20px;
+color: #FFFFFF;
+padding: 8px 20px;
+}
+TACIMDialog #usersScrollArea
+{
+    background: transparent;
+    border: none;
+}
+TACIMDialog #usersScrollArea QWidget
+{
+    background: transparent;
+    border: none;
+}
+TACIMDialog #messageScrollArea
+{
+    background-color: #111111;
+    border: none;
+    border-radius: 30px;
+}
+TACIMDialog #messageScrollArea QWidget
+{
+    background: transparent;
+    border: none;
+    border-radius: 30px;
+}
+
+TACDesktopManagerWidget QLabel
+{
+    font-weight: 600;
+font-size: 20px;
+color: #FFFFFF;
+}
+TACDesktopManagerWidget QPushButton
+{
+    font-weight: 500;
+font-size: 18px;
+color: #FFFFFF;
+text-align: left;
+border: none;
+background: transparent;
+padding-top: 18px;
+padding-bottom: 18px;
+padding-left: 20px;
+}
+TACDesktopManagerWidget QPushButton:hover
+{
+background: rgba(255,255,255,0.05);
+border-radius: 20px;
+
+}
+TACIMDialog QToolButton
+{
+    background: transparent;
+    font-weight: 600;
+font-size: 12px;
+color: rgba(255,255,255,0.6);
+line-height: 18px;
+}
+TACIMDialog QPushButton
+{
+    background: rgba(255,255,255,0.12);
+border-radius: 12px;
+font-weight: 600;
+font-size: 20px;
+color: #FFFFFF;
+padding-top: 15px;
+padding-bottom: 15px;
+}
+TACIMDialog QLineEdit
+{
+    background: rgba(255,255,255,0.12);
+border-radius: 12px;
+font-weight: 600;
+font-size: 20px;
+color: #FFFFFF;
+padding-top: 15px;
+padding-bottom: 15px;
+}
+TACIMDialog #keyButton
+{
+    background: rgba(255,255,255,0.12);
+border-radius: 30px;
+}
+TACClassWeekCourseScheduleDialog #container QPushButton
+{
+    background: rgba(255,255,255,0.1);
+border-radius: 0px;
+font-weight: 500;
+font-size: 20px;
+color: #FFFFFF;
+padding: 15px 25px;
+}
+TACClassWeekCourseScheduleDialog #container
+{
+    background: rgba(255,255,255,0.1);
+border-radius: 40px;
+}
+TACClassWeekCourseScheduleDialog #container QLabel
+{
+font-weight: 500;
+font-size: 20px;
+color: #FFFFFF;
+}
+TACToolWidget QPushButton
+{
+    background: transparent;
+}
+TACClassWeekCourseScheduleDialog #morningLabel,#afternoonLabel
+{
+    padding-left: 20px;
+}
+TACClassWeekCourseScheduleDialog #gridWidget
+{
+    border-bottom-right-radius: 40px;
+}
+TACClassWeekCourseScheduleDialog #labelWidget
+{
+    background: rgba(255,255,255,0.12);
+    border-top-left-radius: 40px;
+    border-top-right-radius: 40px;
+}

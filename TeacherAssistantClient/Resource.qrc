@@ -1,0 +1,33 @@
+<RCC>
+    <qresource prefix="/">
+        <file>res/img/arrow-down.png</file>
+        <file>res/img/arrow-up.png</file>
+        <file>res/img/calendar.png</file>
+        <file>res/img/close-hover.png</file>
+        <file>res/img/close-normal.png</file>
+        <file>res/img/edit.png</file>
+        <file>res/img/folder.png</file>
+        <file>res/img/home.png</file>
+        <file>res/img/message.png</file>
+        <file>res/img/palette.png</file>
+        <file>res/img/phone.png</file>
+        <file>res/img/qinghua.png</file>
+        <file>res/img/timer.png</file>
+        <file>res/img/user.png</file>
+        <file>res/img/user1.png</file>
+        <file>res/css/main.css</file>
+        <file>res/img/type-button-checked.png</file>
+        <file>res/img/widget-close.png</file>
+        <file>res/img/text_popup_ic_add_hover.png</file>
+        <file>res/img/text_popup_ic_add_nor.png</file>
+        <file>res/img/home_ic_file_hover.png</file>
+        <file>res/img/home_ic_file_nor.png</file>
+        <file>res/img/home_file_nor.png</file>
+        <file>res/img/countdown_popup_bg.png</file>
+        <file>res/img/homework.png</file>
+        <file>res/img/font-fill.png</file>
+        <file>res/img/font-underline.png</file>
+        <file>res/img/font-decrease.png</file>
+        <file>res/img/font-increase.png</file>
+    </qresource>
+</RCC>

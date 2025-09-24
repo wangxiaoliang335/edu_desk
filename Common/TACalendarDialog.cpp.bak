@@ -1,0 +1,299 @@
+﻿#pragma execution_character_set("utf-8")
+#include "TACalendarDialog.h"
+#include <QPainterPath>
+#include <QVariant>
+TACalendarWidget::TACalendarWidget(QWidget* parent)
+    : QWidget(parent)
+    , m_currentDate(QDate::currentDate())
+    , m_selectedDate(QDate::currentDate())
+{
+    setWindowFlags(
+        Qt::FramelessWindowHint |
+        Qt::Tool |
+        Qt::WindowStaysOnTopHint
+    );
+    setAttribute(Qt::WA_TranslucentBackground);
+    this->setObjectName("TACalendarWidget");
+    m_mainLayout = new QVBoxLayout(this);
+    m_mainLayout->setSpacing(10);
+    m_mainLayout->setContentsMargins(20,20,20,20);
+
+    QHBoxLayout* navLayout = new QHBoxLayout();
+    navLayout->setSpacing(10);
+    navLayout->addStretch();
+
+    m_yearCombo = new QComboBox(this);
+    m_yearCombo->setFixedWidth(110);
+    connect(m_yearCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+        this, &TACalendarWidget::onYearChanged);
+
+    m_monthCombo = new QComboBox(this);
+    connect(m_monthCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+        this, &TACalendarWidget::onMonthChanged);
+
+    navLayout->addWidget(m_yearCombo);
+    navLayout->addWidget(m_monthCombo);
+    navLayout->addStretch();
+
+    m_calendarLayout = new QGridLayout();
+    m_calendarLayout->setSpacing(2);
+    m_calendarLayout->setContentsMargins(0, 0, 0, 0);
+
+    m_mainLayout->addLayout(navLayout);
+    m_mainLayout->addLayout(m_calendarLayout);
+
+    createWeekdayLabels();
+    populateYearCombo();
+    populateMonthCombo();
+    updateCalendar();
+}
+void TACalendarWidget::populateYearCombo()
+{
+    m_yearCombo->clear();
+
+    int currentYear = m_currentDate.year();
+    int startYear = currentYear - 10;
+    int endYear = currentYear + 10;
+
+    for (int year = startYear; year <= endYear; ++year) {
+        m_yearCombo->addItem(QString::number(year), year);
+    }
+    int index = m_yearCombo->findData(currentYear);
+    if (index != -1) {
+        m_yearCombo->setCurrentIndex(index);
+    }
+}
+
+void TACalendarWidget::populateMonthCombo()
+{
+    m_monthCombo->clear();
+    for (int month = 1; month <= 12; ++month) {
+        QString monthName = QDate(2000, month, 1).toString("MMMM");
+        m_monthCombo->addItem(monthName, month);
+    }
+    int index = m_monthCombo->findData(m_currentDate.month());
+    if (index != -1) {
+        m_monthCombo->setCurrentIndex(index);
+    }
+}
+void TACalendarWidget::onYearChanged(int index)
+{
+    if (index < 0) return;
+
+    QVariant data = m_yearCombo->itemData(index);
+    bool ok;
+    int newYear = data.toInt(&ok);
+    if (ok) {
+        m_currentDate = QDate(newYear, m_currentDate.month(), 1);
+        updateCalendar();
+    }
+}
+void TACalendarWidget::onMonthChanged(int index)
+{
+    if (index < 0) return;
+
+    QVariant data = m_monthCombo->itemData(index);
+    bool ok;
+    int newMonth = data.toInt(&ok);
+    if (ok) {
+        m_currentDate = QDate(m_currentDate.year(), newMonth, 1);
+        updateCalendar();
+    }
+}
+
+void TACalendarWidget::createWeekdayLabels()
+{
+    QStringList weekdayNames = {
+         tr("一"),
+         tr("二"),
+         tr("三"),
+         tr("四"),
+         tr("五"),
+         tr("六"),
+         tr("日") 
+    };
+    for (int i = 0; i < 7; ++i) {
+        QLabel* label = new QLabel(weekdayNames[i], this);
+        label->setAlignment(Qt::AlignCenter);
+        label->setProperty("isWeekdayLabel", true);
+
+        m_calendarLayout->addWidget(label, 0, i);
+    }
+}
+
+void TACalendarWidget::updateCalendar()
+{
+    clearDateButtons();
+    QDate firstDayOfMonth(m_currentDate.year(), m_currentDate.month(), 1);
+    int dayOfWeek = firstDayOfMonth.dayOfWeek();
+    int startCol = dayOfWeek - 1;
+
+    int daysInMonth = m_currentDate.daysInMonth();
+    int totalCells = daysInMonth + startCol;
+    int numRows = (totalCells + 6) / 7;
+    int currentRow = 1;
+    int currentCol = 0;
+    QDate prevMonth = m_currentDate.addMonths(-1);
+    int daysInPrevMonth = prevMonth.daysInMonth();
+    int prevMonthStartDay = daysInPrevMonth - startCol + 1;
+
+    for (int d = prevMonthStartDay; d <= daysInPrevMonth; ++d) {
+        QPushButton* btn = new QPushButton(QString::number(d), this);
+        btn->setEnabled(false);
+        m_calendarLayout->addWidget(btn, currentRow, currentCol);
+        m_dateButtons.append(btn);
+
+        currentCol++;
+        if (currentCol >= 7) {
+            currentCol = 0;
+            currentRow++;
+        }
+    }
+    for (int d = 1; d <= daysInMonth; ++d) {
+        QPushButton* btn = new QPushButton(QString::number(d), this);
+        QDate dateObj(m_currentDate.year(), m_currentDate.month(), d);
+
+        // 设置按钮的样式
+        QString style = "";
+        if (dateObj == QDate::currentDate()) {
+            style += "background-color: lightblue; font-weight: bold;";
+        }
+        if (dateObj == m_selectedDate) {
+            style += " border: 2px solid red;";
+        }
+        btn->setStyleSheet(style);
+        connect(btn, &QPushButton::clicked, this, [this, dateObj]() {
+            selectDate(dateObj);
+            });
+
+        m_calendarLayout->addWidget(btn, currentRow, currentCol);
+        m_dateButtons.append(btn);
+
+        currentCol++;
+        if (currentCol >= 7) {
+            currentCol = 0;
+            currentRow++;
+        }
+    }
+
+    int totalGridCells = numRows * 7;
+    int remainingCells = totalGridCells - (startCol + daysInMonth);
+
+    for (int d = 1; d <= remainingCells; ++d) {
+        QPushButton* btn = new QPushButton(QString::number(d), this);
+        btn->setStyleSheet("color: lightgray;");
+        btn->setEnabled(false);
+        m_calendarLayout->addWidget(btn, currentRow, currentCol);
+        m_dateButtons.append(btn);
+
+        currentCol++;
+        if (currentCol >= 7) {
+            currentCol = 0;
+            currentRow++;
+        }
+    }
+
+    for (int r = 1; r < numRows; ++r) {
+        m_calendarLayout->setRowStretch(r, 1);
+    }
+}
+void TACalendarWidget::selectDate(const QDate& date)
+{
+    if (date.isValid() && date != m_selectedDate) {
+        m_selectedDate = date;
+        m_currentDate = date;
+
+        int yearIndex = m_yearCombo->findData(date.year());
+        if (yearIndex != -1) {
+            m_yearCombo->setCurrentIndex(yearIndex);
+        }
+        else {
+            populateYearCombo();
+            yearIndex = m_yearCombo->findData(date.year());
+            if (yearIndex != -1) {
+                m_yearCombo->setCurrentIndex(yearIndex);
+            }
+        }
+
+        int monthIndex = m_monthCombo->findData(date.month());
+        if (monthIndex != -1) {
+            m_monthCombo->setCurrentIndex(monthIndex);
+        }
+
+        updateCalendar();
+        emit selectionChanged();
+    }
+}
+void TACalendarWidget::clearDateButtons()
+{
+    qDeleteAll(m_dateButtons);
+    m_dateButtons.clear();
+}
+
+
+void TACalendarWidget::paintEvent(QPaintEvent* event)
+{
+    Q_UNUSED(event);
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+
+
+    QRect rect(0, 0, width(), height());
+    int cornerRadius = m_radius;
+    QPainterPath path;
+    path.addRoundedRect(rect, cornerRadius, cornerRadius);
+
+    painter.fillPath(path, QBrush(m_backgroundColor));
+
+    QPen pen;
+    pen.setWidth(m_borderWidth);
+    pen.setColor(m_borderColor);
+    painter.strokePath(path, pen);
+}
+
+QDate TACalendarWidget::selectedDate() const
+{
+    return m_selectedDate;
+}
+
+void TACalendarWidget::setSelectedDate(const QDate& date)
+{
+    if (date.isValid() && date != m_selectedDate) {
+        m_selectedDate = date;
+        m_currentDate = date;
+        updateCalendar();
+        emit selectionChanged();
+    }
+}
+void TACalendarWidget::setRadius(int val)
+{
+    if (m_radius != val)
+    {
+        m_radius = val;
+        update();
+    }
+}
+void TACalendarWidget::setBorderWidth(int val)
+{
+    if (m_borderWidth != val)
+    {
+        m_borderWidth = val;
+        update();
+    }
+}
+void TACalendarWidget::setBorderColor(const QColor& color)
+{
+    if (m_borderColor != color)
+    {
+        m_borderColor = color;
+        update();
+    }
+}
+void TACalendarWidget::setBackgroundColor(const QColor& color)
+{
+    if (m_backgroundColor != color)
+    {
+        m_backgroundColor = color;
+        update();
+    }
+}

@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/">
+        <file>res/img/widget-close.png</file>
+    </qresource>
+</RCC>

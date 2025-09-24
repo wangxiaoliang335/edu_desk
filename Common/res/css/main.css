@@ -1,0 +1,122 @@
+
+QWidget
+{
+    font-family: "Microsoft YaHei";
+}
+QLabel
+{
+    
+}
+TACNavigationBarWidget QPushButton {
+    border: none;
+    border-radius: 30px;
+    
+}
+TACNavigationBarWidget QPushButton:hover {
+    border: 1px solid rgba(255,255,255,0.1);
+    background-color:rgba(255,255,255,0.2);
+}
+
+TACNavigationBarWidget #classNameButton
+{
+    background-color:rgba(11,11,11);
+    font-size: 20px;
+    color: #ffffff;
+    padding: 16px 25px;
+    border-radius:25px;
+    border: none;
+    
+}
+TACNavigationBarWidget #classNameButton:hover
+{
+    background-color:rgba(11,11,11);
+    border: none;
+}
+TACNavigationBarWidget #separatorLineLabel
+{
+    background-color:rgba(255,255,255,25);
+    border: none;
+}
+TACCountDownWidget QLabel
+{
+    color: #F35E5B;
+    font-size: 23px;
+}
+QPushButton#closeButton {
+    qproperty-icon: url(:/res/img/close-normal.png);
+    qproperty-iconSize: 22px 22px;
+    border: none;
+    background-color: transparent;
+    padding: 0px;
+}
+
+QPushButton#closeButton:hover {
+    qproperty-icon: url(:/res/img/close-hover.png);
+}
+#titleBar  QLabel
+{
+    font-weight: 600;
+    font-size: 23px;
+    color: #FFFFFF;
+}
+#buttonWidget QPushButton
+{
+    background: #464646;
+    border-radius: 20px;
+    font-weight: 500;
+    font-size: 20px;
+    color: #FFFFFF;
+    padding: 18px 25px;
+}
+#buttonWidget #enterButton
+{ 
+    background-color: #5079F6;
+}
+TACDateTimeDialog #contentWidget #upContentLabel
+{
+    font-weight: 500;
+    font-size: 64px;
+    color: #FFFFFF;
+}
+TACDateTimeDialog #contentWidget #downContentLabel
+{
+    font-weight: 500;
+font-size: 20px;
+color: #FFFFFF;
+}
+TACDateTimeWidget #upContentLabel
+{
+    font-weight: 500;
+    font-size: 64px;
+    color: #FFFFFF;
+}
+TACDateTimeWidget #downContentLabel
+{
+    font-weight: 500;
+font-size: 20px;
+color: #FFFFFF;
+}
+TACDateTimeDialog #contentWidget
+{
+    background: rgba(255,255,255,0.1);
+    border-radius: 20px;
+}
+TACTypeButton
+{
+    background: rgba(255,255,255,0.1);
+    border-radius: 10px;
+    font-weight: 500;
+    font-size: 20px;
+    color: #FFFFFF;
+    padding-top:16px;
+    padding-bottom:16px;
+}
+TACTypeButton:checked
+{
+    background: rgba(255,255,255);
+    border-radius: 10px;
+    font-weight: 500;
+    font-size: 20px;
+    color: #5079F6;
+    border: 2px solid #5079F6;
+}
