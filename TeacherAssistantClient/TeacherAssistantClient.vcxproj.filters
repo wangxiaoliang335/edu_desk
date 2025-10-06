@@ -86,6 +86,12 @@
     <ClCompile Include="TACToolWidget.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="TACTrayWidget.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TACLoginDialog.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="common.h">
@@ -151,6 +157,12 @@
       <Filter>Header Files</Filter>
     </QtMoc>
     <QtMoc Include="TACToolWidget.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="TACTrayWidget.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="TACLoginDialog.h">
       <Filter>Header Files</Filter>
     </QtMoc>
   </ItemGroup>

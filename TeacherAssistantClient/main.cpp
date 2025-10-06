@@ -106,7 +106,6 @@ static void load_debug_privilege(void)
 	CloseHandle(token);
 }
 
-
 int main(int argc, char* argv[])
 {
 	QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
@@ -141,6 +140,9 @@ int main(int argc, char* argv[])
 		program.setStyleSheet(style);
 		qssFile.close();
 	}
-	program.AppInit();
-	program.exec();
+
+	if (true == program.AppInit())
+	{
+		program.exec();
+	}
 }

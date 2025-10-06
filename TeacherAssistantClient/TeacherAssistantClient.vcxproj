@@ -28,6 +28,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
@@ -68,6 +69,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <AdditionalIncludeDirectories>C:\workspace\obs\TeacherAssistant\Common;..\Common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
       <AdditionalDependencies>E:\合同\TeacherAssistantClient\Common\x64\Debug\Common.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -112,17 +114,21 @@
     <ClCompile Include="TACFolderWidget.cpp" />
     <ClCompile Include="TACHomeworkDialog.cpp" />
     <ClCompile Include="TACIMDialog.cpp" />
+    <ClCompile Include="TACLoginDialog.cpp" />
     <ClCompile Include="TACLogoDialog.cpp" />
     <ClCompile Include="TACLogoWidget.cpp" />
     <ClCompile Include="TACMainDialog.cpp" />
     <ClCompile Include="TACNavigationBarWidget.cpp" />
     <ClCompile Include="TACPrepareClassDialog.cpp" />
     <ClCompile Include="TACToolWidget.cpp" />
+    <ClCompile Include="TACTrayWidget.cpp" />
     <ClCompile Include="TACTypeButton.cpp" />
     <ClCompile Include="TACWallpaperLibraryDialog.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="common.h" />
+    <QtMoc Include="TACLoginDialog.h" />
+    <QtMoc Include="TACTrayWidget.h" />
     <QtMoc Include="TACToolWidget.h" />
     <QtMoc Include="TACClassWeekCourseScheduleDialog.h" />
     <QtMoc Include="TACPrepareClassDialog.h" />

@@ -33,6 +33,9 @@ TACNavigationBarWidget::TACNavigationBarWidget(QWidget *parent)
     messageButton->setFixedSize(BUTTON_SIZE);
     messageButton->setIcon(QIcon(":/res/img/message.png"));
     messageButton->setIconSize(ICON_SIZE);
+    connect(messageButton, &QPushButton::clicked, this, [=]() {
+        emit navType(TACNavigationBarWidgetType::MESSAGE);
+        });
     buttonGroup->addButton(messageButton);
     layout->addWidget(messageButton);
 
@@ -71,6 +74,9 @@ TACNavigationBarWidget::TACNavigationBarWidget(QWidget *parent)
     userButton->setFixedSize(BUTTON_SIZE);
     userButton->setIcon(QIcon(":/res/img/user.png"));
     userButton->setIconSize(ICON_SIZE);
+    connect(userButton, &QPushButton::clicked, this, [=]() {
+        emit navType(TACNavigationBarWidgetType::USER);
+        });
     buttonGroup->addButton(userButton);
     layout->addWidget(userButton);
 

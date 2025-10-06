@@ -23,7 +23,10 @@
 #include "TACPrepareClassDialog.h"
 #include "TACClassWeekCourseScheduleDialog.h"
 #include "ui_TACMainDialog.h"
-
+#include "TACTrayWidget.h"
+#include "SchoolInfoDialog.h"
+#include "TAUserMenuDialog.h"
+#include "FriendGroupDialog.h"
 
 class TACMainDialog : public QDialog
 {
@@ -51,13 +54,19 @@ private:
 	QPointer<TACLogoDialog> logoDialog;
 	QPointer<TACSchoolLabelWidget> schoolLabelWidget;
 	QPointer<TACClassLabelWidget> classLabelWidget;
+	QPointer<TACTrayLabelWidget>  trayLabelWidget;
+
 	QPointer<TACFolderWidget> folderWidget;
 	QPointer<TACCourseSchedule> courseSchedule;
 	QPointer<TACFolderDialog> folderDialog;
 	QPointer<TACWallpaperLibraryDialog> wallpaperLibraryDialog;
+	QPointer<TAUserMenuDialog> userMenuDlg;
 	QPointer<TACHomeworkDialog> homeworkDialog;
 	QPointer<TACIMDialog> imDialog;
+	QPointer<FriendGroupDialog> friendGrpDlg;
 	QPointer<TACDesktopManagerWidget> desktopManagerWidget;
 	QPointer<TACPrepareClassDialog> prepareClassDialog;
 	QPointer<TACClassWeekCourseScheduleDialog> classWeekCourseScheduldDialog;
+	QPointer<TACTrayWidget> trayWidget;
+	QPointer<SchoolInfoDialog> schoolInfoDlg;
 };

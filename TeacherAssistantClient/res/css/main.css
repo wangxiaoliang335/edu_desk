@@ -168,7 +168,11 @@ TACSchoolLabelWidget QLabel
 font-size: 20px;
 color: #FFFFFF;
 }
- 
+TACTrayLabelWidget QLabel {
+    font-weight: 500;
+    font-size: 20px;
+    color: #FFFFFF;
+}
 TACFolderWidget QPushButton {
     background-color: #2C2C2C;
     border-radius: 40px;
@@ -365,13 +369,34 @@ TACIMDialog #messageScrollArea QWidget
     border: none;
     border-radius: 30px;
 }
+TACTrayWidget QLabel {
+    font-weight: 600;
+    font-size: 20px;
+    color: #FFFFFF;
+}
+TACTrayWidget QPushButton {
+    font-weight: 500;
+    font-size: 18px;
+    color: #FFFFFF;
+    text-align: left;
+    border: none;
+    background: transparent;
+    padding-top: 18px;
+    padding-bottom: 18px;
+    padding-left: 20px;
+}
 
+TACTrayWidget QPushButton:hover {
+    background: rgba(255,255,255,0.05);
+    border-radius: 20px;
+}
 TACDesktopManagerWidget QLabel
 {
     font-weight: 600;
 font-size: 20px;
 color: #FFFFFF;
 }
+
 TACDesktopManagerWidget QPushButton
 {
     font-weight: 500;
@@ -390,6 +415,30 @@ background: rgba(255,255,255,0.05);
 border-radius: 20px;
 
 }
+
+TACAddGroupWidget QLabel {
+    font-weight: 600;
+    font-size: 20px;
+    color: #FFFFFF;
+}
+
+TACAddGroupWidget QPushButton {
+    font-weight: 500;
+    font-size: 18px;
+    color: #FFFFFF;
+    text-align: left;
+    border: none;
+    background: transparent;
+    padding-top: 18px;
+    padding-bottom: 18px;
+    padding-left: 20px;
+}
+
+    TACAddGroupWidget QPushButton:hover {
+        background: rgba(255,255,255,0.05);
+        border-radius: 20px;
+    }
+
 TACIMDialog QToolButton
 {
     background: transparent;
