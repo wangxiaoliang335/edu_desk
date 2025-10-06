@@ -135,3 +135,84 @@ void TACClassLabelWidget::initShow()
     int y = 55;
     this->move(x, y);
 }
+
+TACTrayLabelWidget::TACTrayLabelWidget(QWidget* parent) : TAFloatingWidget(parent)
+{
+    this->setObjectName("TACTrayLabelWidget");
+    //label = new QLabel("班级名称", this);
+    //label->setAlignment(Qt::AlignCenter);
+    QHBoxLayout* layout = new QHBoxLayout();
+    layout->setAlignment(Qt::AlignCenter);
+    //layout->addWidget(label);
+    this->setLayout(layout);
+
+    this->setBackgroundColor(WIDGET_BACKGROUND_COLOR);
+    this->setBorderColor(WIDGET_BORDER_COLOR);
+    this->setBorderWidth(WIDGET_BORDER_WIDTH);
+    this->setRadius(30);
+    this->resize(140, 70);
+
+    setWindowFlags(windowFlags() | Qt::WindowStaysOnTopHint);
+    //setWindowFlags(
+    //    Qt::WindowStaysOnTopHint  // 置顶标志
+    //    | Qt::WindowCloseButtonHint  // 保留关闭按钮（可选，避免窗口无关闭按钮）
+    //);
+}
+
+TACTrayLabelWidget::~TACTrayLabelWidget()
+{
+}
+
+void TACTrayLabelWidget::setContent(const QString& text)
+{
+    //label->setText(text);
+}
+void TACTrayLabelWidget::mouseDoubleClickEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton) {
+        emit doubleClicked();
+    }
+}
+
+void TACTrayLabelWidget::mouseReleaseEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton) {
+        emit clicked();
+    }
+}
+
+void TACTrayLabelWidget::paintEvent(QPaintEvent* event)
+{
+    Q_UNUSED(event);
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    if (!m_fileName.isEmpty())
+    {
+        QPixmap m_backgroundPixmap = QPixmap(m_fileName);
+        QPixmap scaled = m_backgroundPixmap.scaled(
+            size(),
+            Qt::KeepAspectRatio,
+            Qt::SmoothTransformation
+        );
+
+        QRect r = scaled.rect();
+        r.moveCenter(rect().center());
+        painter.drawPixmap(r, scaled);
+    }
+}
+
+void TACTrayLabelWidget::updateLogo(const QString& fileName)
+{
+    m_fileName = fileName;
+    update();
+}
+
+void TACTrayLabelWidget::initShow()
+{
+    QRect rect = this->getScreenGeometryWithTaskbar();
+    if (rect.isEmpty())
+        return;
+    int x = 1400;
+    int y = 780;
+    this->move(x, y);
+}

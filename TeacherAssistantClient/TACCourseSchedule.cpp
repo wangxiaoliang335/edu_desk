@@ -10,7 +10,7 @@ TACCourseSchedule::TACCourseSchedule(QWidget* parent) : TAFloatingWidget(parent)
 {
     this->setObjectName("TACCourseSchedule");
 
-    this->resize(QSize(200, 820));
+    this->resize(QSize(200, 603 /*820*/));
     this->setBackgroundColor(WIDGET_BACKGROUND_COLOR);
     this->setBorderColor(WIDGET_BORDER_COLOR);
     this->setBorderWidth(WIDGET_BORDER_WIDTH);

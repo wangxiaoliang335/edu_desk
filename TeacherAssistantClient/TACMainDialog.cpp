@@ -39,6 +39,13 @@ void TACMainDialog::Init()
                     desktopManagerWidget->hide();
             }
         }
+        else if (type == TACNavigationBarWidgetType::USER)
+        {
+            if (userMenuDlg)
+            {
+                userMenuDlg->show();
+            }
+        }
         else if (type == TACNavigationBarWidgetType::WALLPAPER)
         {
             if (wallpaperLibraryDialog)
@@ -48,6 +55,11 @@ void TACMainDialog::Init()
         {
             if (homeworkDialog)
                 homeworkDialog->show();
+        }
+        else if (type == TACNavigationBarWidgetType::MESSAGE)
+        {
+            if (friendGrpDlg)
+                friendGrpDlg->show();
         }
         else if (type == TACNavigationBarWidgetType::IM)
         {
@@ -69,15 +81,44 @@ void TACMainDialog::Init()
 
     prepareClassDialog = new TACPrepareClassDialog(this);
     desktopManagerWidget = new TACDesktopManagerWidget(this);
+    schoolInfoDlg = new SchoolInfoDialog(this);
+    trayWidget = new TACTrayWidget(this);
+    connect(trayWidget, &TACTrayWidget::navType, this, [=](bool checked) {
+        if (desktopManagerWidget)
+        {
+            QRect rect = trayWidget->geometry();
+            desktopManagerWidget->move(rect.x() - desktopManagerWidget->width() - 10, rect.y() - desktopManagerWidget->height() + 180);
+            if (checked)
+                desktopManagerWidget->show();
+            else
+                desktopManagerWidget->hide();
+        }
+     });
 
+    connect(trayWidget, &TACTrayWidget::navChoolInfo, this, [=](bool checked) {
+        if (schoolInfoDlg)
+        {
+            // 获取主屏幕几何信息（Qt 5.14+ 推荐 QScreen）
+            QScreen* screen = QApplication::primaryScreen();
+            QRect screenGeometry = screen->geometry();
+            int x = (screenGeometry.width() - schoolInfoDlg->width()) / 2;
+            int y = (screenGeometry.height() - schoolInfoDlg->height()) / 2;
+            schoolInfoDlg->move(x, y);
+            if (checked)
+                schoolInfoDlg->show();
+            else
+                schoolInfoDlg->hide();
+        }
+        });
 
     imDialog = new TACIMDialog(this);
-
+    friendGrpDlg = new FriendGroupDialog(this);
     homeworkDialog = new TACHomeworkDialog(this);
     homeworkDialog->setContent("语文<br>背诵《荷塘月色》第二段");
 
 
     wallpaperLibraryDialog = new TACWallpaperLibraryDialog(this);
+    userMenuDlg = new TAUserMenuDialog(this);
 
     countDownDialog = new TACCountDownDialog(this);
     countDownWidget = new TACCountDownWidget(this);
@@ -96,7 +137,7 @@ void TACMainDialog::Init()
     datetimeWidget->show();
 
     logoWidget = new TACLogoWidget(this);
-    logoWidget->updateLogo("C:\\workspace\\obs\\TeacherAssistant\\TeacherAssistantClient\\res\\img\\qinghua.png");
+    logoWidget->updateLogo(".\\res\\img\\qinghua.png");
     logoWidget->show();
 
     schoolLabelWidget = new TACSchoolLabelWidget(this);
@@ -111,6 +152,26 @@ void TACMainDialog::Init()
     });
     classLabelWidget->show();
 
+    trayLabelWidget = new TACTrayLabelWidget(this);
+    trayLabelWidget->updateLogo(".\\res\\img\\com_bottom_ic_component@2x.png");
+    //connect(trayLabelWidget, &TACTrayLabelWidget::doubleClicked, this, [=]() {
+    //    logoDialog->show();
+    //    });
+    trayLabelWidget->show();
+
+    connect(trayLabelWidget, &TACTrayLabelWidget::clicked, this, [=]() {
+        //logoDialog->show();
+        if (trayWidget)
+        {
+            QRect rect = trayLabelWidget->geometry();
+            trayWidget->move(rect.x() - trayWidget->width(), rect.y() - trayWidget->height() - 10);
+            if (trayWidget->isHidden())
+                trayWidget->show();
+            else
+                trayWidget->hide();
+        }
+        });
+
     logoDialog = new TACLogoDialog(this);
     connect(logoDialog, &TACLogoDialog::enterClicked, this, [=]() {
         if (schoolLabelWidget && !logoDialog->getSchoolName().isEmpty())
@@ -120,6 +181,10 @@ void TACMainDialog::Init()
         if (classLabelWidget && !logoDialog->getClassName().isEmpty())
         {
             classLabelWidget->setContent(logoDialog->getClassName());
+        }
+        if (trayLabelWidget && !logoDialog->getClassName().isEmpty())
+        {
+            trayLabelWidget->setContent(logoDialog->getClassName());
         }
     });
    
