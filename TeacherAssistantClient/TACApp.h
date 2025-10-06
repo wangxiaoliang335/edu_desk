@@ -4,6 +4,11 @@
 #include <QThread>
 #include <functional>
 #include "TACMainDialog.h"
+#include "ModalDialog.h"
+#include "PwdLoginModalDialog.h"
+#include "RegisterDialog.h"
+#include "ResetPwdDialog.h"
+
 typedef std::function<void()> VoidFunc;
 class TACApp : public QApplication {
 	Q_OBJECT
@@ -12,7 +17,7 @@ public:
 	TACApp(int& argc, char** argv);
 	~TACApp();
 
-	void AppInit();
+	bool AppInit();
 	QString GetClienId();
 
 public slots:
@@ -23,4 +28,8 @@ private:
 
 private:
 	QPointer<TACMainDialog> mainWindow;
+	QPointer<ModalDialog> loginWidget;
+	QPointer<PwdLoginModalDialog> pwdLoginModalDialog;
+	QPointer<RegisterDialog> regDlg;
+	QPointer<ResetPwdDialog> resetPwdDlg;
 };

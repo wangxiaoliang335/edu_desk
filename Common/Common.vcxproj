@@ -68,10 +68,15 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <AdditionalIncludeDirectories>C:\workspace\tanmu\libqrencode-master;C:/vcpkg/installed/x64-windows/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <AdditionalDependencies>C:\workspace\tanmu\libqrencode-master\Debug\qrencoded.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile />
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="Configuration">
     <ClCompile>
@@ -104,10 +109,36 @@
     <QtMoc Include="TACalendarDialog.h" />
     <QtMoc Include="TAEntity.h" />
     <QtMoc Include="TABaseDialog.h" />
+    <QtMoc Include="ModalDialog.h" />
+    <QtMoc Include="PwdLoginModalDialog.h" />
+    <QtMoc Include="ClickableLabel.h" />
+    <QtMoc Include="RegisterDialog.h" />
+    <QtMoc Include="ResetPwdDialog.h" />
+    <QtMoc Include="SchoolInfoDialog.h" />
+    <QtMoc Include="QSchoolInfoWidget.h" />
+    <QtMoc Include="QClassMgr.h" />
+    <QtMoc Include="MemberManagerWidget.h" />
+    <QtMoc Include="TAUserMenuDialog.h" />
+    <QtMoc Include="UserInfoDialog.h" />
+    <QtMoc Include="FriendGroupDialog.h" />
+    <QtMoc Include="TACAddGroupWidget.h" />
+    <QtMoc Include="SearchDialog.h" />
+    <QtMoc Include="ClassTeacherDialog.h" />
+    <QtMoc Include="ScheduleDialog.h" />
+    <QtMoc Include="FriendNotifyDialog.h" />
+    <QtMoc Include="GroupNotifyDialog.h" />
+    <QtMoc Include="CustomListDialog.h" />
     <ClInclude Include="util.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="ModalDialog.cpp" />
+    <ClCompile Include="PwdLoginModalDialog.cpp" />
+    <ClCompile Include="QClassMgr.cpp" />
+    <ClCompile Include="QSchoolInfoWidget.cpp" />
+    <ClCompile Include="RegisterDialog.cpp" />
+    <ClCompile Include="ResetPwdDialog.cpp" />
     <ClCompile Include="TABaseDialog.cpp" />
+    <ClCompile Include="TACAddGroupWidget.cpp" />
     <ClCompile Include="TACalendarDialog.cpp" />
     <ClCompile Include="TADialog.cpp" />
     <ClCompile Include="TAEntity.cpp" />
