@@ -16,6 +16,57 @@ PwdLoginModalDialog::PwdLoginModalDialog(QWidget* parent)
     setAttribute(Qt::WA_TranslucentBackground);
     setFixedSize(420, 320);
 
+    m_httpHandler = new TAHttpHandler(this);
+    if (m_httpHandler)
+    {
+        connect(m_httpHandler, &TAHttpHandler::success, this, [=](const QString& responseString) {
+            //成功消息就不发送了
+            QJsonDocument jsonDoc = QJsonDocument::fromJson(responseString.toUtf8());
+            if (jsonDoc.isObject()) {
+                QJsonObject obj = jsonDoc.object();
+                if (obj["data"].isObject())
+                {
+                    QJsonObject oTmp = obj["data"].toObject();
+                    QString strTmp = oTmp["message"].toString();
+                    qDebug() << "status:" << oTmp["code"].toString();
+                    qDebug() << "msg:" << oTmp["message"].toString(); // 如果 msg 是中文，也能正常输出
+                    int user_id = oTmp["user_id"].toInt();
+                    //errLabel->setText(strTmp);
+                    if (strTmp == "登录成功")
+                    {
+                        accept(); // 验证通过，关闭对话框并返回 Accepted
+                    }
+                }
+            }
+            else
+            {
+                errLabel->setText("网络错误");
+            }
+            });
+
+        connect(m_httpHandler, &TAHttpHandler::failed, this, [=](const QString& errResponseString) {
+            if (errLabel)
+            {
+                QJsonDocument jsonDoc = QJsonDocument::fromJson(errResponseString.toUtf8());
+                if (jsonDoc.isObject()) {
+                    QJsonObject obj = jsonDoc.object();
+                    if (obj["data"].isObject())
+                    {
+                        QJsonObject oTmp = obj["data"].toObject();
+                        QString strTmp = oTmp["message"].toString();
+                        qDebug() << "status:" << oTmp["code"].toString();
+                        qDebug() << "msg:" << oTmp["message"].toString(); // 如果 msg 是中文，也能正常输出
+                        errLabel->setText(strTmp);
+                    }
+                }
+                else
+                {
+                    errLabel->setText("网络错误");
+                }
+            }
+            });
+    }
+
     // 主布局
     mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(10, 40, 10, 10); // 预留标题空间
@@ -50,7 +101,7 @@ PwdLoginModalDialog::PwdLoginModalDialog(QWidget* parent)
     titleLabel = new QLabel("教师个人电脑登录", this);
     titleLabel->setStyleSheet("color: white; font-size:16px; font-weight:bold;");
 
-    pwdLoginButton = new QPushButton("密码登录", this);
+    pwdLoginButton = new QPushButton("验证码登录", this);
     pwdLoginButton->setFlat(true);
     pwdLoginButton->setCursor(Qt::PointingHandCursor);
     pwdLoginButton->setStyleSheet("color: white; font-size:14px;");
@@ -131,6 +182,9 @@ PwdLoginModalDialog::PwdLoginModalDialog(QWidget* parent)
     );
     loginButton->setCursor(Qt::PointingHandCursor);
 
+    errLabel = new QLabel(NULL, this);
+    errLabel->setStyleSheet("color: red; font-size:16px; font-weight:bold;");
+
     // 底部
     registerLabel = new QLabel("还没有账号？ <a style='color:#4A90E2;' href='#'>立即注册</a>", this);
     registerLabel->setTextFormat(Qt::RichText);
@@ -156,6 +210,7 @@ PwdLoginModalDialog::PwdLoginModalDialog(QWidget* parent)
     mainLayout->addSpacing(15);
     mainLayout->addWidget(loginButton);
     mainLayout->addStretch();
+    mainLayout->addWidget(errLabel);
     mainLayout->addLayout(bottomLayout);
     mainLayout->setContentsMargins(16, 16, 16, 16);
     setLayout(mainLayout);
@@ -296,5 +351,13 @@ void PwdLoginModalDialog::onLoginClicked()
         QMessageBox::warning(this, "提示", "请输入密码！");
         return;
     }
-    accept(); // 验证通过，关闭对话框并返回 Accepted
+
+    if (m_httpHandler)
+    {
+        QMap<QString, QString> params;
+        params["phone"] = "13621907363";
+        params["password"] = codeEdit->text();
+        m_httpHandler->post(QString("http://47.100.126.194:5000/login"), params);
+    }
+    //accept(); // 验证通过，关闭对话框并返回 Accepted
 }

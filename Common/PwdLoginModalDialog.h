@@ -10,6 +10,7 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QTimer>
+#include "TAHttpHandler.h"
 
 class PwdLoginModalDialog : public QDialog
 {
@@ -66,6 +67,8 @@ private:
     QLabel* registerLabel;
     QLabel* resetPwdLabel;
 
+    QLabel* errLabel = NULL;  //µÇÂ¼´íÎóÏûÏ¢
+    TAHttpHandler* m_httpHandler = NULL;
     QTimer countdownTimer;
     int countdownValue; // Ê£ÓàÃëÊı
 

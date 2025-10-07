@@ -28,8 +28,13 @@ RegisterDialog::RegisterDialog(QWidget* parent)
                 {
                     QJsonObject oTmp = obj["data"].toObject();
                     QString strTmp = oTmp["message"].toString();
+                    QString strUserId = oTmp["user_id"].toString();
                     qDebug() << "status:" << oTmp["code"].toString();
                     qDebug() << "msg:" << oTmp["message"].toString(); // 如果 msg 是中文，也能正常输出
+                    if (oTmp["code"].toString() == "201")
+                    {
+                        accept(); // 验证通过，关闭对话框并返回 Accepted
+                    }
                     //errLabel->setText(strTmp);
                 }
             }
@@ -439,5 +444,4 @@ void RegisterDialog::onLoginClicked()
         params["verification_code"] = codeEdit->text();
         m_httpHandler->post(QString("http://47.100.126.194:5000/register"), params);
     }
-    accept(); // 验证通过，关闭对话框并返回 Accepted
 }

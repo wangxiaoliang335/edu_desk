@@ -31,6 +31,10 @@ ModalDialog::ModalDialog(QWidget* parent)
                     qDebug() << "status:" << oTmp["code"].toString();
                     qDebug() << "msg:" << oTmp["message"].toString(); // 如果 msg 是中文，也能正常输出
                     //errLabel->setText(strTmp);
+                    if (strTmp == "登录成功")
+                    {
+                        accept(); // 验证通过，关闭对话框并返回 Accepted
+                    }
                 }
             }
             else
@@ -383,6 +387,4 @@ void ModalDialog::onLoginClicked()
         params["verification_code"] = codeEdit->text();
         m_httpHandler->post(QString("http://47.100.126.194:5000/login"), params);
     }
-
-    accept(); // 验证通过，关闭对话框并返回 Accepted
 }
