@@ -38,7 +38,7 @@ TACApp::~TACApp()
 bool TACApp::AppInit()
 {
 	setQuitOnLastWindowClosed(false);
-
+	bool bLoginSucceeded = false;
 	loginWidget = new ModalDialog();
 	//loginWidget->setTitleName("示例模态对话框");
 	loginWidget->setBackgroundColor(QColor(30, 60, 90));
@@ -52,80 +52,164 @@ bool TACApp::AppInit()
 	loginWidget->setBorderColor(WIDGET_BORDER_COLOR);
 	loginWidget->setBorderWidth(WIDGET_BORDER_WIDTH);
 	loginWidget->setRadius(30);
-	//connect(loginWidget, ModalDialog::pwdLogin,this, )
+
+	pwdLoginModalDialog = new PwdLoginModalDialog();
+	pwdLoginModalDialog->setBackgroundColor(QColor(30, 60, 90));
+	pwdLoginModalDialog->setBorderColor(Qt::yellow);
+	pwdLoginModalDialog->setBorderWidth(4);
+	pwdLoginModalDialog->setRadius(12);
+	//loginWidget->resize(300, 200);
+
+	pwdLoginModalDialog->setBackgroundColor(WIDGET_BACKGROUND_COLOR);
+	pwdLoginModalDialog->setBorderColor(WIDGET_BORDER_COLOR);
+	pwdLoginModalDialog->setBorderWidth(WIDGET_BORDER_WIDTH);
+	pwdLoginModalDialog->setRadius(30);
+
+	regDlg = new RegisterDialog();
+	regDlg->setBackgroundColor(QColor(30, 60, 90));
+	regDlg->setBorderColor(Qt::yellow);
+	regDlg->setBorderWidth(4);
+	regDlg->setRadius(12);
+
+	regDlg->setBackgroundColor(WIDGET_BACKGROUND_COLOR);
+	regDlg->setBorderColor(WIDGET_BORDER_COLOR);
+	regDlg->setBorderWidth(WIDGET_BORDER_WIDTH);
+	regDlg->setRadius(30);
+
+	resetPwdDlg = new ResetPwdDialog();
+	resetPwdDlg->setBackgroundColor(QColor(30, 60, 90));
+	resetPwdDlg->setBorderColor(Qt::yellow);
+	resetPwdDlg->setBorderWidth(4);
+	resetPwdDlg->setRadius(12);
+
+	resetPwdDlg->setBackgroundColor(WIDGET_BACKGROUND_COLOR);
+	resetPwdDlg->setBorderColor(WIDGET_BORDER_COLOR);
+	resetPwdDlg->setBorderWidth(WIDGET_BORDER_WIDTH);
+	resetPwdDlg->setRadius(30);
+
+	connect(this, &TACApp::pwdLogin, this,[&]() {
+		if (pwdLoginModalDialog->exec() == QDialog::Accepted)
+		{
+			if (pwdLoginModalDialog->getVerificationCodeLogin())
+			{
+				pwdLoginModalDialog->InitData();
+				int logRes = loginWidget->exec();
+				if (logRes == QDialog::Accepted)
+				{
+					if (loginWidget->getIsPwdLogin() == true)
+					{
+						loginWidget->InitData();
+						emit pwdLogin();
+					}
+					else if (loginWidget->getRegisterLogin() == true)
+					{
+						loginWidget->InitData();
+						emit regLogin();
+					}
+					else if (loginWidget->getResetPwdLogin() == true)
+					{
+						loginWidget->InitData();
+						emit resetPwdLogin();
+					}
+					else
+					{
+						bLoginSucceeded = true;
+					}
+				}
+			}
+			else if (pwdLoginModalDialog->getRegisterLogin() == true)
+			{
+				pwdLoginModalDialog->InitData();
+				emit regLogin();
+			}
+			else if (pwdLoginModalDialog->getResetPwdLogin() == true)
+			{
+				pwdLoginModalDialog->InitData();
+				emit resetPwdLogin();
+			}
+			else
+			{
+				bLoginSucceeded = true;
+			}
+			return true;
+		}
+		else
+		{
+			qDebug("用户关闭或取消");
+			bLoginSucceeded = false;
+			return false;
+		}
+	});
+
+	connect(this, &TACApp::regLogin, this, [&]() {
+		if (regDlg->exec() == QDialog::Accepted)
+		{
+			//regDlg->InitData();
+			if (regDlg->getIsPwdLogin())
+			{
+				regDlg->InitData();
+				emit pwdLogin();
+			}
+			else if (regDlg->getResetPwdLogin() == true)
+			{
+				regDlg->InitData();
+				emit resetPwdLogin();
+			}
+			else
+			{
+				bLoginSucceeded = true;
+			}
+			return true;
+		}
+		else
+		{
+			qDebug("用户关闭或取消");
+			bLoginSucceeded = false;
+			return false;
+		}
+	});
+
+	connect(this, &TACApp::resetPwdLogin, this, [&]() {
+		if (resetPwdDlg->exec() == QDialog::Accepted)
+		{
+			if (resetPwdDlg->getIsPwdLogin())
+			{
+				resetPwdDlg->InitData();
+				emit pwdLogin();
+			}
+			else
+			{
+				bLoginSucceeded = true;
+			}
+			return true;
+		}
+		else
+		{
+			qDebug("用户关闭或取消");
+			bLoginSucceeded = false;
+			return false;
+		}
+	});
+	
 	int logRes = loginWidget->exec();
-	//loginWidget->show();
+	
 	// 阻塞执行，直到用户关闭
 	if (logRes == QDialog::Accepted) {
 		qDebug("用户点击了确认");
 		if (loginWidget->getIsPwdLogin() == true)
 		{
-			pwdLoginModalDialog = new PwdLoginModalDialog();
-			pwdLoginModalDialog->setBackgroundColor(QColor(30, 60, 90));
-			pwdLoginModalDialog->setBorderColor(Qt::yellow);
-			pwdLoginModalDialog->setBorderWidth(4);
-			pwdLoginModalDialog->setRadius(12);
-			//loginWidget->resize(300, 200);
-
-			pwdLoginModalDialog->setBackgroundColor(WIDGET_BACKGROUND_COLOR);
-			pwdLoginModalDialog->setBorderColor(WIDGET_BORDER_COLOR);
-			pwdLoginModalDialog->setBorderWidth(WIDGET_BORDER_WIDTH);
-			pwdLoginModalDialog->setRadius(30);
-			if (pwdLoginModalDialog->exec() == QDialog::Accepted)
-			{
-
-			}
-			else
-			{
-				qDebug("用户关闭或取消");
-				return false;
-			}
+			loginWidget->InitData();
+			emit pwdLogin();
 		}
 		else if (loginWidget->getRegisterLogin() == true)
 		{
-			regDlg = new RegisterDialog();
-			regDlg->setBackgroundColor(QColor(30, 60, 90));
-			regDlg->setBorderColor(Qt::yellow);
-			regDlg->setBorderWidth(4);
-			regDlg->setRadius(12);
-			//loginWidget->resize(300, 200);
-
-			regDlg->setBackgroundColor(WIDGET_BACKGROUND_COLOR);
-			regDlg->setBorderColor(WIDGET_BORDER_COLOR);
-			regDlg->setBorderWidth(WIDGET_BORDER_WIDTH);
-			regDlg->setRadius(30);
-			if (regDlg->exec() == QDialog::Accepted)
-			{
-
-			}
-			else
-			{
-				qDebug("用户关闭或取消");
-				return false;
-			}
+			loginWidget->InitData();
+			emit regLogin();
 		}
 		else if (loginWidget->getResetPwdLogin() == true)
 		{
-			resetPwdDlg = new ResetPwdDialog();
-			resetPwdDlg->setBackgroundColor(QColor(30, 60, 90));
-			resetPwdDlg->setBorderColor(Qt::yellow);
-			resetPwdDlg->setBorderWidth(4);
-			resetPwdDlg->setRadius(12);
-			//loginWidget->resize(300, 200);
-
-			resetPwdDlg->setBackgroundColor(WIDGET_BACKGROUND_COLOR);
-			resetPwdDlg->setBorderColor(WIDGET_BORDER_COLOR);
-			resetPwdDlg->setBorderWidth(WIDGET_BORDER_WIDTH);
-			resetPwdDlg->setRadius(30);
-			if (resetPwdDlg->exec() == QDialog::Accepted)
-			{
-
-			}
-			else
-			{
-				qDebug("用户关闭或取消");
-				return false;
-			}
+			loginWidget->InitData();
+			emit resetPwdLogin();
 		}
 	}
 	else if(logRes == QDialog::Rejected) {
@@ -133,19 +217,29 @@ bool TACApp::AppInit()
 		return false;
 	}
 
-	mainWindow = new TACMainDialog();
-	mainWindow->Init();
-	mainWindow->show();
-	return true;
+	if (bLoginSucceeded)
+	{
+		mainWindow = new TACMainDialog();
+		mainWindow->Init();
+		mainWindow->show();
+		return true;
+	}
+	else
+	{
+		return false;
+	}
 }
+
 QString TACApp::GetClienId()
 {
 	return QString();
 }
+
 void TACApp::Exec(VoidFunc func)
 {
 	func();
 }
+
 bool TACApp::notify(QObject* receiver, QEvent* e)
 {
 	return QApplication::notify(receiver, e);

@@ -7,28 +7,122 @@
 #include <QGridLayout>
 #include <QSpacerItem>
 #include <QIcon>
+#include <qpainterpath.h>
+#include <qtoolbutton.h>
+#include <qdebug.h>
+#include "TABaseDialog.h"
+#include "AvatarLabel.h"
+#include "NameLabel.h"
 
 class UserInfoDialog : public QDialog
 {
     Q_OBJECT
 public:
-    UserInfoDialog(QWidget* parent = nullptr) : QDialog(parent)
+    UserInfoDialog(QWidget* parent = nullptr) : QDialog(parent),
+        m_backgroundColor(QColor(50, 50, 50)),
+        m_dragging(false),
+        m_borderColor(Qt::white),
+        m_borderWidth(2), m_radius(6),
+        m_visibleCloseButton(true)
     {
+        this->setObjectName("UserInfoDialog");
+    }
+
+    void InitData(UserInfo userInfo)
+    {
+        m_userInfo = userInfo;
+    }
+
+    void InitUI()
+    {
+        // 隐藏标题栏（图片里没有标题栏）
+        setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+        setAttribute(Qt::WA_TranslucentBackground);
+        setFixedSize(330, 360);
+
         setWindowTitle("我的");
-        resize(500, 600);
-        setStyleSheet("background-color: #2a2a2a; color: white;");
+        resize(350, 600);
+        //setStyleSheet("background-color: #2a2a2a; color: white;");
+
+        // 关闭按钮（右上角）
+        closeButton = new QPushButton(this);
+        closeButton->setIcon(QIcon(":/res/img/widget-close.png"));
+        closeButton->setIconSize(QSize(22, 22));
+        closeButton->setFixedSize(QSize(22, 22));
+        closeButton->setStyleSheet("background: transparent;");
+        closeButton->move(width() - 24, 4);
+        closeButton->hide();
+        connect(closeButton, &QPushButton::clicked, this, &QDialog::reject);
 
         // ===================== 顶部区域 =====================
+        QHBoxLayout* closeLayout = new QHBoxLayout;
         QHBoxLayout* topLayout = new QHBoxLayout;
-        QLabel* titleLabel = new QLabel("我的");
-        titleLabel->setStyleSheet("font-size: 18px; font-weight: bold;");
 
-        QLabel* lblNumber = new QLabel("2");
+        // 头像标签
+        avatarLabel = new AvatarLabel;
+        avatarLabel->setFixedSize(64, 64);
+        avatarLabel->setStyleSheet("background-color: gray; border-radius: 32px;");
+        avatarLabel->setAvatar(QPixmap(".\\res\\img\\home_bottom_ic_friend@2x.png"));
+        avatarLabel->setEditIcon(QPixmap(".\\res\\img\\com_ic_edit_2@2x.png"));
+
+        QObject::connect(avatarLabel, &AvatarLabel::editIconClicked, [&]() {
+            QString file = QFileDialog::getOpenFileName(
+                this, "选择新头像", "", "Images (*.png *.jpg *.jpeg *.bmp)");
+            if (!file.isEmpty()) {
+                avatarLabel->setAvatar(QPixmap(file));
+                //avatarLabel->update();
+            }
+        });
+
+        QObject::connect(avatarLabel, &AvatarLabel::avatarClicked, []() {
+            qDebug() << "头像被点击";
+        });
+
+        //// 编辑头像按钮
+        //QToolButton* editAvatarBtn = new QToolButton;
+        //editAvatarBtn->setIcon(QIcon(".\\res\\img\\com_ic_edit_2@2x.png"));
+        //editAvatarBtn->setToolTip("编辑头像");
+
+        // 姓名标签
+        nameLabel = new NameLabel;
+
+        //// 编辑姓名按钮
+        //QToolButton* editNameBtn = new QToolButton;
+        //editNameBtn->setIcon(QIcon(".\\res\\img\\com_ic_edit_2@2x.png"));
+        //editNameBtn->setToolTip("编辑姓名");
+
+        // 顶部横向布局：头像+编辑按钮，姓名+编辑按钮
+        //QHBoxLayout* avatarLayout = new QHBoxLayout;
+        //avatarLayout->addWidget(avatarLabel);
+        //avatarLayout->addWidget(editAvatarBtn);
+        //avatarLayout->addStretch();
+
+        nameLabel->setText(m_userInfo.strName);
+        nameLabel->setStyleSheet("color: white; font-size: 15px;");
+        nameLabel->setEditIcon(QPixmap(".\\res\\img\\com_ic_edit_2.png")); // 编辑图标
+
+        QObject::connect(nameLabel, &NameLabel::editIconClicked, [=]() {
+            qDebug() << "编辑图标被点击";
+            });
+
+        QObject::connect(nameLabel, &NameLabel::labelClicked, [=]() {
+            qDebug() << "姓名标签被点击";
+            });
+
+        //QHBoxLayout* nameLayout = new QHBoxLayout;
+        //nameLayout->addWidget(nameLabel);
+        //nameLayout->addWidget(editNameBtn);
+        //nameLayout->addStretch();
+
+        //QLabel* titleLabel = new QLabel("我的");
+        //titleLabel->setStyleSheet("font-size: 18px; font-weight: bold;");
+
+        /*QLabel* lblNumber = new QLabel("2");
         lblNumber->setAlignment(Qt::AlignCenter);
         lblNumber->setFixedSize(30, 30);
-        lblNumber->setStyleSheet("background-color: yellow; border-radius: 15px; color: red; font-weight: bold;");
+        lblNumber->setStyleSheet("background-color: yellow; border-radius: 15px; color: red; font-weight: bold;");*/
 
-        QPushButton* btnUpgrade = new QPushButton("升级为管理员");
+        QPushButton* btnUpgrade = new QPushButton("升级为\n管理员");
         btnUpgrade->setStyleSheet("background-color: lightgreen; color: black; padding:6px 10px; border-radius:6px;");
 
         QPushButton* btnManager = new QPushButton("管理员");
@@ -37,12 +131,24 @@ public:
         QPushButton* btnLogout = new QPushButton("退出登录");
         btnLogout->setStyleSheet("background-color: gray; color: white; padding:6px 10px; border-radius:6px;");
 
-        topLayout->addWidget(lblNumber);
-        topLayout->addWidget(titleLabel);
-        topLayout->addStretch();
-        topLayout->addWidget(btnManager);
+        QVBoxLayout* pVBoxLayout = new QVBoxLayout();
+        pVBoxLayout->addWidget(btnManager);
+        pVBoxLayout->addWidget(btnLogout);
+
+        QLabel* pLabel = new QLabel(this);
+        pLabel->setFixedSize(QSize(22, 22));
+        closeLayout->addWidget(pLabel);
+        closeLayout->addStretch();
+        closeLayout->addWidget(closeButton);
+        //topLayout->addWidget(lblNumber);
+        //topLayout->addWidget(titleLabel);
+        //topLayout->addStretch();
+        topLayout->addWidget(avatarLabel);  //头像
+        topLayout->addWidget(nameLabel);    //姓名
         topLayout->addWidget(btnUpgrade);
-        topLayout->addWidget(btnLogout);
+        topLayout->addLayout(pVBoxLayout);
+        //topLayout->addWidget(btnManager);
+        //topLayout->addWidget(btnLogout);
 
         // ===================== 用户基本信息 =====================
         QGridLayout* infoLayout = new QGridLayout;
@@ -50,25 +156,26 @@ public:
         infoLayout->setVerticalSpacing(12);
 
         infoLayout->addWidget(new QLabel("性别"), 0, 0);
-        infoLayout->addWidget(new QLabel("女"), 0, 1);
+        infoLayout->addWidget(new QLabel(m_userInfo.strSex), 0, 1);
+        infoLayout->addItem(new QSpacerItem(0, 0, QSizePolicy::Expanding, QSizePolicy::Minimum), 0, 2);
 
         infoLayout->addWidget(new QLabel("地址"), 1, 0);
-        infoLayout->addWidget(new QLabel("湖北省武汉市汉江区"), 1, 1);
+        infoLayout->addWidget(new QLabel(m_userInfo.strAddress), 1, 1);
 
         infoLayout->addWidget(new QLabel("学校名"), 2, 0);
-        infoLayout->addWidget(new QLabel("北京市东城区第三小学"), 2, 1);
+        infoLayout->addWidget(new QLabel(m_userInfo.strSchoolName), 2, 1);
 
         infoLayout->addWidget(new QLabel("学段"), 3, 0);
-        infoLayout->addWidget(new QLabel("小学"), 3, 1);
+        infoLayout->addWidget(new QLabel(m_userInfo.strGradeLevel), 3, 1);
 
         infoLayout->addWidget(new QLabel("年级"), 4, 0);
-        infoLayout->addWidget(new QLabel("五年级"), 4, 1);
+        infoLayout->addWidget(new QLabel(m_userInfo.strGrade), 4, 1);
 
         infoLayout->addWidget(new QLabel("任教学科"), 5, 0);
-        infoLayout->addWidget(new QLabel("语文"), 5, 1);
+        infoLayout->addWidget(new QLabel(m_userInfo.strSubject), 5, 1);
 
         infoLayout->addWidget(new QLabel("任教学段"), 6, 0);
-        infoLayout->addWidget(new QLabel("六班"), 6, 1);
+        infoLayout->addWidget(new QLabel(m_userInfo.strClassTaught), 6, 1);
 
         // ===================== 底部按钮 =====================
         QHBoxLayout* btnBottomLayout = new QHBoxLayout;
@@ -82,32 +189,141 @@ public:
         btnBottomLayout->addWidget(btnOk);
 
         // ===================== 底部工具栏 =====================
-        QHBoxLayout* toolLayout = new QHBoxLayout;
-        QStringList toolNames = { "电话", "消息", "相册", "文档", "设置", "用户" };
-        QStringList icons = { ":/icons/phone.png", ":/icons/message.png", ":/icons/photo.png", ":/icons/doc.png", ":/icons/settings.png", ":/icons/user.png" };
+        //QHBoxLayout* toolLayout = new QHBoxLayout;
+        //QStringList toolNames = { "电话", "消息", "相册", "文档", "设置", "用户" };
+        //QStringList icons = { ":/icons/phone.png", ":/icons/message.png", ":/icons/photo.png", ":/icons/doc.png", ":/icons/settings.png", ":/icons/user.png" };
 
-        for (int i = 0; i < toolNames.size(); ++i) {
-            QPushButton* btn = new QPushButton;
-            btn->setIcon(QIcon(icons[i])); // 图标文件需要在资源中准备好
-            btn->setIconSize(QSize(24, 24));
-            btn->setFlat(true);
-            btn->setStyleSheet("QPushButton {border:none; color: white;} QPushButton:hover { color: lightblue; }");
-            toolLayout->addWidget(btn);
-            toolLayout->addStretch();
-        }
+        //for (int i = 0; i < toolNames.size(); ++i) {
+        //    QPushButton* btn = new QPushButton;
+        //    btn->setIcon(QIcon(icons[i])); // 图标文件需要在资源中准备好
+        //    btn->setIconSize(QSize(24, 24));
+        //    btn->setFlat(true);
+        //    btn->setStyleSheet("QPushButton {border:none; color: white;} QPushButton:hover { color: lightblue; }");
+        //    toolLayout->addWidget(btn);
+        //    toolLayout->addStretch();
+        //}
 
         // ===================== 主布局 =====================
         QVBoxLayout* mainLayout = new QVBoxLayout(this);
+        mainLayout->addLayout(closeLayout);
         mainLayout->addLayout(topLayout);
         mainLayout->addSpacing(10);
         mainLayout->addLayout(infoLayout);
         mainLayout->addSpacing(20);
         mainLayout->addLayout(btnBottomLayout);
-        mainLayout->addStretch();
-        mainLayout->addLayout(toolLayout);
+
+        setLayout(mainLayout);
+        //mainLayout->addStretch();
+        //mainLayout->addLayout(toolLayout);
 
         // 连接信号
-        connect(btnCancel, &QPushButton::clicked, this, &QDialog::reject);
-        connect(btnOk, &QPushButton::clicked, this, &QDialog::accept);
+        //connect(btnCancel, &QPushButton::clicked, this, &TABaseDialog::reject);
+        //connect(btnOk, &QPushButton::clicked, this, &TABaseDialog::accept);
     }
+
+    void paintEvent(QPaintEvent* event) override {
+        Q_UNUSED(event);
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+
+        QRect rect(0, 0, width(), height());
+        QPainterPath path;
+        path.addRoundedRect(rect, m_radius, m_radius);
+
+        p.fillPath(path, QBrush(m_backgroundColor));
+        QPen pen(m_borderColor, m_borderWidth);
+        p.strokePath(path, pen);
+
+        // 标题
+        p.setPen(Qt::white);
+        p.drawText(10, 25, m_titleName);
+    }
+
+    QString titleName() const { return m_titleName; }
+    QColor backgroundColor() const { return m_backgroundColor; }
+    QColor borderColor() const { return m_borderColor; }
+    int borderWidth() const { return m_borderWidth; }
+    int radius() const { return m_radius; }
+
+    void mousePressEvent(QMouseEvent* event) {
+        if (event->button() == Qt::LeftButton) {
+            m_dragging = true;
+            m_dragStartPos = event->globalPos() - frameGeometry().topLeft();
+        }
+    }
+
+    void mouseMoveEvent(QMouseEvent* event) {
+        if (m_dragging && (event->buttons() & Qt::LeftButton)) {
+            move(event->globalPos() - m_dragStartPos);
+        }
+    }
+
+    void mouseReleaseEvent(QMouseEvent* event) {
+        if (event->button() == Qt::LeftButton) {
+            m_dragging = false;
+        }
+    }
+
+    void leaveEvent(QEvent* event)
+    {
+        QDialog::leaveEvent(event);
+        closeButton->hide();
+    }
+
+    void enterEvent(QEvent* event)
+    {
+        QDialog::enterEvent(event);
+        if (m_visibleCloseButton)
+            closeButton->show();
+    }
+
+    void resizeEvent(QResizeEvent* event)
+    {
+        QDialog::resizeEvent(event);
+        //initShow();
+        closeButton->move(this->width() - 22, 0);
+    }
+
+    void setTitleName(const QString& name) {
+        m_titleName = name;
+        update();
+    }
+
+    void visibleCloseButton(bool val)
+    {
+        m_visibleCloseButton = val;
+    }
+
+    void setBackgroundColor(const QColor& color) {
+        m_backgroundColor = color;
+        update();
+    }
+
+    void setBorderColor(const QColor& color) {
+        m_borderColor = color;
+        update();
+    }
+
+    void setBorderWidth(int val) {
+        m_borderWidth = val;
+        update();
+    }
+
+    void setRadius(int val) {
+        m_radius = val;
+        update();
+    }
+
+    UserInfo m_userInfo;
+    bool m_dragging;
+    QPoint m_dragStartPos;
+    QString m_titleName;
+    QColor m_backgroundColor;
+    QColor m_borderColor;
+    int m_borderWidth;
+    int m_radius;
+    bool m_visibleCloseButton;
+    QPushButton* closeButton = NULL;
+    AvatarLabel* avatarLabel = NULL;
+    NameLabel* nameLabel = NULL;
 };

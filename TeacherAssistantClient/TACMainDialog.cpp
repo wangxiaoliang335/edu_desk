@@ -17,6 +17,84 @@ void TACMainDialog::Init()
 {
     navBarWidget = new TACNavigationBarWidget(this);
     navBarWidget->visibleCloseButton(false);
+
+    m_httpHandler = new TAHttpHandler(this);
+    if (m_httpHandler)
+    {
+        connect(m_httpHandler, &TAHttpHandler::success, this, [=](const QString& responseString) {
+            //成功消息就不发送了
+            QJsonDocument jsonDoc = QJsonDocument::fromJson(responseString.toUtf8());
+            if (jsonDoc.isObject()) {
+                QJsonObject obj = jsonDoc.object();
+                if (obj["data"].isObject())
+                {
+                    QJsonObject oTmp = obj["data"].toObject();
+                    QString strTmp = oTmp["message"].toString();
+                    qDebug() << "status:" << oTmp["code"].toString();
+                    qDebug() << "msg:" << oTmp["message"].toString(); // 如果 msg 是中文，也能正常输出
+                    //errLabel->setText(strTmp);
+                    //user_id = oTmp["user_id"].toInt();
+                    if (strTmp == "登录成功")
+                    {
+                        accept(); // 验证通过，关闭对话框并返回 Accepted
+                    }
+                    else if (strTmp == "获取用户信息成功")
+                    {
+                        if (oTmp["userinfo"].isArray())
+                        {
+                            QJsonArray oUserInfo = oTmp["userinfo"].toArray();
+                            if (oUserInfo.size() > 0)
+                            {
+                                m_userInfo.strPhone = oUserInfo.at(0)["phone"].toString();
+                                m_userInfo.strName = oUserInfo.at(0)["name"].toString();
+                                m_userInfo.strSex = oUserInfo.at(0)["sex"].toString();
+                                m_userInfo.strAddress = oUserInfo.at(0)["address"].toString();
+                                m_userInfo.strSchoolName = oUserInfo.at(0)["school_name"].toString();
+                                m_userInfo.strGradeLevel = oUserInfo.at(0)["grade_level"].toString();
+                                m_userInfo.strGrade = oUserInfo.at(0)["grade"].toString();
+                                m_userInfo.strSubject = oUserInfo.at(0)["subject"].toString();
+                                m_userInfo.strClassTaught = oUserInfo.at(0)["class_taught"].toString();
+                                m_userInfo.strIsAdministrator = oUserInfo.at(0)["is_administrator"].toString();
+
+                                if (userMenuDlg)
+                                {
+                                    userMenuDlg->InitData(m_userInfo);
+                                    userMenuDlg->InitUI();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                //errLabel->setText("网络错误");
+            }
+            });
+
+        connect(m_httpHandler, &TAHttpHandler::failed, this, [=](const QString& errResponseString) {
+            //if (errLabel)
+            {
+                QJsonDocument jsonDoc = QJsonDocument::fromJson(errResponseString.toUtf8());
+                if (jsonDoc.isObject()) {
+                    QJsonObject obj = jsonDoc.object();
+                    if (obj["data"].isObject())
+                    {
+                        QJsonObject oTmp = obj["data"].toObject();
+                        QString strTmp = oTmp["message"].toString();
+                        qDebug() << "status:" << oTmp["code"].toString();
+                        qDebug() << "msg:" << oTmp["message"].toString(); // 如果 msg 是中文，也能正常输出
+                        //errLabel->setText(strTmp);
+                    }
+                }
+                /*else
+                {
+                    errLabel->setText("网络错误");
+                }*/
+            }
+            });
+    }
+
     connect(navBarWidget, &TACNavigationBarWidget::navType, this, [=](TACNavigationBarWidgetType type,bool checked) {
         if (type == TACNavigationBarWidgetType::TIMER)
         {
@@ -116,7 +194,6 @@ void TACMainDialog::Init()
     homeworkDialog = new TACHomeworkDialog(this);
     homeworkDialog->setContent("语文<br>背诵《荷塘月色》第二段");
 
-
     wallpaperLibraryDialog = new TACWallpaperLibraryDialog(this);
     userMenuDlg = new TAUserMenuDialog(this);
 
@@ -207,11 +284,15 @@ void TACMainDialog::Init()
     classMap[TimeRange(QTime(14, 15), QTime(15, 0))] = "历史";
 
     courseSchedule->updateClass(classMap);
-
- 
     classWeekCourseScheduldDialog = new TACClassWeekCourseScheduleDialog(this);
-    //updateBackground("C:/workspace/obs/TeacherAssistant/TeacherAssistantClient/res/bg/5.jpg");
 
+    if (m_httpHandler)
+    {
+        //QMap<QString, QString> params;
+        //params["phone"] = "13621907363";
+        m_httpHandler->get(QString("http://47.100.126.194:5000/userInfo?phone=13621907363"));
+    }
+    //updateBackground("C:/workspace/obs/TeacherAssistant/TeacherAssistantClient/res/bg/5.jpg");
 }
 void TACMainDialog::updateBackground(const QString & fileName)
 {

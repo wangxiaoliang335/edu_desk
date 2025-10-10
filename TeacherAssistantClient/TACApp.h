@@ -20,6 +20,11 @@ public:
 	bool AppInit();
 	QString GetClienId();
 
+signals:
+	void pwdLogin();
+	void regLogin();
+	void resetPwdLogin();
+
 public slots:
 	void Exec(VoidFunc func);
 
