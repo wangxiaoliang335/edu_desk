@@ -30,7 +30,7 @@ PwdLoginModalDialog::PwdLoginModalDialog(QWidget* parent)
                     QString strTmp = oTmp["message"].toString();
                     qDebug() << "status:" << oTmp["code"].toString();
                     qDebug() << "msg:" << oTmp["message"].toString(); // 如果 msg 是中文，也能正常输出
-                    int user_id = oTmp["user_id"].toInt();
+                    user_id = oTmp["user_id"].toInt();
                     //errLabel->setText(strTmp);
                     if (strTmp == "登录成功")
                     {
@@ -217,9 +217,29 @@ PwdLoginModalDialog::PwdLoginModalDialog(QWidget* parent)
 
     // 信号
     //connect(closeButton, &QPushButton::clicked, this, &QDialog::reject);
-    //connect(getCodeButton, &QPushButton::clicked, this, &ModalDialog::onGetCodeClicked);
+    connect(pwdLoginButton, &QPushButton::clicked, this, &PwdLoginModalDialog::onSwitchPwdLogin);
     connect(&countdownTimer, &QTimer::timeout, this, &PwdLoginModalDialog::onTimerTick);
     connect(loginButton, &QPushButton::clicked, this, &PwdLoginModalDialog::onLoginClicked);
+
+    connect(registerLabel, &QLabel::linkActivated, this, [=](const QString& link) {
+        //qDebug() << "用户点击了链接，href=" << link;
+        if (link == "#") {
+            // 执行注册逻辑
+            //QMessageBox::information(this, "提示", "打开注册页面");
+            m_registerLogin = true;
+            accept();
+        }
+        });
+
+    connect(resetPwdLabel, &QLabel::linkActivated, this, [=](const QString& link) {
+        //qDebug() << "用户点击了链接，href=" << link;
+        if (link == "#") {
+            // 执行注册逻辑
+            //QMessageBox::information(this, "提示", "打开注册页面");
+            m_resetPwdLogin = true;
+            accept();
+        }
+        });
 }
 
 PwdLoginModalDialog::~PwdLoginModalDialog() {}
@@ -325,6 +345,33 @@ void PwdLoginModalDialog::onGetCodeClicked()
     //getCodeButton->setText(QString("重新获取(%1)").arg(countdownValue));
     countdownTimer.start(1000);
 }
+
+void PwdLoginModalDialog::onSwitchPwdLogin()
+{
+    m_verification_code_Login = true;
+    accept();
+}
+
+void PwdLoginModalDialog::InitData()
+{
+    m_verification_code_Login = false;
+    m_registerLogin = false;
+    m_resetPwdLogin = false;
+}
+
+void PwdLoginModalDialog::showEvent(QShowEvent* event) {
+    QDialog::showEvent(event); // 保留父类行为
+    //counter = 0; // 初始化变量
+    //updateUI();  // 刷新界面
+}
+
+//bool PwdLoginModalDialog::event(QEvent* e) {
+//    if (e->type() == QEvent::Polish) {
+//        //counter = 0;
+//        qDebug() << "Dialog polished, variables reset.";
+//    }
+//    return QDialog::event(e);
+//}
 
 void PwdLoginModalDialog::onTimerTick()
 {

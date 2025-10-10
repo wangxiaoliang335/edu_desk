@@ -249,7 +249,7 @@ RegisterDialog::RegisterDialog(QWidget* parent)
 
     // 底部
     //registerLabel = new QLabel("还没有账号？ <a style='color:#4A90E2;' href='#'>立即注册</a>", this);
-    registerLabel = new QLabel("手机号登录", this);
+    registerLabel = new QLabel("<a style='color:white;' href='#'>手机号登录</a>", this);
     registerLabel->setTextFormat(Qt::RichText);
     registerLabel->setTextInteractionFlags(Qt::TextBrowserInteraction);
     registerLabel->setStyleSheet("color: white; font-size:12px;");
@@ -287,13 +287,21 @@ RegisterDialog::RegisterDialog(QWidget* parent)
     connect(getCodeButton, &QPushButton::clicked, this, &RegisterDialog::onGetCodeClicked);
     connect(&countdownTimer, &QTimer::timeout, this, &RegisterDialog::onTimerTick);
     connect(loginButton, &QPushButton::clicked, this, &RegisterDialog::onLoginClicked);
-    connect(pwdLoginButton, &QPushButton::clicked, this, &RegisterDialog::onPwdLoginClicked);
+    //connect(pwdLoginButton, &QPushButton::clicked, this, &RegisterDialog::onPwdLoginClicked);
     // 连接 linkActivated 信号
     connect(registerLabel, &QLabel::linkActivated, this, [=](const QString& link) {
         //qDebug() << "用户点击了链接，href=" << link;
         if (link == "#") {
             // 执行注册逻辑
-            QMessageBox::information(this, "提示", "打开注册页面");
+            onPwdLoginClicked();
+        }
+    });
+
+    connect(resetPwdLabel, &QLabel::linkActivated, this, [=](const QString& link) {
+        //qDebug() << "用户点击了链接，href=" << link;
+        if (link == "#") {
+            // 执行注册逻辑
+            onResetPwdClicked();
         }
         });
 }
@@ -387,6 +395,12 @@ void RegisterDialog::resizeEvent(QResizeEvent* event)
     closeButton->move(this->width() - 22, 0);
 }
 
+void RegisterDialog::InitData()
+{
+    m_pwdLogin = false;
+    m_resetPwdLogin = false;
+}
+
 void RegisterDialog::onGetCodeClicked()
 {
     QRegExp phoneRegex("^1[3-9]\\d{9}$");
@@ -425,6 +439,12 @@ void RegisterDialog::onTimerTick()
 void RegisterDialog::onPwdLoginClicked()
 {
     m_pwdLogin = true;
+    accept();
+}
+
+void RegisterDialog::onResetPwdClicked()
+{
+    m_resetPwdLogin = true;
     accept();
 }
 

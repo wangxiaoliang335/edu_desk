@@ -25,6 +25,7 @@ class RegisterDialog : public QDialog
 public:
     explicit RegisterDialog(QWidget* parent = nullptr);
     ~RegisterDialog();
+    void InitData();
 
     QString titleName() const { return m_titleName; }
     QColor backgroundColor() const { return m_backgroundColor; }
@@ -42,6 +43,7 @@ public:
     QString phoneNumber() const { return phoneEdit->text(); }
     QString verifyCode()  const { return codeEdit->text(); }
     int getIsPwdLogin() { return m_pwdLogin; }
+    int getResetPwdLogin() { return m_resetPwdLogin; }
 
 signals:
     void pwdLogin();
@@ -79,12 +81,14 @@ private:
     QTimer countdownTimer;
     int countdownValue; // สฃำเร๋สý
     int m_pwdLogin = false;
+    int m_resetPwdLogin = false;
 
 private slots:
     void onGetCodeClicked();
     void onTimerTick();
     void onLoginClicked();
     void onPwdLoginClicked();
+    void onResetPwdClicked();
 
 protected:
     void paintEvent(QPaintEvent* event) override;

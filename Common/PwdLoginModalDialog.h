@@ -25,6 +25,8 @@ public:
     explicit PwdLoginModalDialog(QWidget* parent = nullptr);
     ~PwdLoginModalDialog();
 
+    void InitData();
+
     QString titleName() const { return m_titleName; }
     QColor backgroundColor() const { return m_backgroundColor; }
     QColor borderColor() const { return m_borderColor; }
@@ -40,6 +42,9 @@ public:
 
     QString phoneNumber() const { return phoneEdit->text(); }
     QString verifyCode()  const { return codeEdit->text(); }
+    bool getVerificationCodeLogin() { return m_verification_code_Login; }
+    int getRegisterLogin() { return m_registerLogin; }
+    int getResetPwdLogin() { return m_resetPwdLogin; }
 private:
     bool m_dragging;
     QPoint m_dragStartPos;
@@ -72,10 +77,17 @@ private:
     QTimer countdownTimer;
     int countdownValue; // สฃำเร๋สý
 
+    int m_verification_code_Login = false;
+    int m_registerLogin = false;
+    int m_resetPwdLogin = false;
+
+    int user_id = -1;
+
 private slots:
     void onGetCodeClicked();
     void onTimerTick();
     void onLoginClicked();
+    void onSwitchPwdLogin();
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -85,4 +97,6 @@ protected:
     void leaveEvent(QEvent* event) override;
     void enterEvent(QEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
+    void showEvent(QShowEvent* event) override;
+    //bool event(QEvent* e) override;
 };
