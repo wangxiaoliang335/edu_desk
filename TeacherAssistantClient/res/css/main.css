@@ -390,6 +390,13 @@ TACTrayWidget QPushButton:hover {
     background: rgba(255,255,255,0.05);
     border-radius: 20px;
 }
+
+UserInfoDialog QLabel {
+    font-weight: 500;
+    font-size: 14px;
+    color: #FFFFFF;
+}
+
 TACDesktopManagerWidget QLabel
 {
     font-weight: 600;

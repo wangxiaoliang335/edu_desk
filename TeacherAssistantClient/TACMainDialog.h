@@ -27,6 +27,7 @@
 #include "SchoolInfoDialog.h"
 #include "TAUserMenuDialog.h"
 #include "FriendGroupDialog.h"
+#include "TAHttpHandler.h"
 
 class TACMainDialog : public QDialog
 {
@@ -69,4 +70,6 @@ private:
 	QPointer<TACClassWeekCourseScheduleDialog> classWeekCourseScheduldDialog;
 	QPointer<TACTrayWidget> trayWidget;
 	QPointer<SchoolInfoDialog> schoolInfoDlg;
+	TAHttpHandler* m_httpHandler = NULL;
+	UserInfo m_userInfo;
 };
