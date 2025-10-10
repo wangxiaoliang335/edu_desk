@@ -25,6 +25,7 @@ class ModalDialog : public QDialog
 public:
     explicit ModalDialog(QWidget* parent = nullptr);
     ~ModalDialog();
+    void InitData();
 
     QString titleName() const { return m_titleName; }
     QColor backgroundColor() const { return m_backgroundColor; }
@@ -78,9 +79,11 @@ private:
 
     QTimer countdownTimer;
     int countdownValue; // สฃำเร๋สý
+
     int m_pwdLogin = false;
     int m_registerLogin = false;
     int m_resetPwdLogin = false;
+    int user_id = -1;
 private slots:
     void onGetCodeClicked();
     void onTimerTick();

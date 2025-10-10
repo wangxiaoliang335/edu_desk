@@ -70,6 +70,12 @@
     <ClCompile Include="TACAddGroupWidget.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="AvatarLabel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="NameLabel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="TAFloatingWidget.h">
@@ -145,6 +151,12 @@
       <Filter>Header Files</Filter>
     </QtMoc>
     <QtMoc Include="CustomListDialog.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="AvatarLabel.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="NameLabel.h">
       <Filter>Header Files</Filter>
     </QtMoc>
   </ItemGroup>

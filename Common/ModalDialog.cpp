@@ -31,6 +31,7 @@ ModalDialog::ModalDialog(QWidget* parent)
                     qDebug() << "status:" << oTmp["code"].toString();
                     qDebug() << "msg:" << oTmp["message"].toString(); // 如果 msg 是中文，也能正常输出
                     //errLabel->setText(strTmp);
+                    user_id = oTmp["user_id"].toInt();
                     if (strTmp == "登录成功")
                     {
                         accept(); // 验证通过，关闭对话框并返回 Accepted
@@ -329,6 +330,13 @@ void ModalDialog::resizeEvent(QResizeEvent* event)
     QDialog::resizeEvent(event);
     //initShow();
     closeButton->move(this->width() - 22, 0);
+}
+
+void ModalDialog::InitData()
+{
+    m_pwdLogin = false;
+    m_registerLogin = false;
+    m_resetPwdLogin = false;
 }
 
 void ModalDialog::onGetCodeClicked()

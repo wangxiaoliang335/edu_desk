@@ -128,10 +128,14 @@
     <QtMoc Include="FriendNotifyDialog.h" />
     <QtMoc Include="GroupNotifyDialog.h" />
     <QtMoc Include="CustomListDialog.h" />
+    <QtMoc Include="AvatarLabel.h" />
+    <QtMoc Include="NameLabel.h" />
     <ClInclude Include="util.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AvatarLabel.cpp" />
     <ClCompile Include="ModalDialog.cpp" />
+    <ClCompile Include="NameLabel.cpp" />
     <ClCompile Include="PwdLoginModalDialog.cpp" />
     <ClCompile Include="QClassMgr.cpp" />
     <ClCompile Include="QSchoolInfoWidget.cpp" />
