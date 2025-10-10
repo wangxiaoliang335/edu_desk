@@ -10,6 +10,7 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QTimer>
+#include "TAHttpHandler.h"
 #include "ClickableLabel.h"
 
 class ResetPwdDialog : public QDialog
@@ -24,6 +25,7 @@ class ResetPwdDialog : public QDialog
 public:
     explicit ResetPwdDialog(QWidget* parent = nullptr);
     ~ResetPwdDialog();
+    void InitData();
 
     QString titleName() const { return m_titleName; }
     QColor backgroundColor() const { return m_backgroundColor; }
@@ -54,12 +56,15 @@ private:
     int m_borderWidth;
     int m_radius;
 
+    TAHttpHandler* m_httpHandler = NULL;
+
     QPushButton* closeButton = NULL;
     //QPushButton* okButton;
     //QPushButton* cancelButton;
     //QLabel* label = NULL;
     QVBoxLayout* mainLayout;
     bool m_visibleCloseButton;
+    QLabel* errLabel = NULL;  //µÇÂ¼´íÎóÏûÏ¢
 
     QLineEdit* phoneEdit = NULL;
     QLineEdit* codeEdit = NULL;

@@ -16,6 +16,58 @@ ResetPwdDialog::ResetPwdDialog(QWidget* parent)
     setAttribute(Qt::WA_TranslucentBackground);
     setFixedSize(420, 320);
 
+    m_httpHandler = new TAHttpHandler(this);
+    if (m_httpHandler)
+    {
+        connect(m_httpHandler, &TAHttpHandler::success, this, [=](const QString& responseString) {
+            //成功消息就不发送了
+            QJsonDocument jsonDoc = QJsonDocument::fromJson(responseString.toUtf8());
+            if (jsonDoc.isObject()) {
+                QJsonObject obj = jsonDoc.object();
+                if (obj["data"].isObject())
+                {
+                    QJsonObject oTmp = obj["data"].toObject();
+                    QString strTmp = oTmp["message"].toString();
+                    QString strUserId = oTmp["user_id"].toString();
+                    qDebug() << "status:" << oTmp["code"].toString();
+                    qDebug() << "msg:" << oTmp["message"].toString(); // 如果 msg 是中文，也能正常输出
+                    if (strTmp == "密码重置成功")
+                    {
+                        m_pwdLogin = true;
+                        accept(); // 验证通过，关闭对话框并返回 Accepted
+                    }
+                    //errLabel->setText(strTmp);
+                }
+            }
+            else
+            {
+                errLabel->setText("网络错误");
+            }
+            });
+
+        connect(m_httpHandler, &TAHttpHandler::failed, this, [=](const QString& errResponseString) {
+            if (errLabel)
+            {
+                QJsonDocument jsonDoc = QJsonDocument::fromJson(errResponseString.toUtf8());
+                if (jsonDoc.isObject()) {
+                    QJsonObject obj = jsonDoc.object();
+                    if (obj["data"].isObject())
+                    {
+                        QJsonObject oTmp = obj["data"].toObject();
+                        QString strTmp = oTmp["message"].toString();
+                        qDebug() << "status:" << oTmp["code"].toString();
+                        qDebug() << "msg:" << oTmp["message"].toString(); // 如果 msg 是中文，也能正常输出
+                        errLabel->setText(strTmp);
+                    }
+                }
+                else
+                {
+                    errLabel->setText("网络错误");
+                }
+            }
+            });
+    }
+
     // 主布局
     mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(10, 40, 10, 10); // 预留标题空间
@@ -184,6 +236,8 @@ ResetPwdDialog::ResetPwdDialog(QWidget* parent)
     secPwdWidget->setLayout(secPwdLayout);
     secPwdWidget->setStyleSheet("background-color: rgba(255,255,255,0.08); border-radius:6px;");
     /***************************************************************/
+    errLabel = new QLabel(NULL, this);
+    errLabel->setStyleSheet("color: red; font-size:16px; font-weight:bold;");
 
     // 登录按钮
     loginButton = new QPushButton("登 录", this);
@@ -222,6 +276,7 @@ ResetPwdDialog::ResetPwdDialog(QWidget* parent)
     mainLayout->addWidget(secPwdWidget);
     mainLayout->addSpacing(15);
     mainLayout->addWidget(loginButton);
+    mainLayout->addWidget(errLabel);
     //mainLayout->addStretch();
     //mainLayout->addLayout(bottomLayout);
     mainLayout->setContentsMargins(16, 16, 16, 16);
@@ -232,7 +287,7 @@ ResetPwdDialog::ResetPwdDialog(QWidget* parent)
     connect(getCodeButton, &QPushButton::clicked, this, &ResetPwdDialog::onGetCodeClicked);
     connect(&countdownTimer, &QTimer::timeout, this, &ResetPwdDialog::onTimerTick);
     connect(loginButton, &QPushButton::clicked, this, &ResetPwdDialog::onLoginClicked);
-    connect(pwdLoginButton, &QPushButton::clicked, this, &ResetPwdDialog::onPwdLoginClicked);
+    //connect(pwdLoginButton, &QPushButton::clicked, this, &ResetPwdDialog::onPwdLoginClicked);
     // 连接 linkActivated 信号
     //connect(registerLabel, &QLabel::linkActivated, this, [=](const QString& link) {
     //    //qDebug() << "用户点击了链接，href=" << link;
@@ -332,6 +387,11 @@ void ResetPwdDialog::resizeEvent(QResizeEvent* event)
     closeButton->move(this->width() - 22, 0);
 }
 
+void ResetPwdDialog::InitData()
+{
+    m_pwdLogin = false;
+}
+
 void ResetPwdDialog::onGetCodeClicked()
 {
     QRegExp phoneRegex("^1[3-9]\\d{9}$");
@@ -345,6 +405,13 @@ void ResetPwdDialog::onGetCodeClicked()
     getCodeButton->setEnabled(false);
     getCodeButton->setText(QString("重新获取(%1)").arg(countdownValue));
     countdownTimer.start(1000);
+
+    if (m_httpHandler)
+    {
+        QMap<QString, QString> params;
+        params["phone"] = "13621907363";
+        m_httpHandler->post(QString("http://47.100.126.194:5000/send_verification_code"), params);
+    }
 }
 
 void ResetPwdDialog::onTimerTick()
@@ -373,5 +440,14 @@ void ResetPwdDialog::onLoginClicked()
         QMessageBox::warning(this, "提示", "请输入6位数字验证码！");
         return;
     }
-    accept(); // 验证通过，关闭对话框并返回 Accepted
+
+    if (m_httpHandler)
+    {
+        QMap<QString, QString> params;
+        params["phone"] = "13621907363";
+        params["new_password"] = secPwdEdit->text();
+        params["verification_code"] = codeEdit->text();
+        m_httpHandler->post(QString("http://47.100.126.194:5000/verify_and_set_password"), params);
+    }
+    //accept(); // 验证通过，关闭对话框并返回 Accepted
 }

@@ -7,6 +7,20 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QLabel>
+
+typedef struct tagUserInfo {
+    QString strPhone;
+    QString strName;
+    QString strSex;
+    QString strAddress;
+    QString strSchoolName;
+    QString strGradeLevel;
+    QString strGrade;
+    QString strSubject;
+    QString strClassTaught;
+    QString strIsAdministrator;
+}UserInfo;
+
 class TABaseDialog  : public QWidget
 {
 	Q_OBJECT

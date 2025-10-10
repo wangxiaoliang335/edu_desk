@@ -1,25 +1,40 @@
 ﻿#pragma once
 //#pragma execution_character_set("utf-8")
 #include "TABaseDialog.h"
+#include "TAFloatingWidget.h"
 #include <QLabel>
 #include <QPushButton>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
+#include <QPointer>
 #include <QScreen>
 #include <QApplication>
 #include <QIcon>
 #include <QPixmap>
 #include "UserInfoDialog.h"
 
-class TAUserMenuDialog : public TABaseDialog
+class TAUserMenuDialog : public TAFloatingWidget
 {
     Q_OBJECT
 public:
     explicit TAUserMenuDialog(QWidget* parent = nullptr)
-        : TABaseDialog(parent)
+        : TAFloatingWidget(parent)
+    {
+        
+    }
+
+    void InitData(UserInfo userInfo)
+    {
+        m_userInfo = userInfo;
+    }
+
+    void InitUI()
     {
         // 隐藏标题栏（图片里没有标题栏）
-        titleBar->setVisible(false);
+        //titleBar->setVisible(false);
+        contentLayout = new QVBoxLayout();
+
+        this->setLayout(this->contentLayout);
 
         // 基类外观（半透明深色、圆角）
         setBackgroundColor(QColor(0, 0, 0, 180));
@@ -48,8 +63,8 @@ public:
         // avatar->setPixmap(pm.scaled(56,56, Qt::KeepAspectRatio, Qt::SmoothTransformation));
 
         QVBoxLayout* namePhoneLayout = new QVBoxLayout;
-        QLabel* nameLabel = new QLabel("王晓露");
-        QLabel* phoneLabel = new QLabel("15874102586");
+        QLabel* nameLabel = new QLabel(m_userInfo.strName);
+        QLabel* phoneLabel = new QLabel(m_userInfo.strPhone);
         nameLabel->setStyleSheet("color: #FFFFFF; font-size: 18px; font-weight: 600;");
         phoneLabel->setStyleSheet("color: #B0B0B0; font-size: 12px;");
         namePhoneLayout->setContentsMargins(0, 0, 0, 0);
@@ -88,6 +103,19 @@ public:
         QPushButton* btnAnalyze = makeMenuButton("教学分析");
         userMenuDlg = new UserInfoDialog(this);
 
+        //userMenuDlg->setBackgroundColor(QColor(30, 60, 90));
+        //userMenuDlg->setBorderColor(Qt::yellow);
+        //userMenuDlg->setBorderWidth(4);
+        //userMenuDlg->setRadius(12);
+
+        //userMenuDlg->setBackgroundColor(WIDGET_BACKGROUND_COLOR);
+        //userMenuDlg->setBorderColor(WIDGET_BORDER_COLOR);
+        //userMenuDlg->setBorderWidth(WIDGET_BORDER_WIDTH);
+        //userMenuDlg->setRadius(30);
+
+        userMenuDlg->InitData(m_userInfo);
+        userMenuDlg->InitUI();
+
         // 菜单垂直排列
         QVBoxLayout* menuLayout = new QVBoxLayout;
         menuLayout->setContentsMargins(0, 12, 0, 0);
@@ -101,7 +129,7 @@ public:
 
         // 示例：连接信号（你可替换成自己的槽函数）
         connect(btnProfile, &QPushButton::clicked, this, [=]() {
-            qDebug("打开个人信息"); 
+            qDebug("打开个人信息");
             if (userMenuDlg)
             {
                 if (userMenuDlg->isHidden())
@@ -113,10 +141,23 @@ public:
                     userMenuDlg->hide();
                 }
             }
-            });
+        });
         connect(btnHealth, &QPushButton::clicked, this, [] { qDebug("打开健康管理"); });
         connect(btnAnalyze, &QPushButton::clicked, this, [] { qDebug("打开教学分析"); });
     }
 
+    void initShow()
+    {
+        QRect rect = this->getScreenGeometryWithTaskbar();
+        if (rect.isEmpty())
+            return;
+        QSize windowSize = this->size();
+        int x = rect.x() + (rect.width() - windowSize.width()) / 2;
+        int y = rect.y() + rect.height() - windowSize.height() - 60;
+        this->move(x, y);
+    }
+
     UserInfoDialog* userMenuDlg = NULL;
+    UserInfo m_userInfo;
+    QPointer<QVBoxLayout> contentLayout;
 };
