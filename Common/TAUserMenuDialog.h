@@ -152,8 +152,9 @@ public:
         if (rect.isEmpty())
             return;
         QSize windowSize = this->size();
-        int x = rect.x() + (rect.width() - windowSize.width()) / 2;
-        int y = rect.y() + rect.height() - windowSize.height() - 60;
+        int x = rect.x() + (rect.width() - windowSize.width()) *5 / 6;
+        //int x = rect.x() + rect.width() - windowSize.width();
+        int y = rect.y() + rect.height() - windowSize.height() - 140;
         this->move(x, y);
     }
 

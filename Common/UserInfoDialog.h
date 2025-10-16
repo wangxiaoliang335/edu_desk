@@ -9,10 +9,15 @@
 #include <QIcon>
 #include <qpainterpath.h>
 #include <qtoolbutton.h>
+#include <QJsonObject>    // JSON 对象
+#include <QJsonArray>     // JSON 数组
+#include <QJsonDocument>  // JSON 文档（序列化/反序列化）
+#include <QJsonValue>     // JSON 值类型
 #include <qdebug.h>
 #include "TABaseDialog.h"
 #include "AvatarLabel.h"
 #include "NameLabel.h"
+#include "TAHttpHandler.h"
 
 class UserInfoDialog : public QDialog
 {
@@ -26,12 +31,47 @@ public:
         m_visibleCloseButton(true)
     {
         this->setObjectName("UserInfoDialog");
+        m_httpHandler = new TAHttpHandler(this);
     }
 
     void InitData(UserInfo userInfo)
     {
         m_userInfo = userInfo;
     }
+
+	void uploadAvatar(QString filePath)
+	{
+		// ===== 1. 读取头像图片 =====
+		QFile file(filePath);  // 本地头像路径
+		if (!file.open(QIODevice::ReadOnly)) {
+			qDebug() << "Failed to open image file.";
+			return;
+		}
+		QByteArray imageData = file.readAll(); // 二进制数据
+		file.close();
+
+		// ===== 2. 图片转 Base64 =====
+		QString imageBase64 = QString::fromLatin1(imageData.toBase64());
+
+        // ===== 3. 构造 JSON 数据 =====
+        QMap<QString, QString> params;
+        params["avatar"] = imageBase64;
+        params["phone"] = m_userInfo.strPhone;
+        params["name"] = m_userInfo.strName;
+        params["sex"] = m_userInfo.strSex;
+        params["address"] = m_userInfo.strAddress;
+        params["school_name"] = m_userInfo.strSchoolName;
+        params["grade_level"] = m_userInfo.strGradeLevel;
+        params["grade"] = m_userInfo.strGrade;
+        params["subject"] = m_userInfo.strSubject;
+        params["class_taught"] = m_userInfo.strClassTaught;
+        params["is_administrator"] = m_userInfo.strIsAdministrator;
+        params["id_number"] = m_userInfo.strIdNumber;
+        if (m_httpHandler)
+        {
+            m_httpHandler->post(QString("http://47.100.126.194:5000/updateUserInfo"), params);
+        }
+	}
 
     void InitUI()
     {
@@ -43,6 +83,84 @@ public:
         setWindowTitle("我的");
         resize(350, 600);
         //setStyleSheet("background-color: #2a2a2a; color: white;");
+
+        if (m_httpHandler)
+        {
+            connect(m_httpHandler, &TAHttpHandler::success, this, [=](const QString& responseString) {
+                //成功消息就不发送了
+                QJsonDocument jsonDoc = QJsonDocument::fromJson(responseString.toUtf8());
+                if (jsonDoc.isObject()) {
+                    QJsonObject obj = jsonDoc.object();
+                    if (obj["data"].isObject())
+                    {
+                        QJsonObject oTmp = obj["data"].toObject();
+                        QString strTmp = oTmp["message"].toString();
+                        qDebug() << "status:" << oTmp["code"].toString();
+                        qDebug() << "msg:" << oTmp["message"].toString(); // 如果 msg 是中文，也能正常输出
+                        //errLabel->setText(strTmp);
+                        //user_id = oTmp["user_id"].toInt();
+                        if (strTmp == "登录成功")
+                        {
+                            accept(); // 验证通过，关闭对话框并返回 Accepted
+                        }
+                        else if (strTmp == "获取用户信息成功")
+                        {
+                            /*if (oTmp["userinfo"].isArray())
+                            {
+                                QJsonArray oUserInfo = oTmp["userinfo"].toArray();
+                                if (oUserInfo.size() > 0)
+                                {
+                                    m_userInfo.strPhone = oUserInfo.at(0)["phone"].toString();
+                                    m_userInfo.strName = oUserInfo.at(0)["name"].toString();
+                                    m_userInfo.strSex = oUserInfo.at(0)["sex"].toString();
+                                    m_userInfo.strAddress = oUserInfo.at(0)["address"].toString();
+                                    m_userInfo.strSchoolName = oUserInfo.at(0)["school_name"].toString();
+                                    m_userInfo.strGradeLevel = oUserInfo.at(0)["grade_level"].toString();
+                                    m_userInfo.strGrade = oUserInfo.at(0)["grade"].toString();
+                                    m_userInfo.strSubject = oUserInfo.at(0)["subject"].toString();
+                                    m_userInfo.strClassTaught = oUserInfo.at(0)["class_taught"].toString();
+                                    m_userInfo.strIsAdministrator = oUserInfo.at(0)["is_administrator"].toString();
+                                    m_userInfo.avatar = oUserInfo.at(0)["avatar"].toString();
+                                    m_userInfo.strIdNumber = oUserInfo.at(0)["id_number"].toString();
+
+                                    if (userMenuDlg)
+                                    {
+                                        userMenuDlg->InitData(m_userInfo);
+                                        userMenuDlg->InitUI();
+                                    }
+                                }
+                            }*/
+                        }
+                    }
+                }
+                else
+                {
+                    //errLabel->setText("网络错误");
+                }
+                });
+
+            connect(m_httpHandler, &TAHttpHandler::failed, this, [=](const QString& errResponseString) {
+                //if (errLabel)
+                {
+                    QJsonDocument jsonDoc = QJsonDocument::fromJson(errResponseString.toUtf8());
+                    if (jsonDoc.isObject()) {
+                        QJsonObject obj = jsonDoc.object();
+                        if (obj["data"].isObject())
+                        {
+                            QJsonObject oTmp = obj["data"].toObject();
+                            QString strTmp = oTmp["message"].toString();
+                            qDebug() << "status:" << oTmp["code"].toString();
+                            qDebug() << "msg:" << oTmp["message"].toString(); // 如果 msg 是中文，也能正常输出
+                            //errLabel->setText(strTmp);
+                        }
+                    }
+                    /*else
+                    {
+                        errLabel->setText("网络错误");
+                    }*/
+                }
+                });
+        }
 
         // 关闭按钮（右上角）
         closeButton = new QPushButton(this);
@@ -70,7 +188,7 @@ public:
                 this, "选择新头像", "", "Images (*.png *.jpg *.jpeg *.bmp)");
             if (!file.isEmpty()) {
                 avatarLabel->setAvatar(QPixmap(file));
-                //avatarLabel->update();
+                uploadAvatar(file);
             }
         });
 
@@ -326,4 +444,5 @@ public:
     QPushButton* closeButton = NULL;
     AvatarLabel* avatarLabel = NULL;
     NameLabel* nameLabel = NULL;
+    TAHttpHandler* m_httpHandler = NULL;
 };

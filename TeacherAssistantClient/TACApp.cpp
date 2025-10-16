@@ -211,6 +211,10 @@ bool TACApp::AppInit()
 			loginWidget->InitData();
 			emit resetPwdLogin();
 		}
+		else
+		{
+			bLoginSucceeded = true;
+		}
 	}
 	else if(logRes == QDialog::Rejected) {
 		qDebug("用户关闭或取消");

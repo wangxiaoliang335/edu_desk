@@ -18,6 +18,7 @@ public:
 	void get(const QString& urlStr);
 	void addHeader(const QString& key, const QString& value);
 	void post(const QString& urlStr, const QMap<QString, QString>& params);
+	void post(const QString& urlStr, const QByteArray& jsonData);
 
 signals:
 	void success(const QString content);
