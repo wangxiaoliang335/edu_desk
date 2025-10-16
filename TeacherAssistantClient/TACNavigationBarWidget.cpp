@@ -133,6 +133,9 @@ TACNavigationBarWidget::TACNavigationBarWidget(QWidget *parent)
     teacherIconButton->setIcon(QIcon(":/res/img/user1.png"));
     teacherIconButton->setIconSize(BUTTON_SIZE);
     layout->addWidget(teacherIconButton);
+    connect(teacherIconButton, &QPushButton::clicked, this, [=]() {
+        emit navType(TACNavigationBarWidgetType::USER1);
+        });
 
     layout->setSpacing(20);
     layout->setAlignment(Qt::AlignLeft);

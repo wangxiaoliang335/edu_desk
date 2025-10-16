@@ -12,7 +12,8 @@ enum TACNavigationBarWidgetType
 	USER,
 	WALLPAPER,
 	CALENDAR,
-	TIMER
+	TIMER,
+	USER1
 };
 class TACNavigationBarWidget  : public TAFloatingWidget
 {

@@ -55,12 +55,50 @@ void TACMainDialog::Init()
                                 m_userInfo.strSubject = oUserInfo.at(0)["subject"].toString();
                                 m_userInfo.strClassTaught = oUserInfo.at(0)["class_taught"].toString();
                                 m_userInfo.strIsAdministrator = oUserInfo.at(0)["is_administrator"].toString();
+                                m_userInfo.avatar = oUserInfo.at(0)["avatar"].toString();
+                                m_userInfo.strIdNumber = oUserInfo.at(0)["id_number"].toString();
+                                QString avatarBase64 = oUserInfo.at(0)["avatar_base64"].toString();
+
+                                // 没有文件名就用手机号或ID代替
+                                if (m_userInfo.avatar.isEmpty())
+                                    m_userInfo.avatar = oUserInfo.at(0)["id_number"].toString() + "_" + ".png";
+
+                                // 从最后一个 "/" 之后开始截取
+                                QString fileName = m_userInfo.avatar.section('/', -1);  // "320506197910016493_.png"
+
+                                QString saveDir = QCoreApplication::applicationDirPath() + "/avatars/" + m_userInfo.strIdNumber; // 保存图片目录
+                                QDir().mkpath(saveDir);
+                                
+                                QString filePath = saveDir + "/" + fileName;
+
+                                if (avatarBase64.isEmpty()) {
+                                    qWarning() << "No avatar data for" << filePath;
+                                    //continue;
+                                }
+
+                                // Base64 解码成图片二进制数据
+                                QByteArray imageData = QByteArray::fromBase64(avatarBase64.toUtf8());
+
+                                // 写入文件（覆盖旧的）
+                                QFile file(filePath);
+                                if (!file.open(QIODevice::WriteOnly)) {
+                                    qWarning() << "Cannot open file for writing:" << filePath;
+                                    //continue;
+                                }
+                                file.write(imageData);
+                                file.close();
 
                                 if (userMenuDlg)
                                 {
                                     userMenuDlg->InitData(m_userInfo);
                                     userMenuDlg->InitUI();
                                 }
+
+                                if (schoolInfoDlg)
+                                {
+                                    schoolInfoDlg->InitData(m_userInfo);
+                                }
+
                             }
                         }
                     }
@@ -119,10 +157,8 @@ void TACMainDialog::Init()
         }
         else if (type == TACNavigationBarWidgetType::USER)
         {
-            if (userMenuDlg)
-            {
-                userMenuDlg->show();
-            }
+            if (friendGrpDlg)
+                friendGrpDlg->show();
         }
         else if (type == TACNavigationBarWidgetType::WALLPAPER)
         {
@@ -136,8 +172,7 @@ void TACMainDialog::Init()
         }
         else if (type == TACNavigationBarWidgetType::MESSAGE)
         {
-            if (friendGrpDlg)
-                friendGrpDlg->show();
+            
         }
         else if (type == TACNavigationBarWidgetType::IM)
         {
@@ -153,6 +188,13 @@ void TACMainDialog::Init()
         {
             if (classWeekCourseScheduldDialog)
                 classWeekCourseScheduldDialog->show();
+        }
+        else if (type == TACNavigationBarWidgetType::USER1)
+        {
+            if (userMenuDlg)
+            {
+                userMenuDlg->show();
+            }
         }
     });
     navBarWidget->show();
