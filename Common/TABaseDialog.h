@@ -19,6 +19,8 @@ typedef struct tagUserInfo {
     QString strSubject;
     QString strClassTaught;
     QString strIsAdministrator;
+    QString avatar;
+    QString strIdNumber;
 }UserInfo;
 
 class TABaseDialog  : public QWidget

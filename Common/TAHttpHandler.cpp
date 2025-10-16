@@ -61,3 +61,9 @@ void TAHttpHandler::post(const QString& urlStr, const QMap<QString, QString>& pa
 
     QNetworkReply* reply = manager->post(request, jsonData);
 }
+
+void TAHttpHandler::post(const QString& urlStr, const QByteArray& jsonData) {
+    request.setUrl(QUrl(urlStr));
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    QNetworkReply* reply = manager->post(request, jsonData);
+}
