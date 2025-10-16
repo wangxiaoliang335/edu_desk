@@ -130,6 +130,7 @@
     <QtMoc Include="CustomListDialog.h" />
     <QtMoc Include="AvatarLabel.h" />
     <QtMoc Include="NameLabel.h" />
+    <ClInclude Include="UniqueNumberGenerator.h" />
     <ClInclude Include="util.h" />
   </ItemGroup>
   <ItemGroup>
