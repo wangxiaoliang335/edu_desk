@@ -80,6 +80,24 @@ TACAddGroupWidget::TACAddGroupWidget(QWidget *parent)
 
 TACAddGroupWidget::~TACAddGroupWidget()
 {}
+
+void TACAddGroupWidget::InitWebSocket()
+{
+	if (m_classTeacherDlg)
+	{
+		m_classTeacherDlg->InitWebSocket();
+	}
+}
+
+QVector<QString> TACAddGroupWidget::getNoticeMsg()
+{
+	if (m_classTeacherDlg)
+	{
+		m_classTeacherDlg->getNoticeMsg();
+	}
+	return QVector<QString>();
+}
+
 void TACAddGroupWidget::showEvent(QShowEvent* event)
 {
 	QWidget::showEvent(event);

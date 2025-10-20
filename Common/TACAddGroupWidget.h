@@ -10,6 +10,9 @@ class TACAddGroupWidget : public TAFloatingWidget
 public:
 	TACAddGroupWidget(QWidget *parent);
 	~TACAddGroupWidget();
+
+	void InitWebSocket();
+	QVector<QString> getNoticeMsg();
 protected:
 	void showEvent(QShowEvent* event) override;
 	void resizeEvent(QResizeEvent* event) override;
