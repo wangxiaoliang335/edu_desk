@@ -58,6 +58,16 @@ PwdLoginModalDialog::PwdLoginModalDialog(QWidget* parent)
                         qDebug() << "msg:" << oTmp["message"].toString(); // 如果 msg 是中文，也能正常输出
                         errLabel->setText(strTmp);
                     }
+                    else
+                    {
+                        if (obj["detail"].isString())
+                        {
+                            if (0 == obj["detail"].toString().compare("Not Found"))
+                            {
+                                errLabel->setText("网络错误");
+                            }
+                        }
+                    }
                 }
                 else
                 {
@@ -402,7 +412,7 @@ void PwdLoginModalDialog::onLoginClicked()
     if (m_httpHandler)
     {
         QMap<QString, QString> params;
-        params["phone"] = "13621907363";
+        params["phone"] = phoneEdit->text();
         params["password"] = codeEdit->text();
         m_httpHandler->post(QString("http://47.100.126.194:5000/login"), params);
     }

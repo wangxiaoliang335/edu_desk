@@ -409,7 +409,7 @@ void ResetPwdDialog::onGetCodeClicked()
     if (m_httpHandler)
     {
         QMap<QString, QString> params;
-        params["phone"] = "13621907363";
+        params["phone"] = phoneEdit->text();
         m_httpHandler->post(QString("http://47.100.126.194:5000/send_verification_code"), params);
     }
 }
@@ -444,7 +444,7 @@ void ResetPwdDialog::onLoginClicked()
     if (m_httpHandler)
     {
         QMap<QString, QString> params;
-        params["phone"] = "13621907363";
+        params["phone"] = phoneEdit->text();
         params["new_password"] = secPwdEdit->text();
         params["verification_code"] = codeEdit->text();
         m_httpHandler->post(QString("http://47.100.126.194:5000/verify_and_set_password"), params);

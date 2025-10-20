@@ -135,6 +135,10 @@ private slots:
             table->setItem(newRow, col, new QTableWidgetItem(""));
         }
 
+        //QTableWidgetItem* bhItem = new QTableWidgetItem();
+        //bhItem->setFlags(bhItem->flags() & ~Qt::ItemIsEditable);
+        //QPushButton* pImageBtn = new QPushButton();
+        //table->setCellWidget(newRow, table->columnCount() - 1, pImageBtn);
         qDebug() << "添加新成员行:" << newRow;
     }
 
