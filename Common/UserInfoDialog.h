@@ -180,7 +180,7 @@ public:
         avatarLabel = new AvatarLabel;
         avatarLabel->setFixedSize(64, 64);
         avatarLabel->setStyleSheet("background-color: gray; border-radius: 32px;");
-        avatarLabel->setAvatar(QPixmap(".\\res\\img\\home_bottom_ic_friend@2x.png"));
+        avatarLabel->setAvatar(QPixmap(m_userInfo.strHeadImagePath));
         avatarLabel->setEditIcon(QPixmap(".\\res\\img\\com_ic_edit_2@2x.png"));
 
         QObject::connect(avatarLabel, &AvatarLabel::editIconClicked, [&]() {

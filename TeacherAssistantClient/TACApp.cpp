@@ -39,6 +39,7 @@ bool TACApp::AppInit()
 {
 	setQuitOnLastWindowClosed(false);
 	bool bLoginSucceeded = false;
+	QString qPhone;
 	loginWidget = new ModalDialog();
 	//loginWidget->setTitleName("示例模态对话框");
 	loginWidget->setBackgroundColor(QColor(30, 60, 90));
@@ -114,6 +115,7 @@ bool TACApp::AppInit()
 					else
 					{
 						bLoginSucceeded = true;
+						qPhone = loginWidget->phoneNumber();
 					}
 				}
 			}
@@ -130,6 +132,7 @@ bool TACApp::AppInit()
 			else
 			{
 				bLoginSucceeded = true;
+				qPhone = pwdLoginModalDialog->phoneNumber();
 			}
 			return true;
 		}
@@ -158,6 +161,7 @@ bool TACApp::AppInit()
 			else
 			{
 				bLoginSucceeded = true;
+				qPhone = regDlg->phoneNumber();
 			}
 			return true;
 		}
@@ -180,6 +184,7 @@ bool TACApp::AppInit()
 			else
 			{
 				bLoginSucceeded = true;
+				qPhone = resetPwdDlg->phoneNumber();
 			}
 			return true;
 		}
@@ -214,6 +219,7 @@ bool TACApp::AppInit()
 		else
 		{
 			bLoginSucceeded = true;
+			qPhone = loginWidget->phoneNumber();
 		}
 	}
 	else if(logRes == QDialog::Rejected) {
@@ -224,7 +230,7 @@ bool TACApp::AppInit()
 	if (bLoginSucceeded)
 	{
 		mainWindow = new TACMainDialog();
-		mainWindow->Init();
+		mainWindow->Init(qPhone);
 		mainWindow->show();
 		return true;
 	}

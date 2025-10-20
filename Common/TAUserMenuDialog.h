@@ -50,8 +50,9 @@ public:
         QHBoxLayout* headerLayout = new QHBoxLayout;
         headerLayout->setSpacing(12);
 
-        QLabel* avatar = new QLabel;
+        AvatarLabel* avatar = new AvatarLabel;
         avatar->setFixedSize(56, 56);
+        avatar->setAvatar(QPixmap(m_userInfo.strHeadImagePath));
         avatar->setStyleSheet(
             "QLabel {"
             "background-color: rgba(255,255,255,0.20);"
