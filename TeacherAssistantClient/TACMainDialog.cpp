@@ -1,6 +1,7 @@
 ﻿#pragma execution_character_set("utf-8")
 #include <QScreen>
 #include "TACMainDialog.h"
+#include "CommonInfo.h"
 
 TACMainDialog::TACMainDialog(QWidget *parent)
 	: QDialog(parent)
@@ -12,8 +13,29 @@ TACMainDialog::TACMainDialog(QWidget *parent)
 }
 
 TACMainDialog::~TACMainDialog()
-{}
-void TACMainDialog::Init()
+{
+
+}
+
+//void TACMainDialog::InitWebSocket()
+//{
+//    socket = new QWebSocket();
+//    connect(socket, &QWebSocket::connected, this, &TACMainDialog::onConnected);
+//    connect(socket, &QWebSocket::textMessageReceived, this, &TACMainDialog::onMessageReceived);
+//    connect(socket, QOverload<QAbstractSocket::SocketError>::of(&QWebSocket::error),
+//        this, &TACMainDialog::onError);
+//
+//    // 建立 WebSocket 连接
+//    QString url = QString("ws://47.100.126.194:5000/ws/%1").arg(m_userInfo.strIdNumber);
+//    socket->open(QUrl(url));
+//
+//    // 定时发送心跳
+//    heartbeatTimer = new QTimer(this);
+//    connect(heartbeatTimer, &QTimer::timeout, this, &TACMainDialog::sendHeartbeat);
+//    heartbeatTimer->start(5000); // 每 5 秒一次
+//}
+
+void TACMainDialog::Init(QString qPhone)
 {
     navBarWidget = new TACNavigationBarWidget(this);
     navBarWidget->visibleCloseButton(false);
@@ -57,6 +79,8 @@ void TACMainDialog::Init()
                                 m_userInfo.strIsAdministrator = oUserInfo.at(0)["is_administrator"].toString();
                                 m_userInfo.avatar = oUserInfo.at(0)["avatar"].toString();
                                 m_userInfo.strIdNumber = oUserInfo.at(0)["id_number"].toString();
+                                int iteacher_unique_id = oUserInfo.at(0)["teacher_unique_id"].toInt();
+                                m_userInfo.teacher_unique_id = QString("%1").arg(iteacher_unique_id, 6, 10, QChar('0'));
                                 QString avatarBase64 = oUserInfo.at(0)["avatar_base64"].toString();
 
                                 // 没有文件名就用手机号或ID代替
@@ -76,6 +100,8 @@ void TACMainDialog::Init()
                                     //continue;
                                 }
 
+                                m_userInfo.strHeadImagePath = filePath;
+
                                 // Base64 解码成图片二进制数据
                                 QByteArray imageData = QByteArray::fromBase64(avatarBase64.toUtf8());
 
@@ -92,6 +118,12 @@ void TACMainDialog::Init()
                                 {
                                     userMenuDlg->InitData(m_userInfo);
                                     userMenuDlg->InitUI();
+                                    CommonInfo::InitData(m_userInfo);
+                                    if (friendGrpDlg)
+                                    {
+                                        friendGrpDlg->InitWebSocket();
+                                    }
+                                    //InitWebSocket();
                                 }
 
                                 if (schoolInfoDlg)
@@ -233,6 +265,11 @@ void TACMainDialog::Init()
 
     imDialog = new TACIMDialog(this);
     friendGrpDlg = new FriendGroupDialog(this);
+    friendGrpDlg->setBackgroundColor(WIDGET_BACKGROUND_COLOR);
+    friendGrpDlg->setBorderColor(WIDGET_BORDER_COLOR);
+    friendGrpDlg->setBorderWidth(WIDGET_BORDER_WIDTH);
+    friendGrpDlg->setRadius(30);
+
     homeworkDialog = new TACHomeworkDialog(this);
     homeworkDialog->setContent("语文<br>背诵《荷塘月色》第二段");
 
@@ -332,7 +369,7 @@ void TACMainDialog::Init()
     {
         //QMap<QString, QString> params;
         //params["phone"] = "13621907363";
-        m_httpHandler->get(QString("http://47.100.126.194:5000/userInfo?phone=13621907363"));
+        m_httpHandler->get(QString("http://47.100.126.194:5000/userInfo?phone=" + qPhone));
     }
     //updateBackground("C:/workspace/obs/TeacherAssistant/TeacherAssistantClient/res/bg/5.jpg");
 }
