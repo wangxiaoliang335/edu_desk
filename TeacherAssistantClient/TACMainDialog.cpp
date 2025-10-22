@@ -35,7 +35,7 @@ TACMainDialog::~TACMainDialog()
 //    heartbeatTimer->start(5000); // 每 5 秒一次
 //}
 
-void TACMainDialog::Init(QString qPhone)
+void TACMainDialog::Init(QString qPhone, int user_id)
 {
     navBarWidget = new TACNavigationBarWidget(this);
     navBarWidget->visibleCloseButton(false);
@@ -122,8 +122,8 @@ void TACMainDialog::Init(QString qPhone)
                                     if (friendGrpDlg)
                                     {
                                         friendGrpDlg->InitWebSocket();
+                                        friendGrpDlg->InitData();
                                     }
-                                    //InitWebSocket();
                                 }
 
                                 if (schoolInfoDlg)

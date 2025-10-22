@@ -28,7 +28,7 @@ RegisterDialog::RegisterDialog(QWidget* parent)
                 {
                     QJsonObject oTmp = obj["data"].toObject();
                     QString strTmp = oTmp["message"].toString();
-                    QString strUserId = oTmp["user_id"].toString();
+                    user_id = oTmp["user_id"].toInt();
                     qDebug() << "status:" << oTmp["code"].toString();
                     qDebug() << "msg:" << oTmp["message"].toString(); // 如果 msg 是中文，也能正常输出
                     if (oTmp["code"].toString() == "201")

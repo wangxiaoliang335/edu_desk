@@ -14,7 +14,6 @@ TACCountDownWidget::TACCountDownWidget(QWidget *parent)
 	contentLabel->setAlignment(Qt::AlignVCenter | Qt::AlignCenter);
 	layout->addWidget(contentLabel);
 
-	
 	setLayout(layout);
 	resize(656, 62);
 	this->setBackgroundColor(QColor(243, 96, 93, 50));

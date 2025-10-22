@@ -39,7 +39,7 @@ class TACMainDialog : public QDialog
 public:
 	TACMainDialog(QWidget *parent = nullptr);
 	~TACMainDialog();
-	void Init(QString qPhone);
+	void Init(QString qPhone, int user_id);
     //void InitWebSocket();
 protected:
 	void paintEvent(QPaintEvent* event) override;

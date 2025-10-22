@@ -1,4 +1,5 @@
-﻿#include <QApplication>
+﻿#pragma once
+#include <QApplication>
 #include <QDialog>
 #include <QVBoxLayout>
 #include <QHBoxLayout>

@@ -93,7 +93,7 @@ QVector<QString> TACAddGroupWidget::getNoticeMsg()
 {
 	if (m_classTeacherDlg)
 	{
-		m_classTeacherDlg->getNoticeMsg();
+		return m_classTeacherDlg->getNoticeMsg();
 	}
 	return QVector<QString>();
 }

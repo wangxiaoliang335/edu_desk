@@ -44,7 +44,7 @@ public:
     QString verifyCode()  const { return codeEdit->text(); }
     int getIsPwdLogin() { return m_pwdLogin; }
     int getResetPwdLogin() { return m_resetPwdLogin; }
-
+    int getUserId() { return user_id; }
 signals:
     void pwdLogin();
 private:
@@ -82,7 +82,7 @@ private:
     int countdownValue; // สฃำเร๋สý
     int m_pwdLogin = false;
     int m_resetPwdLogin = false;
-
+    int user_id = -1;
 private slots:
     void onGetCodeClicked();
     void onTimerTick();
