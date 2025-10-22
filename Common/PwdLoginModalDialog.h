@@ -45,6 +45,7 @@ public:
     bool getVerificationCodeLogin() { return m_verification_code_Login; }
     int getRegisterLogin() { return m_registerLogin; }
     int getResetPwdLogin() { return m_resetPwdLogin; }
+    int getUserId() { return user_id; }
 private:
     bool m_dragging;
     QPoint m_dragStartPos;

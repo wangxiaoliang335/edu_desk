@@ -45,6 +45,7 @@ public:
     int getIsPwdLogin() { return m_pwdLogin; }
     int getRegisterLogin() { return m_registerLogin; }
     int getResetPwdLogin() { return m_resetPwdLogin; }
+    int getUserId() { return user_id; }
 signals:
     void pwdLogin();
 private:
