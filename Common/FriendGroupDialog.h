@@ -1,4 +1,5 @@
-﻿#include <QApplication>
+﻿#pragma once
+#include <QApplication>
 #include <QDialog>
 #include <QStackedWidget>
 #include <QPushButton>
@@ -11,43 +12,11 @@
 #include <QStyle>
 #include <QDir>
 #include <qpainterpath.h>
+#include "ScheduleDialog.h"
 #include "FriendNotifyDialog.h"
 #include "TACAddGroupWidget.h"
 #include "GroupNotifyDialog.h"
 #include "TAHttpHandler.h"
-
-// 帮助函数：生成一行左右两个按钮布局（相同颜色）
-static QHBoxLayout* makeRowBtn(const QString& leftText, const QString& rightText,
-    const QString& bgColor, const QString& fgColor)
-{
-    QHBoxLayout* row = new QHBoxLayout;
-    QPushButton* left = new QPushButton(leftText);
-    QPushButton* right = new QPushButton(rightText);
-    QString style = QString("background-color:%1; color:%2; padding:6px; font-size:16px;")
-        .arg(bgColor).arg(fgColor);
-    left->setStyleSheet(style);
-    right->setStyleSheet(style);
-    row->addWidget(left);
-    row->addWidget(right);
-    return row;
-}
-
-// 帮助函数：生成一行两个不同用途的按钮（如头像+昵称）
-static QHBoxLayout* makePairBtn(const QString& leftText, const QString& rightText,
-    const QString& bgColor, const QString& fgColor)
-{
-    QHBoxLayout* pair = new QHBoxLayout;
-    QPushButton* left = new QPushButton();
-    QPushButton* right = new QPushButton(rightText);
-    QString style = QString("background-color:%1; color:%2; padding:6px; font-size:16px;")
-        .arg(bgColor).arg(fgColor);
-    left->setIcon(QIcon(leftText));
-    left->setStyleSheet(style);
-    right->setStyleSheet(style);
-    pair->addWidget(left);
-    pair->addWidget(right);
-    return pair;
-}
 
 class RowItem : public QFrame {
     Q_OBJECT
@@ -56,8 +25,8 @@ public:
         setObjectName("RowItem");
         setFixedHeight(48);
         setStyleSheet(
-            "QFrame#RowItem { background:#ffffff; border-bottom:1px solid #eaeaea; }"
-            "QLabel { color:#222; font-size:15px; }"
+            "QFrame#RowItem { background:#ffffff; border-bottom:1px solid #eaeaea; }\n"
+            "QLabel { color:#222; font-size:15px; }\n"
             "QToolButton { border:none; color:#888; }"
         );
         auto h = new QHBoxLayout(this);
@@ -90,7 +59,7 @@ class FriendGroupDialog : public QDialog
 {
     Q_OBJECT
 public:
-    FriendGroupDialog(QWidget* parent = nullptr) 
+    FriendGroupDialog(QWidget* parent)
         : QDialog(parent), m_dragging(false),
         m_backgroundColor(QColor(50, 50, 50)),
         m_borderColor(Qt::white),
@@ -98,11 +67,13 @@ public:
         m_visibleCloseButton(true)
     {
         setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
-        setModal(true);
+        //setModal(true);
         setAttribute(Qt::WA_TranslucentBackground);
 
         setWindowTitle("好友 / 群聊");
         resize(500, 600);
+
+        m_scheduleDlg = new ScheduleDialog();
 
         //fLayout->addLayout(makePairBtn("老师头像", "老师昵称", "green", "white"));
         //fLayout->addLayout(makePairBtn("老师头像", "老师昵称", "green", "white"));
@@ -117,7 +88,6 @@ public:
                     if (obj["friends"].isArray())
                     {
                         QJsonArray friendsArray = obj.value("friends").toArray();
-
                         fLayout->addLayout(makeRowBtn("教师", QString::number(friendsArray.size()), "blue", "white"));
                         for (int i = 0; i < friendsArray.size(); i++)
                         {
@@ -171,7 +141,7 @@ public:
 
                             if (fLayout)
                             {
-                                fLayout->addLayout(makePairBtn(filePath, name, "green", "white"));
+                                fLayout->addLayout(makePairBtn(filePath, name, "green", "white", ""));
                             }
                             /********************************************/
                         }
@@ -182,6 +152,32 @@ public:
                         qDebug() << "msg:" << oTmp["message"].toString(); // 如果 msg 是中文，也能正常输出
                         //errLabel->setText(strTmp);
                         //user_id = oTmp["user_id"].toInt();
+                    }
+                    else if (obj["data"].isObject())
+                    {
+                        QJsonObject dataObj = obj["data"].toObject();
+                        if (dataObj["groups"].isArray())
+                        {
+                            gAdminLayout->addLayout(makeRowBtn("管理", "1", "orange", "black"));
+                            QJsonArray groupArray = dataObj["groups"].toArray();
+                            for (int i = 0; i < groupArray.size(); i++)
+                            {
+                                QJsonObject groupObj = groupArray.at(i).toObject();
+                                QString unique_group_id = groupObj.value("unique_group_id").toString();
+                                gAdminLayout->addLayout(makePairBtn("群头像", groupObj.value("nickname").toString(), "white", "red", unique_group_id));
+                            }
+                        }
+                        else if (dataObj["joingroups"].isArray())
+                        {
+                            gJoinLayout->addLayout(makeRowBtn("加入", "3", "orange", "black"));
+                            QJsonArray groupArray = dataObj["joingroups"].toArray();
+                            for (int i = 0; i < groupArray.size(); i++)
+                            {
+                                QJsonObject groupObj = groupArray.at(i).toObject();
+                                QString unique_group_id = groupObj.value("unique_group_id").toString();
+                                gJoinLayout->addLayout(makePairBtn("群头像", groupObj.value("nickname").toString(), "white", "red", unique_group_id));
+                            }
+                        }
                     }
                 }
                 else
@@ -212,15 +208,6 @@ public:
                 }
                 });
         }
-        if (m_httpHandler)
-        {
-            //QMap<QString, QString> params;
-            //params["id_card"] = "320506197910016493";
-            QString url = "http://47.100.126.194:5000/friends?";
-            url += "id_card=";
-            url += "320506197910016493";
-            m_httpHandler->get(url);
-        }
 
         // 顶部通知区 + 添加按钮
         QHBoxLayout* topLayout = new QHBoxLayout;
@@ -235,6 +222,11 @@ public:
         connect(friendNotify, &RowItem::clicked, this, [=] {
             qDebug("好友通知 clicked");
             QVector<QString> vstrNotice = addGroupWidget->getNoticeMsg();
+            if (friendNotifyDlg)
+            {
+                friendNotifyDlg->InitData(vstrNotice);
+            }
+
             if (friendNotifyDlg && friendNotifyDlg->isHidden())
             {
                 friendNotifyDlg->show();
@@ -243,9 +235,14 @@ public:
             {
                 friendNotifyDlg->hide();
             }
-        });
+            });
         connect(groupNotify, &RowItem::clicked, this, [=] {
             qDebug("群通知 clicked");
+            QVector<QString> vstrNotice = addGroupWidget->getNoticeMsg();
+            if (grpNotifyDlg)
+            {
+                grpNotifyDlg->InitData(vstrNotice);
+            }
             if (grpNotifyDlg && grpNotifyDlg->isHidden())
             {
                 grpNotifyDlg->show();
@@ -254,7 +251,7 @@ public:
             {
                 grpNotifyDlg->hide();
             }
-        });
+            });
 
         QHBoxLayout* closeLayout = new QHBoxLayout;
         pLabel = new QLabel(NULL);
@@ -287,17 +284,17 @@ public:
         //topLayout->addStretch();
         //topLayout->addWidget(closeButton);
 
-		connect(btnAdd, &QPushButton::clicked, this, [=] {
-			if (addGroupWidget)
-			{
-				addGroupWidget->show();
-			}
-		});
+        connect(btnAdd, &QPushButton::clicked, this, [=] {
+            if (addGroupWidget)
+            {
+                addGroupWidget->show();
+            }
+            });
 
         // 中间切换按钮
         QHBoxLayout* switchLayout = new QHBoxLayout;
-        QPushButton* btnFriend = new QPushButton("好友");
         QPushButton* btnGroup = new QPushButton("群聊");
+        QPushButton* btnFriend = new QPushButton("好友");
         btnFriend->setCheckable(true);
         btnGroup->setCheckable(true);
         btnFriend->setStyleSheet("QPushButton {background-color: green; color: white; padding:6px;} QPushButton:checked { background-color: green;}");
@@ -314,8 +311,8 @@ public:
         fLayout = new QVBoxLayout(friendPage);
         fLayout->setSpacing(10);
         fLayout->addLayout(makeRowBtn("班级", "3", "blue", "white"));
-        fLayout->addLayout(makePairBtn("班级头像", "班级昵称", "orange", "black"));
-        fLayout->addLayout(makePairBtn("班级头像", "班级昵称", "orange", "black"));
+        fLayout->addLayout(makePairBtn("班级头像", "班级昵称", "orange", "black", ""));
+        fLayout->addLayout(makePairBtn("班级头像", "班级昵称", "orange", "black", ""));
         //fLayout->addLayout(makeRowBtn("教师", "3", "blue", "white"));
         //fLayout->addLayout(makePairBtn("老师头像", "老师昵称", "green", "white"));
         //fLayout->addLayout(makePairBtn("老师头像", "老师昵称", "green", "white"));
@@ -323,12 +320,15 @@ public:
         // 群聊界面
         QWidget* groupPage = new QWidget;
         gLayout = new QVBoxLayout(groupPage);
+        gAdminLayout = new QVBoxLayout(groupPage);
+        gJoinLayout = new QVBoxLayout(groupPage);
         gLayout->setSpacing(10);
+        //gLayout->addLayout(makePairBtn("群头像", "群昵称", "white", "red"));
+        //gLayout->addLayout(makePairBtn("群头像", "群昵称", "white", "red"));
+
         gLayout->addLayout(makeRowBtn("班级群", "3", "blue", "white"));
-        gLayout->addLayout(makePairBtn("管理", "1", "orange", "black"));
-        gLayout->addLayout(makePairBtn("加入", "3", "orange", "black"));
-        gLayout->addLayout(makePairBtn("群头像", "群昵称", "white", "red"));
-        gLayout->addLayout(makePairBtn("群头像", "群昵称", "white", "red"));
+        gLayout->addLayout(gAdminLayout);
+        gLayout->addLayout(gJoinLayout);
         gLayout->addLayout(makeRowBtn("普通群", "3", "blue", "white"));
 
         stack->addWidget(friendPage);
@@ -357,6 +357,69 @@ public:
         mainLayout->addSpacing(10);
         mainLayout->addLayout(switchLayout);
         mainLayout->addWidget(stack);
+    }
+
+    // 帮助函数：生成一行左右两个按钮布局（相同颜色）
+    static QHBoxLayout* makeRowBtn(const QString& leftText, const QString& rightText, const QString& bgColor, const QString& fgColor)
+    {
+        QHBoxLayout* row = new QHBoxLayout;
+        QPushButton* left = new QPushButton(leftText);
+        QPushButton* right = new QPushButton(rightText);
+        QString style = QString("background-color:%1; color:%2; padding:6px; font-size:16px;").arg(bgColor).arg(fgColor);
+        left->setStyleSheet(style);
+        right->setStyleSheet(style);
+        row->addWidget(left);
+        row->addWidget(right);
+        return row;
+    }
+
+    // 帮助函数：生成一行两个不同用途的按钮（如头像+昵称）
+    QHBoxLayout* makePairBtn(const QString& leftText, const QString& rightText, const QString& bgColor, const QString& fgColor, QString unique_group_id)
+    {
+        QHBoxLayout* pair = new QHBoxLayout;
+        QPushButton* left = new QPushButton();
+        QPushButton* right = new QPushButton(rightText);
+        QString style = QString("background-color:%1; color:%2; padding:6px; font-size:16px;").arg(bgColor).arg(fgColor);
+        left->setIcon(QIcon(leftText));
+        left->setStyleSheet(style);
+        right->setStyleSheet(style);
+        pair->addWidget(left);
+        left->setProperty("unique_group_id", unique_group_id);
+        right->setProperty("unique_group_id", unique_group_id);
+        pair->addWidget(right);
+        if (!unique_group_id.isEmpty())
+        {
+            connect(left, &QPushButton::clicked, this, [&]() {
+                if (m_scheduleDlg && m_scheduleDlg->isHidden())
+                {
+                    m_scheduleDlg->show();
+                }
+                //accept();
+                });
+        }
+        return pair;
+    }
+
+    void InitData()
+    {
+        if (m_httpHandler)
+        {
+            UserInfo userInfo = CommonInfo::GetData();
+            QString url = "http://47.100.126.194:5000/friends?";
+            url += "id_card=";
+            url += userInfo.strIdNumber;
+            m_httpHandler->get(url);
+
+            url = "http://47.100.126.194:5000/groups?";
+            url += "group_admin_id=";
+            url += userInfo.teacher_unique_id;
+            m_httpHandler->get(url);
+
+            url = "http://47.100.126.194:5000/member/groups?";
+            url += "unique_member_id=";
+            url += userInfo.teacher_unique_id;
+            m_httpHandler->get(url);
+        }
     }
 
     void InitWebSocket()
@@ -472,4 +535,9 @@ public:
      TAHttpHandler* m_httpHandler = NULL;
      QVBoxLayout* fLayout = NULL;
      QVBoxLayout* gLayout = NULL;
+     QVBoxLayout* gAdminLayout = NULL;
+     QVBoxLayout* gJoinLayout = NULL;
+
+public:
+     ScheduleDialog* m_scheduleDlg = NULL;
 };

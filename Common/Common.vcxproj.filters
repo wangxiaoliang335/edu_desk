@@ -85,6 +85,9 @@
     <ClCompile Include="CommonInfo.h.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="FriendGroupDialog.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="TAFloatingWidget.h">

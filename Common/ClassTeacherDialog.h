@@ -61,6 +61,8 @@ public:
                             QString avatar = userDetails.value("avatar").toString();
                             QString strIdNumber = userDetails.value("id_number").toString();
                             QString avatarBase64 = userDetails.value("avatar_base64").toString();
+                            QString grade = userDetails.value("grade").toString();
+                            QString class_taught = userDetails.value("class_taught").toString();
 
                             // 没有文件名就用手机号或ID代替
                             if (avatar.isEmpty())
@@ -94,11 +96,11 @@ public:
                             {
                                 if (false == bFirst)
                                 {
-                                    addPersonRow(teacherListLayout, filePath, name, phone, teacher_unique_id, sexGroup, true);
+                                    addPersonRow(teacherListLayout, filePath, name, phone, teacher_unique_id, grade, class_taught, sexGroup, true);
                                 }
                                 else
                                 {
-                                    addPersonRow(teacherListLayout, filePath, name, phone, teacher_unique_id, sexGroup);
+                                    addPersonRow(teacherListLayout, filePath, name, phone, teacher_unique_id, grade, class_taught, sexGroup);
                                 }
                                 bFirst = true;
                                 //fLayout->addLayout(makePairBtn(filePath, name, "green", "white"));
@@ -171,9 +173,9 @@ public:
         QWidget* classListWidget = new QWidget;
         classListLayout = new QVBoxLayout(classListWidget);
         classListLayout->setSpacing(8);
-        addPersonRow(classListLayout, ":/icons/avatar1.png", "软件开发工程师", "", "", NULL);
-        addPersonRow(classListLayout, ":/icons/avatar2.png", "苏州-UI-已入职", "", "", NULL);
-        addPersonRow(classListLayout, ":/icons/avatar3.png", "平平淡淡", "", "", NULL);
+        addPersonRow(classListLayout, ":/icons/avatar1.png", "软件开发工程师", "", "", "", "", NULL);
+        addPersonRow(classListLayout, ":/icons/avatar2.png", "苏州-UI-已入职", "", "", "", "", NULL);
+        addPersonRow(classListLayout, ":/icons/avatar3.png", "平平淡淡", "", "", "", "", NULL);
         classLayout->addWidget(classListWidget);
         mainLayout->addLayout(classLayout);
 
@@ -238,13 +240,17 @@ public:
     }
 
 private:
-    void addPersonRow(QVBoxLayout* parentLayout, const QString& iconPath, const QString& name, const QString phone, const QString teacher_unique_id, QButtonGroup* pBtnGroup, bool checked = false)
+    void addPersonRow(QVBoxLayout* parentLayout, const QString& iconPath, const QString& name, const QString phone, const QString teacher_unique_id, 
+            QString grade, QString class_taught, QButtonGroup* pBtnGroup, bool checked = false)
     {
         QHBoxLayout* rowLayout = new QHBoxLayout;
         QRadioButton* radio = new QRadioButton;
         radio->setChecked(checked);
         radio->setProperty("phone", phone); // 可以是 int / QString / QVariant
         radio->setProperty("teacher_unique_id", teacher_unique_id); // 可以是 int / QString / QVariant
+        radio->setProperty("grade", grade);
+        radio->setProperty("class_taught", class_taught);
+        radio->setProperty("name", name);
 
         QLabel* avatar = new QLabel;
         avatar->setFixedSize(36, 36);
@@ -312,44 +318,97 @@ private:
         }
 
         void sendPrivateMessage() {
-            //QString msg = inputEdit->text();
-            //if (!msg.isEmpty()) {
-            //    bool ok = false;
-            //    QString targetId = QInputDialog::getText(this, "私聊", "目标 ID:", QLineEdit::Normal, "", &ok);
-            //    if (ok && !targetId.isEmpty()) {
-            //        socket->sendTextMessage(QString("to:%1:%2").arg(targetId, msg));
-            //        inputEdit->clear();
-            //    }
-            //}
+			// 先拿到当前选中的按钮
+			QAbstractButton* checked = sexGroup->checkedButton();
+			if (!checked) {
+				qWarning() << "没有选中的教师";
+				return;
+			}
+			// 取出按钮上绑定的私有数据
+			QString phone = checked->property("phone").toString();
+			QString teacher_unique_id = checked->property("teacher_unique_id").toString();
+            QString grade = checked->property("grade").toString();
+            QString class_taught = checked->property("class_taught").toString();
+            QString name = checked->property("name").toString();
+			qDebug() << "当前选中教师 Phone:" << phone << "  唯一编号:" << teacher_unique_id;
 
-            // 先拿到当前选中的按钮
-            QAbstractButton* checked = sexGroup->checkedButton();
-            if (!checked) {
-                qWarning() << "没有选中的教师";
-                return;
-            }
-            // 取出按钮上绑定的私有数据
-            QString phone = checked->property("phone").toString();
-            QString teacher_unique_id = checked->property("teacher_unique_id").toString();
-            qDebug() << "当前选中教师 Phone:" << phone << "  唯一编号:" << teacher_unique_id;
+			//QJsonObject obj;
+			//obj["teacher_unique_id"] = teacher_unique_id;
+			//obj["phone"] = phone;
+			//obj["text"] = "加好友";
+			//obj["type"] = "1";   //1 加好友，2 解除好友, 3.创建群，4.解散群
 
-            QJsonObject obj;
-            obj["teacher_unique_id"] = teacher_unique_id;
-            obj["phone"] = phone;
-            obj["text"] = "加好友";
-            obj["type"] = "1";   //1 加好友，2 解除好友
- 
+			//// 用 QJsonDocument 序列化
+			//QJsonDocument doc(obj);
+			//// 输出美化格式（有缩进）
+			//QString prettyString = QString::fromUtf8(doc.toJson(QJsonDocument::Indented));
+			//qDebug() << "美化格式:" << prettyString;
+
+			//if (!prettyString.isEmpty()) {
+			//	socket->sendTextMessage(QString("to:%1:%2").arg(teacher_unique_id, prettyString));
+			//	//inputEdit->clear();
+			//}
+
+            UserInfo userinfo = CommonInfo::GetData();
+            // 创建群
+            QJsonObject createGroupMsg;
+            createGroupMsg["type"] = "3";
+            createGroupMsg["permission_level"] = 1;
+            createGroupMsg["headImage_path"] = "/images/group.png";
+            createGroupMsg["group_type"] = 1;
+            createGroupMsg["nickname"] = grade + class_taught + "的班级群";
+            createGroupMsg["owner_id"] = userinfo.teacher_unique_id;
+            createGroupMsg["owner_name"] = userinfo.strName;
+
+            // 成员数组
+            QJsonArray members;
+            QJsonObject m1;
+            m1["unique_member_id"] = teacher_unique_id;
+            m1["member_name"] = name;
+            m1["group_role"] = 0;
+            members.append(m1);
+            createGroupMsg["members"] = members;
+
             // 用 QJsonDocument 序列化
-            QJsonDocument doc(obj);
+            QJsonDocument doc(createGroupMsg);
             // 输出美化格式（有缩进）
             QString prettyString = QString::fromUtf8(doc.toJson(QJsonDocument::Indented));
             qDebug() << "美化格式:" << prettyString;
 
             if (!prettyString.isEmpty()) {
-                socket->sendTextMessage(QString("to:%1:%2").arg(teacher_unique_id, prettyString));
-                //inputEdit->clear();
+            	socket->sendTextMessage(QString("to:%1:%2").arg(teacher_unique_id, prettyString));
             }
         }
+
+        //void sendPrivateMessage() {
+        //    // 先拿到当前选中的按钮
+        //    QAbstractButton* checked = sexGroup->checkedButton();
+        //    if (!checked) {
+        //        qWarning() << "没有选中的教师";
+        //        return;
+        //    }
+        //    // 取出按钮上绑定的私有数据
+        //    QString phone = checked->property("phone").toString();
+        //    QString teacher_unique_id = checked->property("teacher_unique_id").toString();
+        //    qDebug() << "当前选中教师 Phone:" << phone << "  唯一编号:" << teacher_unique_id;
+
+        //    QJsonObject obj;
+        //    obj["teacher_unique_id"] = teacher_unique_id;
+        //    obj["phone"] = phone;
+        //    obj["text"] = "加好友";
+        //    obj["type"] = "1";   //1 加好友，2 解除好友, 3.创建群，4.解散群
+ 
+        //    // 用 QJsonDocument 序列化
+        //    QJsonDocument doc(obj);
+        //    // 输出美化格式（有缩进）
+        //    QString prettyString = QString::fromUtf8(doc.toJson(QJsonDocument::Indented));
+        //    qDebug() << "美化格式:" << prettyString;
+
+        //    if (!prettyString.isEmpty()) {
+        //        socket->sendTextMessage(QString("to:%1:%2").arg(teacher_unique_id, prettyString));
+        //        //inputEdit->clear();
+        //    }
+        //}
 
         void sendHeartbeat() {
             if (socket->state() == QAbstractSocket::ConnectedState) {

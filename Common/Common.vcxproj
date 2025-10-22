@@ -137,6 +137,7 @@
   <ItemGroup>
     <ClCompile Include="AvatarLabel.cpp" />
     <ClCompile Include="CommonInfo.h.cpp" />
+    <ClCompile Include="FriendGroupDialog.cpp" />
     <ClCompile Include="ModalDialog.cpp" />
     <ClCompile Include="NameLabel.cpp" />
     <ClCompile Include="PwdLoginModalDialog.cpp" />
