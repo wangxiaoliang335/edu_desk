@@ -221,11 +221,11 @@ public:
 
         QObject::connect(nameLabel, &NameLabel::editIconClicked, [=]() {
             qDebug() << "编辑图标被点击";
-            });
+        });
 
         QObject::connect(nameLabel, &NameLabel::labelClicked, [=]() {
             qDebug() << "姓名标签被点击";
-            });
+        });
 
         //QHBoxLayout* nameLayout = new QHBoxLayout;
         //nameLayout->addWidget(nameLabel);

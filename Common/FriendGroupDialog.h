@@ -164,7 +164,42 @@ public:
                             {
                                 QJsonObject groupObj = groupArray.at(i).toObject();
                                 QString unique_group_id = groupObj.value("unique_group_id").toString();
-                                gAdminLayout->addLayout(makePairBtn("群头像", groupObj.value("nickname").toString(), "white", "red", unique_group_id));
+                                QString avatar_base64 = groupObj.value("avatar_base64").toString();
+                                QString headImage_path = groupObj.value("headImage_path").toString();
+
+                                //// 假设 avatarBase64 是 QString 类型，从 HTTP 返回的 JSON 中拿到
+                                //QByteArray imageData = QByteArray::fromBase64(avatar_base64.toUtf8());
+                                //QPixmap pixmap;
+                                //pixmap.loadFromData(imageData);
+
+                                // 从最后一个 "/" 之后开始截取
+                                QString fileName = headImage_path.section('/', -1);  // "320506197910016493_.png"
+                                QString saveDir = QCoreApplication::applicationDirPath() + "/group_images/" + unique_group_id; // 保存图片目录
+                                QDir().mkpath(saveDir);
+                                QString filePath = saveDir + "/" + fileName;
+
+                                if (avatar_base64.isEmpty()) {
+                                    qWarning() << "No avatar data for" << filePath;
+                                    //continue;
+                                }
+                                //m_userInfo.strHeadImagePath = filePath;
+
+                                // Base64 解码成图片二进制数据
+                                QByteArray imageData = QByteArray::fromBase64(avatar_base64.toUtf8());
+
+                                // 写入文件（覆盖旧的）
+                                QFile file(filePath);
+                                if (!file.open(QIODevice::WriteOnly)) {
+                                    qWarning() << "Cannot open file for writing:" << filePath;
+                                    //continue;
+                                }
+                                file.write(imageData);
+                                file.close();
+
+                                //lblAvatar->setPixmap(pixmap.scaled(lblAvatar->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                                //lblAvatar->setScaledContents(true);
+
+                                gAdminLayout->addLayout(makePairBtn(filePath, groupObj.value("nickname").toString(), "white", "red", unique_group_id));
                             }
                         }
                         else if (dataObj["joingroups"].isArray())
@@ -175,7 +210,41 @@ public:
                             {
                                 QJsonObject groupObj = groupArray.at(i).toObject();
                                 QString unique_group_id = groupObj.value("unique_group_id").toString();
-                                gJoinLayout->addLayout(makePairBtn("群头像", groupObj.value("nickname").toString(), "white", "red", unique_group_id));
+                                QString avatar_base64 = groupObj.value("avatar_base64").toString();
+                                QString headImage_path = groupObj.value("headImage_path").toString();
+                                //// 假设 avatarBase64 是 QString 类型，从 HTTP 返回的 JSON 中拿到
+                                //QByteArray imageData = QByteArray::fromBase64(avatar_base64.toUtf8());
+                                //QPixmap pixmap;
+                                //pixmap.loadFromData(imageData);
+
+                                // 从最后一个 "/" 之后开始截取
+                                QString fileName = headImage_path.section('/', -1);  // "320506197910016493_.png"
+                                QString saveDir = QCoreApplication::applicationDirPath() + "/group_images/" + unique_group_id; // 保存图片目录
+                                QDir().mkpath(saveDir);
+                                QString filePath = saveDir + "/" + fileName;
+
+                                if (avatar_base64.isEmpty()) {
+                                    qWarning() << "No avatar data for" << filePath;
+                                    //continue;
+                                }
+                                //m_userInfo.strHeadImagePath = filePath;
+
+                                // Base64 解码成图片二进制数据
+                                QByteArray imageData = QByteArray::fromBase64(avatar_base64.toUtf8());
+
+                                // 写入文件（覆盖旧的）
+                                QFile file(filePath);
+                                if (!file.open(QIODevice::WriteOnly)) {
+                                    qWarning() << "Cannot open file for writing:" << filePath;
+                                    //continue;
+                                }
+                                file.write(imageData);
+                                file.close();
+
+                                //lblAvatar->setPixmap(pixmap.scaled(lblAvatar->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                                //lblAvatar->setScaledContents(true);
+
+                                gJoinLayout->addLayout(makePairBtn(filePath, groupObj.value("nickname").toString(), "white", "red", unique_group_id));
                             }
                         }
                     }
@@ -389,13 +458,14 @@ public:
         pair->addWidget(right);
         if (!unique_group_id.isEmpty())
         {
-            connect(left, &QPushButton::clicked, this, [&]() {
+            connect(left, &QPushButton::clicked, this, [this, rightText, unique_group_id]() {
                 if (m_scheduleDlg && m_scheduleDlg->isHidden())
                 {
+                    m_scheduleDlg->InitData(rightText, unique_group_id);
                     m_scheduleDlg->show();
                 }
                 //accept();
-                });
+            });
         }
         return pair;
     }

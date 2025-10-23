@@ -369,7 +369,7 @@ void TACMainDialog::Init(QString qPhone, int user_id)
     {
         //QMap<QString, QString> params;
         //params["phone"] = "13621907363";
-        m_httpHandler->get(QString("http://47.100.126.194:5000/userInfo?phone=" + qPhone));
+        m_httpHandler->get(QString("http://47.100.126.194:5000/userInfo?userid=" + QString::number(user_id)));
     }
     //updateBackground("C:/workspace/obs/TeacherAssistant/TeacherAssistantClient/res/bg/5.jpg");
 }

@@ -171,6 +171,9 @@
     <QtMoc Include="NameLabel.h">
       <Filter>Header Files</Filter>
     </QtMoc>
+    <QtMoc Include="ChatDialog.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="Resource.qrc">
