@@ -123,7 +123,7 @@ public:
             }
             else
             {
-                addTextMessage(":/res/img/home.png", "我", iter.content, false);
+                addTextMessage(":/res/img/home.png", iter.sender_name, iter.content, false);
             }
         }
     }
@@ -210,22 +210,25 @@ private slots:
 
     void sendMyImageMessage()
     {
+        UserInfo userinfo = CommonInfo::GetData();
         QString imgPath = QFileDialog::getOpenFileName(this, "选择图片", "", "Images (*.png *.jpg *.jpeg *.bmp)");
         if (!imgPath.isEmpty())
-            addImageMessage(":/res/img/home.png", "我", imgPath, true);
+            addImageMessage(":/res/img/home.png", userinfo.strName, imgPath, true);
     }
 
     void sendMyFileMessage()
     {
+        UserInfo userinfo = CommonInfo::GetData();
         QString filePath = QFileDialog::getOpenFileName(this, "选择文件");
         if (!filePath.isEmpty())
-            addFileMessage(":/res/img/home.png", "我", filePath, true);
+            addFileMessage(":/res/img/home.png", userinfo.strName, filePath, true);
     }
 
     void sendMyVoiceMessage()
     {
+        UserInfo userinfo = CommonInfo::GetData();
         // 模拟 8秒语音
-        addVoiceMessage(":/res/img/home.png", "我", 8, true);
+        addVoiceMessage(":/res/img/home.png", userinfo.strName, 8, true);
     }
 
 private:
@@ -253,12 +256,26 @@ private:
             m_lastMessage.time.secsTo(now) <= 180;
     }
 
-    QWidget* buildMessageWidget(const QString& avatarPath, QWidget* contentWidget, bool isMine, bool hideAvatar)
+    //如果 hideAvatar = true 就不显示头像但仍显示发送者名字。
+    QWidget* buildMessageWidget(const QString& avatarPath, const QString& senderName, QWidget* contentWidget, bool isMine, bool hideAvatar)
     {
         QWidget* msgWidget = new QWidget();
         QVBoxLayout* vLayout = new QVBoxLayout(msgWidget);
         vLayout->setContentsMargins(5, 5, 5, 5);
+        vLayout->setSpacing(2);
 
+        // ====== 第一行：发送者名称 ======
+        QLabel* lblName = new QLabel(senderName);
+        lblName->setStyleSheet("color: gray; font-size: 12px;");
+        if (isMine) {
+            lblName->setAlignment(Qt::AlignRight);
+        }
+        else {
+            lblName->setAlignment(Qt::AlignLeft);
+        }
+        vLayout->addWidget(lblName);
+
+        // ====== 第二行：头像 + 气泡 ======
         QHBoxLayout* hLayout = new QHBoxLayout();
         hLayout->setContentsMargins(0, 0, 0, 0);
 
@@ -295,6 +312,7 @@ private:
         return msgWidget;
     }
 
+
     void addTextMessage(const QString& avatarPath, const QString& senderName, const QString& text, bool isMine)
     {
         QDateTime now = QDateTime::currentDateTime();
@@ -305,7 +323,7 @@ private:
         lblMessage->setWordWrap(true);
         lblMessage->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
-        QWidget* msgWidget = buildMessageWidget(avatarPath, lblMessage, isMine, hideAvatar);
+        QWidget* msgWidget = buildMessageWidget(avatarPath, senderName, lblMessage, isMine, hideAvatar);
 
         QListWidgetItem* item = new QListWidgetItem(m_listWidget);
         item->setSizeHint(msgWidget->sizeHint());
@@ -332,7 +350,7 @@ private:
             QDesktopServices::openUrl(QUrl::fromLocalFile(imgPath));
             });
 
-        QWidget* msgWidget = buildMessageWidget(avatarPath, lblImage, isMine, hideAvatar);
+        QWidget* msgWidget = buildMessageWidget(avatarPath, senderName, lblImage, isMine, hideAvatar);
 
         QListWidgetItem* item = new QListWidgetItem(m_listWidget);
         item->setSizeHint(msgWidget->sizeHint());
@@ -362,7 +380,7 @@ private:
             QDesktopServices::openUrl(QUrl::fromLocalFile(filePath));
             });
 
-        QWidget* msgWidget = buildMessageWidget(avatarPath, lblFile, isMine, hideAvatar);
+        QWidget* msgWidget = buildMessageWidget(avatarPath, senderName, lblFile, isMine, hideAvatar);
 
         QListWidgetItem* item = new QListWidgetItem(m_listWidget);
         item->setSizeHint(msgWidget->sizeHint());
@@ -388,7 +406,7 @@ private:
             qDebug("播放语音 %d 秒", seconds);
             });
 
-        QWidget* msgWidget = buildMessageWidget(avatarPath, lblVoice, isMine, hideAvatar);
+        QWidget* msgWidget = buildMessageWidget(avatarPath, senderName, lblVoice, isMine, hideAvatar);
 
         QListWidgetItem* item = new QListWidgetItem(m_listWidget);
         item->setSizeHint(msgWidget->sizeHint());
