@@ -9,11 +9,11 @@
 #define WIDGET_BORDER_COLOR_C QColor(255,255,255,25)
 #define WIDGET_BORDER_WIDTH_C 1
 
-TACAddGroupWidget::TACAddGroupWidget(QWidget *parent)
+TACAddGroupWidget::TACAddGroupWidget(QWidget *parent, TaQTWebSocket* pWs)
 	: TAFloatingWidget(parent)
 {
 	m_searchDlg = new SearchDialog(this);
-	m_classTeacherDlg = new ClassTeacherDialog(this);
+	m_classTeacherDlg = new ClassTeacherDialog(this, pWs);
 	this->setObjectName("TACDesktopManagerWidget");
 
 	this->setBackgroundColor(WIDGET_BACKGROUND_COLOR_C);

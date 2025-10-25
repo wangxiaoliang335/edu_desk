@@ -8,7 +8,7 @@ class TACAddGroupWidget : public TAFloatingWidget
 	Q_OBJECT
 
 public:
-	TACAddGroupWidget(QWidget *parent);
+	TACAddGroupWidget(QWidget *parent, TaQTWebSocket* pWs);
 	~TACAddGroupWidget();
 
 	void InitWebSocket();

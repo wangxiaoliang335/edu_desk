@@ -31,6 +31,7 @@
 #include "TAUserMenuDialog.h"
 #include "FriendGroupDialog.h"
 #include "TAHttpHandler.h"
+#include "TaQTWebSocket.h"
 
 class TACMainDialog : public QDialog
 {
@@ -124,6 +125,8 @@ private:
 	QPointer<SchoolInfoDialog> schoolInfoDlg;
 	TAHttpHandler* m_httpHandler = NULL;
 	UserInfo m_userInfo;
+
+	static TaQTWebSocket* m_ws;
 
 	//QString m_userId;
 	//QWebSocket* socket;

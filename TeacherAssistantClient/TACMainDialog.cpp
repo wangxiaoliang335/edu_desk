@@ -3,6 +3,8 @@
 #include "TACMainDialog.h"
 #include "CommonInfo.h"
 
+TaQTWebSocket* TACMainDialog::m_ws = NULL;
+
 TACMainDialog::TACMainDialog(QWidget *parent)
 	: QDialog(parent)
 {
@@ -39,6 +41,8 @@ void TACMainDialog::Init(QString qPhone, int user_id)
 {
     navBarWidget = new TACNavigationBarWidget(this);
     navBarWidget->visibleCloseButton(false);
+
+    m_ws = new TaQTWebSocket(this);
 
     m_httpHandler = new TAHttpHandler(this);
     if (m_httpHandler)
@@ -119,6 +123,12 @@ void TACMainDialog::Init(QString qPhone, int user_id)
                                     userMenuDlg->InitData(m_userInfo);
                                     userMenuDlg->InitUI();
                                     CommonInfo::InitData(m_userInfo);
+
+                                    if (m_ws)
+                                    {
+                                        TaQTWebSocket::InitWebSocket(m_ws);
+                                    }
+                                    
                                     if (friendGrpDlg)
                                     {
                                         friendGrpDlg->InitWebSocket();
@@ -264,7 +274,7 @@ void TACMainDialog::Init(QString qPhone, int user_id)
         });
 
     imDialog = new TACIMDialog(this);
-    friendGrpDlg = new FriendGroupDialog(this);
+    friendGrpDlg = new FriendGroupDialog(this, m_ws);
     friendGrpDlg->setBackgroundColor(WIDGET_BACKGROUND_COLOR);
     friendGrpDlg->setBorderColor(WIDGET_BORDER_COLOR);
     friendGrpDlg->setBorderWidth(WIDGET_BORDER_WIDTH);
