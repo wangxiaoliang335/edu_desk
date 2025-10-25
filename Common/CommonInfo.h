@@ -1,6 +1,22 @@
 #pragma once
 #include "TABaseDialog.h"
 
+struct Notification {
+    int id;
+    int sender_id;
+    QString sender_name;
+    int receiver_id;
+    QString unique_group_id;
+    QString group_name;
+    QString content;
+    int content_text;
+    int is_read;
+    int is_agreed;
+    QString remark;
+    QString created_at;
+    QString updated_at;
+};
+
 class CommonInfo
 {
 public:

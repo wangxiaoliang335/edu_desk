@@ -88,6 +88,9 @@
     <ClCompile Include="FriendGroupDialog.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="TaQTWebSocket.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="TAFloatingWidget.h">
@@ -172,6 +175,9 @@
       <Filter>Header Files</Filter>
     </QtMoc>
     <QtMoc Include="ChatDialog.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="TaQTWebSocket.h">
       <Filter>Header Files</Filter>
     </QtMoc>
   </ItemGroup>

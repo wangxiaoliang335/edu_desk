@@ -14,17 +14,19 @@
 #include "ScheduleDialog.h"
 #include "TAHttpHandler.h"
 #include "CommonInfo.h"
+#include "TaQTWebSocket.h"
 
 class ClassTeacherDialog : public QDialog
 {
     Q_OBJECT
 public:
-    ClassTeacherDialog(QWidget* parent = nullptr) : QDialog(parent)
+    ClassTeacherDialog(QWidget* parent = nullptr, TaQTWebSocket* pWs = NULL) : QDialog(parent)
     {
         setWindowTitle("班级 / 教师选择");
         resize(420, 300);
         setStyleSheet("background-color:#dde2f0; font-size:14px;");
 
+        m_pWs = pWs;
         m_httpHandler = new TAHttpHandler(this);
         if (m_httpHandler)
         {
@@ -154,7 +156,8 @@ public:
             m_httpHandler->get(url);
         }
 
-        m_scheduleDlg = new ScheduleDialog(this);
+        m_scheduleDlg = new ScheduleDialog(this, pWs);
+        m_scheduleDlg->InitWebSocket();
         QVBoxLayout* mainLayout = new QVBoxLayout(this);
 
         // 顶部黄色圆形数字标签
@@ -210,7 +213,16 @@ public:
         connect(btnOk, &QPushButton::clicked, this, [=]() {
             if (m_scheduleDlg && m_scheduleDlg->isHidden())
             {
-                m_scheduleDlg->show();
+            QAbstractButton* checked = sexGroup->checkedButton();
+            if (!checked) {
+                qWarning() << "没有选中的教师";
+                return;
+            }
+
+            QString grade = checked->property("grade").toString();
+            QString class_taught = checked->property("class_taught").toString();
+            m_scheduleDlg->InitData(grade + class_taught + "的班级群", "", true);
+            m_scheduleDlg->show();
             }
             accept();
         });
@@ -223,25 +235,32 @@ public:
 
     void InitWebSocket()
     {
-        socket = new QWebSocket();
-        connect(socket, &QWebSocket::connected, this, &ClassTeacherDialog::onConnected);
-        connect(socket, &QWebSocket::textMessageReceived, this, &ClassTeacherDialog::onMessageReceived);
-        //connect(btnOk, &QPushButton::clicked, this, &ClassTeacherDialog::sendBroadcast);
+        TaQTWebSocket::regRecvDlg(this);
+        if (m_pWs)
+        {
+            connect(m_pWs, &TaQTWebSocket::newMessage,
+                this, &ClassTeacherDialog::onWebSocketMessage);
+        }
+
+        //socket = new QWebSocket();
+        //connect(socket, &QWebSocket::connected, this, &ClassTeacherDialog::onConnected);
+        //connect(socket, &QWebSocket::textMessageReceived, this, &ClassTeacherDialog::onMessageReceived);
+        ////connect(btnOk, &QPushButton::clicked, this, &ClassTeacherDialog::sendBroadcast);
         connect(btnOk, &QPushButton::clicked, this, &ClassTeacherDialog::sendPrivateMessage);
 
-        UserInfo userinfo = CommonInfo::GetData();
-        // 建立连接
-        socket->open(QUrl(QString("ws://47.100.126.194:5000/ws/%1").arg(userinfo.teacher_unique_id)));
+        //UserInfo userinfo = CommonInfo::GetData();
+        //// 建立连接
+        //socket->open(QUrl(QString("ws://47.100.126.194:5000/ws/%1").arg(userinfo.teacher_unique_id)));
 
-        // 发送心跳
-        heartbeatTimer = new QTimer(this);
-        connect(heartbeatTimer, &QTimer::timeout, this, &ClassTeacherDialog::sendHeartbeat);
-        heartbeatTimer->start(5000); // 每 5 秒一次
+        //// 发送心跳
+        //heartbeatTimer = new QTimer(this);
+        //connect(heartbeatTimer, &QTimer::timeout, this, &ClassTeacherDialog::sendHeartbeat);
+        //heartbeatTimer->start(5000); // 每 5 秒一次
     }
 
 private:
-    void addPersonRow(QVBoxLayout* parentLayout, const QString& iconPath, const QString& name, const QString phone, const QString teacher_unique_id, 
-            QString grade, QString class_taught, QButtonGroup* pBtnGroup, bool checked = false)
+    void addPersonRow(QVBoxLayout* parentLayout, const QString& iconPath, const QString& name, const QString phone, const QString teacher_unique_id,
+        QString grade, QString class_taught, QButtonGroup* pBtnGroup, bool checked = false)
     {
         QHBoxLayout* rowLayout = new QHBoxLayout;
         QRadioButton* radio = new QRadioButton;
@@ -257,7 +276,7 @@ private:
         avatar->setStyleSheet("background-color: lightgray; border-radius: 18px;");
         // 如果有头像图片资源，可以这样设置：
         QPixmap pix(iconPath);
-        avatar->setPixmap(pix.scaled(36,36, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        avatar->setPixmap(pix.scaled(36, 36, Qt::KeepAspectRatio, Qt::SmoothTransformation));
 
         QLabel* lblName = new QLabel(name);
         rowLayout->addWidget(radio);
@@ -275,6 +294,32 @@ private:
         parentLayout->addWidget(rowWidget);
     }
     private slots:
+        // ChatDialog.cpp
+        void onWebSocketMessage(const QString& msg)
+        {
+            qDebug() << " ClassTeacherDialog msg:" << msg; // 发信号;
+            // 这里可以解析 JSON 或直接追加到聊天窗口
+            //addTextMessage(":/avatar_teacher.png", "对方", msg, false);
+            m_NoticeMsg.push_back(msg);
+            if (m_scheduleDlg)
+            {
+                QJsonParseError parseError;
+                QJsonDocument doc = QJsonDocument::fromJson(msg.toUtf8(), &parseError);
+                if (parseError.error != QJsonParseError::NoError) {
+                    qDebug() << "JSON parse error:" << parseError.errorString();
+                }
+                else {
+                    if (doc.isObject()) {
+                        QJsonObject obj = doc.object();
+                        if (obj["type"].toString() == 3)
+                        {
+                            obj["group_id"].toString();
+                        }
+                    }
+                }
+            }
+        }
+
         void onConnected() {
             //logView->append("✅ 已连接到服务端");
         }
@@ -312,8 +357,7 @@ private:
             qDebug() << "美化格式:" << prettyString;
 
             if (!prettyString.isEmpty()) {
-                socket->sendTextMessage(prettyString);
-                //inputEdit->clear();
+                //socket->sendTextMessage(prettyString);
             }
         }
 
@@ -376,7 +420,8 @@ private:
             qDebug() << "美化格式:" << prettyString;
 
             if (!prettyString.isEmpty()) {
-            	socket->sendTextMessage(QString("to:%1:%2").arg(teacher_unique_id, prettyString));
+            	//socket->sendTextMessage(QString("to:%1:%2").arg(teacher_unique_id, prettyString));
+                TaQTWebSocket::sendPrivateMessage(QString("to:%1:%2").arg(teacher_unique_id, prettyString));
             }
         }
 
@@ -411,9 +456,9 @@ private:
         //}
 
         void sendHeartbeat() {
-            if (socket->state() == QAbstractSocket::ConnectedState) {
-                socket->sendTextMessage("ping");
-            }
+            //if (socket->state() == QAbstractSocket::ConnectedState) {
+            //    socket->sendTextMessage("ping");
+            //}
         }
 
 private:
@@ -422,9 +467,10 @@ private:
     QVBoxLayout* teacherListLayout = NULL;
     QVBoxLayout* classListLayout = NULL;
     QButtonGroup* sexGroup = new QButtonGroup(this);
-    QWebSocket* socket = NULL;
-    QTimer* heartbeatTimer;
+    //QWebSocket* socket = NULL;
+    //QTimer* heartbeatTimer;
     QPushButton* btnOk = NULL;
     QPushButton* btnCancel = NULL;
     QVector<QString> m_NoticeMsg;
+    TaQTWebSocket* m_pWs = NULL;
 };

@@ -16,6 +16,11 @@
 #include <QMouseEvent>
 #include <QDesktopServices>
 #include <QUrl>
+#include <QJsonParseError>
+#include <qjsonarray.h>
+#include <qjsonobject.h>
+#include "TaQTWebSocket.h"
+#include "CommonInfo.h"
 
 struct ChatMessage {
     QString avatarPath;
@@ -42,13 +47,14 @@ class ChatDialog : public QDialog
 {
     Q_OBJECT
 public:
-    ChatDialog(QWidget* parent = nullptr) : QDialog(parent)
+    ChatDialog(QWidget* parent = nullptr, TaQTWebSocket* pWs = NULL) : QDialog(parent)
     {
         setWindowTitle("多类型聊天对话框");
         resize(500, 660);
 
-        QVBoxLayout* mainLayout = new QVBoxLayout(this);
+        m_pWs = pWs;
 
+        QVBoxLayout* mainLayout = new QVBoxLayout(this);
         // 消息列表
         m_listWidget = new QListWidget();
         m_listWidget->setStyleSheet("QListWidget { background-color: #F5F5F5; border:none; }");
@@ -86,8 +92,40 @@ public:
         connect(btnVoice, &QPushButton::clicked, this, &ChatDialog::sendMyVoiceMessage);
 
         // 测试对话
-        addTextMessage(":/avatar_teacher.png", "班主任", "李老师，今天家里有事，我们调一下课吧", false);
-        addTextMessage(":/avatar_teacher2.png", "语文老师", "可以", false);
+        addTextMessage(":/res/img/home.png", "班主任", "李老师，今天家里有事，我们调一下课吧", false);
+        addTextMessage(":/res/img/home.png", "语文老师", "可以", false);
+    }
+
+    void InitData(QString unique_group_id, bool iGroupOwner)
+    {
+        m_unique_group_id = unique_group_id;
+        m_iGroupOwner = iGroupOwner;
+    }
+
+    void InitWebSocket()
+    {
+        /*TaQTWebSocket::regRecvDlg(this);
+        if (m_pWs)
+        {
+            connect(m_pWs, &TaQTWebSocket::newMessage,
+                this, &ChatDialog::onWebSocketMessage);
+        }*/
+    }
+
+    void setNoticeMsg(QList<Notification> listNoticeMsg)
+    {
+        UserInfo userInfo = CommonInfo::GetData();
+        for (auto iter : listNoticeMsg)
+        {
+            if (QString::number(iter.sender_id) == userInfo.teacher_unique_id)
+            {
+                addTextMessage(":/res/img/home.png", iter.sender_name, iter.content, true);
+            }
+            else
+            {
+                addTextMessage(":/res/img/home.png", "我", iter.content, false);
+            }
+        }
     }
 
 private slots:
@@ -96,33 +134,98 @@ private slots:
         QString text = m_lineEdit->text().trimmed();
         if (text.isEmpty()) return;
 
-        addTextMessage(":/avatar_me.png", "我", text, true);
+        UserInfo userinfo = CommonInfo::GetData();
+        addTextMessage(":/res/img/home.png", userinfo.strName, text, true);
         m_lineEdit->clear();
 
+
+        QJsonObject createGroupMsg;
+        createGroupMsg["type"] = "5";
+        createGroupMsg["content"] = text;
+        createGroupMsg["unique_group_id"] = m_unique_group_id;
+        createGroupMsg["sender_id"] = userinfo.teacher_unique_id;
+        createGroupMsg["sender_name"] = userinfo.strName;
+        createGroupMsg["groupowner"] = m_iGroupOwner;
+
+        // 用 QJsonDocument 序列化
+        QJsonDocument doc(createGroupMsg);
+        // 输出美化格式（有缩进）
+        QString prettyString = QString::fromUtf8(doc.toJson(QJsonDocument::Indented));
+        qDebug() << "美化格式:" << prettyString;
+
+        if (!prettyString.isEmpty()) {
+            //socket->sendTextMessage(QString("to:%1:%2").arg(teacher_unique_id, prettyString));
+            TaQTWebSocket::sendPrivateMessage(QString("to:%1:%2").arg(m_unique_group_id, prettyString));
+        }
+
         // 模拟回复
-        QTimer::singleShot(1200, this, [=]() {
-            addVoiceMessage(":/avatar_teacher2.png", "语文老师", 5, false);
-            });
+        //QTimer::singleShot(1200, this, [=]() {
+        //    addVoiceMessage(":/avatar_teacher2.png", "语文老师", 5, false);
+        //    });
     }
+
+    //// ChatDialog.cpp
+    //void onWebSocketMessage(const QString& msg)
+    //{
+    //    qDebug() << " ClassTeacherDialog msg:" << msg; // 发信号;
+    //    // 这里可以解析 JSON 或直接追加到聊天窗口
+    //    //addTextMessage(":/avatar_teacher.png", "对方", msg, false);
+    //    //m_NoticeMsg.push_back(msg);
+
+    //    QJsonParseError parseError;
+    //    QJsonDocument doc = QJsonDocument::fromJson(msg.toUtf8(), &parseError);
+
+    //    if (parseError.error != QJsonParseError::NoError) {
+    //        qDebug() << "JSON parse error:" << parseError.errorString();
+    //    }
+    //    else {
+    //        if (doc.isObject()) {
+    //            QJsonObject obj = doc.object();
+    //            if (obj["data"].isArray())
+    //            {
+    //                // 4. 取出数组
+    //                QJsonArray arr = obj["data"].toArray();
+    //                // 5. 遍历数组
+    //                for (const QJsonValue& value : arr) {
+    //                    if (value.isObject()) { // 每个元素是一个对象
+    //                        QJsonObject obj = value.toObject();
+    //                        int qSender_id = obj["sender_id"].toInt();
+    //                        QString strSender_id = QString("%1").arg(qSender_id, 6, 10, QChar('0'));
+    //                        QString SenderName = obj["sender_name"].toString();
+    //                        int iContent_text = obj["content_text"].toInt();
+    //                        QString updated_at = obj["updated_at"].toString();
+    //                        int is_agreed = obj["is_agreed"].toInt();
+    //                        QString content = obj["content"].toString();
+    //                        QString GroupName = obj["group_name"].toString();
+    //                        if (1 != iContent_text && 2 != iContent_text && 3 != iContent_text && 4 != iContent_text)
+    //                        {
+    //                            addTextMessage(":/avatar_me.png", "我", content, true);
+    //                        }
+    //                    }
+    //                }
+    //            }
+    //        }
+    //    }
+    //}
 
     void sendMyImageMessage()
     {
         QString imgPath = QFileDialog::getOpenFileName(this, "选择图片", "", "Images (*.png *.jpg *.jpeg *.bmp)");
         if (!imgPath.isEmpty())
-            addImageMessage(":/avatar_me.png", "我", imgPath, true);
+            addImageMessage(":/res/img/home.png", "我", imgPath, true);
     }
 
     void sendMyFileMessage()
     {
         QString filePath = QFileDialog::getOpenFileName(this, "选择文件");
         if (!filePath.isEmpty())
-            addFileMessage(":/avatar_me.png", "我", filePath, true);
+            addFileMessage(":/res/img/home.png", "我", filePath, true);
     }
 
     void sendMyVoiceMessage()
     {
         // 模拟 8秒语音
-        addVoiceMessage(":/avatar_me.png", "我", 8, true);
+        addVoiceMessage(":/res/img/home.png", "我", 8, true);
     }
 
 private:
@@ -296,4 +399,8 @@ private:
         m_hasLastMessage = true;
         m_listWidget->scrollToBottom();
     }
+
+    TaQTWebSocket* m_pWs = NULL;
+    QString m_unique_group_id;
+    bool m_iGroupOwner = false;
 };

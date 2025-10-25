@@ -44,17 +44,18 @@ class ScheduleDialog : public QDialog
 {
     Q_OBJECT
 public:
-    ScheduleDialog(QWidget* parent = nullptr) : QDialog(parent)
+    ScheduleDialog(QWidget* parent = nullptr, TaQTWebSocket* pWs = NULL) : QDialog(parent)
     {
         setWindowTitle("课程表");
         resize(700, 500);
         setStyleSheet("QPushButton { font-size:14px; } QLabel { font-size:14px; }");
         m_taHttpHandler = new TAHttpHandler();
 
+        m_pWs = pWs;
+
+        m_chatDlg = new ChatDialog(this, m_pWs);
         customListDlg = new CustomListDialog(this);
         QVBoxLayout* mainLayout = new QVBoxLayout(this);
-
-        m_chatDlg = new ChatDialog(this);
 
         // 顶部：头像 + 班级信息 + 功能按钮 + 更多
         QHBoxLayout* topLayout = new QHBoxLayout;
@@ -222,7 +223,7 @@ public:
             // 这里可以弹出输入框、打开聊天功能等
             if (m_chatDlg)
             {
-                m_chatDlg->exec();
+                m_chatDlg->show();
             }
         });
 
@@ -267,14 +268,33 @@ public:
         }
     }
 
-    void InitData(QString groupName, QString unique_group_id)
+    void InitWebSocket()
+    {
+        if (m_chatDlg)
+        {
+            m_chatDlg->InitWebSocket();
+        }
+    }
+
+    void setNoticeMsg(QList<Notification> listNoticeMsg)
+    {
+        if (m_chatDlg)
+        {
+            m_chatDlg->setNoticeMsg(listNoticeMsg);
+        }
+    }
+
+    void InitData(QString groupName, QString unique_group_id, bool iGroupOwner)
     {
         m_groupName = groupName;
         m_unique_group_id = unique_group_id;
+        m_iGroupOwner = iGroupOwner;
         if (m_lblClass)
         {
             m_lblClass->setText(groupName);
         }
+        m_chatDlg->InitData(m_unique_group_id, iGroupOwner);
+        
     }
 
 private:
@@ -284,4 +304,6 @@ private:
     QString m_unique_group_id;
     TAHttpHandler* m_taHttpHandler = NULL;
     ChatDialog* m_chatDlg = NULL;
+    TaQTWebSocket* m_pWs = NULL;
+    bool m_iGroupOwner = false;
 };

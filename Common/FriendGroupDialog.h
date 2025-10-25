@@ -17,6 +17,7 @@
 #include "TACAddGroupWidget.h"
 #include "GroupNotifyDialog.h"
 #include "TAHttpHandler.h"
+#include <QMap>
 
 class RowItem : public QFrame {
     Q_OBJECT
@@ -59,7 +60,7 @@ class FriendGroupDialog : public QDialog
 {
     Q_OBJECT
 public:
-    FriendGroupDialog(QWidget* parent)
+    FriendGroupDialog(QWidget* parent, TaQTWebSocket* pWs)
         : QDialog(parent), m_dragging(false),
         m_backgroundColor(QColor(50, 50, 50)),
         m_borderColor(Qt::white),
@@ -69,11 +70,13 @@ public:
         setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
         //setModal(true);
         setAttribute(Qt::WA_TranslucentBackground);
+        m_pWs = pWs;
 
         setWindowTitle("好友 / 群聊");
         resize(500, 600);
 
-        m_scheduleDlg = new ScheduleDialog();
+        //m_scheduleDlg = new ScheduleDialog(this, pWs);
+        //m_scheduleDlg->InitWebSocket();
 
         //fLayout->addLayout(makePairBtn("老师头像", "老师昵称", "green", "white"));
         //fLayout->addLayout(makePairBtn("老师头像", "老师昵称", "green", "white"));
@@ -141,7 +144,7 @@ public:
 
                             if (fLayout)
                             {
-                                fLayout->addLayout(makePairBtn(filePath, name, "green", "white", ""));
+                                fLayout->addLayout(makePairBtn(filePath, name, "green", "white", "", false));
                             }
                             /********************************************/
                         }
@@ -199,7 +202,7 @@ public:
                                 //lblAvatar->setPixmap(pixmap.scaled(lblAvatar->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
                                 //lblAvatar->setScaledContents(true);
 
-                                gAdminLayout->addLayout(makePairBtn(filePath, groupObj.value("nickname").toString(), "white", "red", unique_group_id));
+                                gAdminLayout->addLayout(makePairBtn(filePath, groupObj.value("nickname").toString(), "white", "red", unique_group_id, true));
                             }
                         }
                         else if (dataObj["joingroups"].isArray())
@@ -244,7 +247,7 @@ public:
                                 //lblAvatar->setPixmap(pixmap.scaled(lblAvatar->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
                                 //lblAvatar->setScaledContents(true);
 
-                                gJoinLayout->addLayout(makePairBtn(filePath, groupObj.value("nickname").toString(), "white", "red", unique_group_id));
+                                gJoinLayout->addLayout(makePairBtn(filePath, groupObj.value("nickname").toString(), "white", "red", unique_group_id, false));
                             }
                         }
                     }
@@ -344,7 +347,7 @@ public:
         btnAdd->setFixedSize(40, 40);
         btnAdd->setStyleSheet("background-color: blue; color: white; font-size: 20px; border-radius: 20px;");
 
-        addGroupWidget = new TACAddGroupWidget(this);
+        addGroupWidget = new TACAddGroupWidget(this, pWs);
         friendNotifyDlg = new FriendNotifyDialog(this);
         grpNotifyDlg = new GroupNotifyDialog(this);
         topLayout->addLayout(notifyLayout, 13);
@@ -380,8 +383,8 @@ public:
         fLayout = new QVBoxLayout(friendPage);
         fLayout->setSpacing(10);
         fLayout->addLayout(makeRowBtn("班级", "3", "blue", "white"));
-        fLayout->addLayout(makePairBtn("班级头像", "班级昵称", "orange", "black", ""));
-        fLayout->addLayout(makePairBtn("班级头像", "班级昵称", "orange", "black", ""));
+        fLayout->addLayout(makePairBtn("班级头像", "班级昵称", "orange", "black", "", false));
+        fLayout->addLayout(makePairBtn("班级头像", "班级昵称", "orange", "black", "", false));
         //fLayout->addLayout(makeRowBtn("教师", "3", "blue", "white"));
         //fLayout->addLayout(makePairBtn("老师头像", "老师昵称", "green", "white"));
         //fLayout->addLayout(makePairBtn("老师头像", "老师昵称", "green", "white"));
@@ -443,7 +446,7 @@ public:
     }
 
     // 帮助函数：生成一行两个不同用途的按钮（如头像+昵称）
-    QHBoxLayout* makePairBtn(const QString& leftText, const QString& rightText, const QString& bgColor, const QString& fgColor, QString unique_group_id)
+    QHBoxLayout* makePairBtn(const QString& leftText, const QString& rightText, const QString& bgColor, const QString& fgColor, QString unique_group_id, bool iGroupOwner)
     {
         QHBoxLayout* pair = new QHBoxLayout;
         QPushButton* left = new QPushButton();
@@ -454,17 +457,39 @@ public:
         right->setStyleSheet(style);
         pair->addWidget(left);
         left->setProperty("unique_group_id", unique_group_id);
+        left->setProperty("iGroupOwner", iGroupOwner);
         right->setProperty("unique_group_id", unique_group_id);
+        right->setProperty("iGroupOwner", iGroupOwner);
         pair->addWidget(right);
         if (!unique_group_id.isEmpty())
         {
-            connect(left, &QPushButton::clicked, this, [this, rightText, unique_group_id]() {
-                if (m_scheduleDlg && m_scheduleDlg->isHidden())
+            connect(left, &QPushButton::clicked, this, [this, rightText, unique_group_id, iGroupOwner]() {
+                if (!m_scheduleDlg[unique_group_id])
                 {
-                    m_scheduleDlg->InitData(rightText, unique_group_id);
-                    m_scheduleDlg->show();
+                    m_scheduleDlg[unique_group_id] = new ScheduleDialog(this, m_pWs);
+                    m_scheduleDlg[unique_group_id]->InitWebSocket();
+                    QList<Notification> curNotification;
+                    for (auto iter : notifications)
+                    {
+                        if (iter.unique_group_id == unique_group_id)
+                        {
+                            curNotification.append(iter);
+                        }
+                    }
+                    m_scheduleDlg[unique_group_id]->setNoticeMsg(curNotification);
                 }
-                //accept();
+
+                if (m_scheduleDlg[unique_group_id] && m_scheduleDlg[unique_group_id]->isHidden())
+                {
+                    m_scheduleDlg[unique_group_id]->InitData(rightText, unique_group_id, iGroupOwner);
+                    m_scheduleDlg[unique_group_id]->show();
+                }
+                else
+                {
+					//m_scheduleDlg[unique_group_id] = new ScheduleDialog(this, m_pWs);
+					//m_scheduleDlg[unique_group_id]->InitWebSocket();
+                    m_scheduleDlg[unique_group_id]->hide();
+                }
             });
         }
         return pair;
@@ -497,6 +522,13 @@ public:
         if (addGroupWidget)
         {
             addGroupWidget->InitWebSocket();
+        }
+
+        TaQTWebSocket::regRecvDlg(this);
+        if (m_pWs)
+        {
+            connect(m_pWs, &TaQTWebSocket::newMessage,
+                this, &FriendGroupDialog::onWebSocketMessage);
         }
     }
 
@@ -591,6 +623,51 @@ public:
     FriendNotifyDialog* friendNotifyDlg = NULL;
     GroupNotifyDialog* grpNotifyDlg = NULL;
 
+ private slots:
+	 void onWebSocketMessage(const QString& msg)
+	 {
+         // 解析 JSON 文本
+         QJsonParseError parseError;
+         QJsonDocument doc = QJsonDocument::fromJson(msg.toUtf8(), &parseError);
+         if (parseError.error != QJsonParseError::NoError) {
+             qWarning() << "JSON解析失败:" << parseError.errorString();
+             return;
+         }
+
+         if (!doc.isObject()) {
+             qWarning() << "根节点不是 JSON 对象";
+             return;
+         }
+
+         QJsonObject rootObj = doc.object();
+
+         // 提取 data 数组
+         if (rootObj.contains("data") && rootObj["data"].isArray()) {
+             QJsonArray dataArray = rootObj["data"].toArray();
+             for (auto item : dataArray) {
+                 if (!item.isObject()) continue;
+                 QJsonObject obj = item.toObject();
+
+                 Notification n;
+                 n.id = obj["id"].toInt();
+                 n.sender_id = obj["sender_id"].toInt();
+                 n.sender_name = obj["sender_name"].isNull() ? "" : obj["sender_name"].toString();
+                 n.receiver_id = obj["receiver_id"].toInt();
+                 n.unique_group_id = obj["unique_group_id"].isNull() ? "" : obj["unique_group_id"].toString();
+                 n.group_name = obj["group_name"].isNull() ? "" : obj["group_name"].toString();
+                 n.content = obj["content"].toString();
+                 n.content_text = obj["content_text"].toInt();
+                 n.is_read = obj["is_read"].toInt();
+                 n.is_agreed = obj["is_agreed"].toInt();
+                 n.remark = obj["remark"].isNull() ? "" : obj["remark"].toString();
+                 n.created_at = obj["created_at"].toString();
+                 n.updated_at = obj["updated_at"].toString();
+
+                 notifications.append(n);
+             }
+         }
+	 }
+
  private:
 	 bool m_dragging;
 	 QPoint m_dragStartPos;
@@ -607,7 +684,7 @@ public:
      QVBoxLayout* gLayout = NULL;
      QVBoxLayout* gAdminLayout = NULL;
      QVBoxLayout* gJoinLayout = NULL;
-
-public:
-     ScheduleDialog* m_scheduleDlg = NULL;
+     TaQTWebSocket* m_pWs = NULL;
+     QMap<QString, ScheduleDialog*> m_scheduleDlg;
+     QList<Notification> notifications;
 };

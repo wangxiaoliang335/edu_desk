@@ -132,6 +132,7 @@
     <QtMoc Include="NameLabel.h" />
     <QtMoc Include="ChatDialog.h" />
     <ClInclude Include="CommonInfo.h" />
+    <QtMoc Include="TaQTWebSocket.h" />
     <ClInclude Include="UniqueNumberGenerator.h" />
     <ClInclude Include="util.h" />
   </ItemGroup>
@@ -153,6 +154,7 @@
     <ClCompile Include="TAEntity.cpp" />
     <ClCompile Include="TAFloatingWidget.cpp" />
     <ClCompile Include="TAHttpHandler.cpp" />
+    <ClCompile Include="TaQTWebSocket.cpp" />
     <ClCompile Include="util.cpp" />
   </ItemGroup>
   <ItemGroup>
