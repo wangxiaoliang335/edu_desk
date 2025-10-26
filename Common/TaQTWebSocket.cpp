@@ -128,6 +128,14 @@ void TaQTWebSocket::sendPrivateMessage(QString msg) {
     }
 }
 
+void TaQTWebSocket::sendBinaryMessage(QByteArray packet)
+{
+    if (socket)
+    {
+        socket->sendBinaryMessage(packet);
+    }
+}
+
 void TaQTWebSocket::sendHeartbeat() {
     if (socket->state() == QAbstractSocket::ConnectedState) {
         socket->sendTextMessage("ping");

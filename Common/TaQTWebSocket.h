@@ -16,6 +16,7 @@ public:
 	static void InitWebSocket(TaQTWebSocket* wsInstance);
 	static void regRecvDlg(QDialog* dlg);
 	static void sendPrivateMessage(QString msg);
+	static void sendBinaryMessage(QByteArray packet);
 signals:
 	void newMessage(QString msg);
 

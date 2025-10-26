@@ -16,6 +16,11 @@
 #include <wbemidl.h>
 #pragma comment(lib, "wbemuuid.lib")
 #endif
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
 #ifdef _MSC_VER
 extern "C" __declspec(dllexport) DWORD NvOptimusEnablement = 1;
 extern "C" __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
@@ -106,9 +111,35 @@ static void load_debug_privilege(void)
 	CloseHandle(token);
 }
 
+void debugOutputHandler(QtMsgType type, const QMessageLogContext& context, const QString& msg)
+{
+	QByteArray localMsg = msg.toLocal8Bit();
+	const char* prefix = "";
+	switch (type) {
+	case QtDebugMsg:    prefix = "[Debug] "; break;
+	case QtInfoMsg:     prefix = "[Info] "; break;
+	case QtWarningMsg:  prefix = "[Warning] "; break;
+	case QtCriticalMsg: prefix = "[Critical] "; break;
+	case QtFatalMsg:    prefix = "[Fatal] "; break;
+	}
+
+#ifdef Q_OS_WIN
+	// 发送到 Visual Studio 的输出窗口
+	OutputDebugStringA((QString(prefix) + QString(localMsg)).toLocal8Bit().data());
+#else
+	// Mac/Linux直接发到标准输出，也会被 Qt Creator 捕获
+	fprintf(stderr, "%s%s
+		", prefix, localMsg.constData());
+#endif
+}
+
 int main(int argc, char* argv[])
 {
 	QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+
+	// 安装输出重定向
+	qInstallMessageHandler(debugOutputHandler);
+
 #ifdef _WIN32
 	SetErrorMode(SEM_FAILCRITICALERRORS);
 	load_debug_privilege();
