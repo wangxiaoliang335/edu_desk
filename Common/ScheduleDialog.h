@@ -273,6 +273,10 @@ public:
 			btnTalk->setText("录音中...松开结束");
 			qDebug() << "开始对讲（按钮按下）";
 			start();
+
+			// 发送开始包（flag=0）
+			QByteArray empty;
+			encodeAndSend(empty, 0);
 			//btnTalk->setText("松开结束对讲");
 		});
 
@@ -282,6 +286,10 @@ public:
 			btnTalk->setText("按住开始对讲");*/
 			qint64 releaseMs = QDateTime::currentMSecsSinceEpoch();
 			qint64 duration = releaseMs - pressStartMs;
+
+			// 发送结束包（flag=2）
+			QByteArray empty;
+			encodeAndSend(empty, 2);
 
 			stop();  // 停止采集
 
@@ -425,7 +433,81 @@ public:
 		if (swrCtx) swr_free(&swrCtx);
 	}
 
-	void encodeAndSend(const QByteArray& pcm) {
+	void addADTSHeader(char* buf, int packetLen, int profile, int sampleRate, int channels)
+	{
+		// profile: 1=Main, 2=LC, 3=SSR
+		int freqIdx;
+		switch (sampleRate) {
+		case 96000: freqIdx = 0; break;
+		case 88200: freqIdx = 1; break;
+		case 64000: freqIdx = 2; break;
+		case 48000: freqIdx = 3; break;
+		case 44100: freqIdx = 4; break;
+		case 32000: freqIdx = 5; break;
+		case 24000: freqIdx = 6; break;
+		case 22050: freqIdx = 7; break;
+		case 16000: freqIdx = 8; break;
+		case 12000: freqIdx = 9; break;
+		case 11025: freqIdx = 10; break;
+		case 8000:  freqIdx = 11; break;
+		case 7350:  freqIdx = 12; break;
+		default:    freqIdx = 4; break; // 默认 44100
+		}
+
+		int fullLen = packetLen + 7; // ADTS头长 + AAC数据长
+
+		buf[0] = 0xFF; // syncword 0xFFF高8位
+		buf[1] = 0xF1; // syncword低4位 + MPEG-4 (ID=0) + layer=00 + protection_absent=1
+		buf[2] = ((profile - 1) << 6) | (freqIdx << 2) | (channels >> 2);
+		buf[3] = ((channels & 3) << 6) | ((fullLen & 0x1FFF) >> 11);
+		buf[4] = (fullLen & 0x7FF) >> 3;
+		buf[5] = ((fullLen & 7) << 5) | 0x1F; // 0x7FF buffer fullness
+		buf[6] = 0xFC; // number_of_raw_data_blocks_in_frame=0
+	}
+
+
+
+	void encodeAndSend(const QByteArray& pcm, quint8 flag) {
+		if (flag == 0 || flag == 2)
+		{
+			QByteArray packet;
+			QDataStream ds(&packet, QIODevice::WriteOnly);
+			ds.setByteOrder(QDataStream::LittleEndian);
+
+			// ===== 打包帧 =====
+			quint8 frameType = 6; // 音频帧
+			ds << frameType;
+
+			// 加flag
+			ds << flag;
+
+			QByteArray groupIdBytes = m_unique_group_id.toUtf8();
+			quint32 groupIdLen = groupIdBytes.size();
+			ds << groupIdLen;
+			ds.writeRawData(groupIdBytes.constData(), groupIdLen);
+
+			QByteArray senderIdBytes = m_userId.toUtf8();
+			quint32 senderIdLen = senderIdBytes.size();
+			ds << senderIdLen;
+			ds.writeRawData(senderIdBytes.constData(), senderIdLen);
+
+			QByteArray senderNameBytes = m_userName.toUtf8();
+			quint32 senderNameLen = senderNameBytes.size();
+			ds << senderNameLen;
+			ds.writeRawData(senderNameBytes.constData(), senderNameLen);
+
+			quint64 ts = QDateTime::currentMSecsSinceEpoch();
+			ds << ts;
+
+			quint32 aacLen = pcm.size();
+			ds << aacLen;
+			ds.writeRawData(pcm.constData(), aacLen);
+
+			//m_ws.sendBinaryMessage(packet);
+			TaQTWebSocket::sendBinaryMessage(packet);
+			return;
+		}
+
 		int16_t* pcmData = (int16_t*)pcm.data();
 		int numSamples = pcm.size() / (2 * codecCtx->channels);
 		const uint8_t* inData[1] = { (uint8_t*)pcmData };
@@ -439,9 +521,18 @@ public:
 				QDataStream ds(&packet, QIODevice::WriteOnly);
 				ds.setByteOrder(QDataStream::LittleEndian);
 
+				// 构造带ADTS的包
+				QByteArray aacWithADTS;
+				aacWithADTS.resize(aacData.size() + 7);
+				addADTSHeader(aacWithADTS.data(), aacData.size(), 2, 44100, 2); // LC, 44100Hz, stereo
+				memcpy(aacWithADTS.data() + 7, aacData.constData(), aacData.size());
+
 				// ===== 打包帧 =====
 				quint8 frameType = 6; // 音频帧
 				ds << frameType;
+
+				// 加flag
+				ds << flag;
 
 				QByteArray groupIdBytes = m_unique_group_id.toUtf8();
 				quint32 groupIdLen = groupIdBytes.size();
@@ -461,9 +552,9 @@ public:
 				quint64 ts = QDateTime::currentMSecsSinceEpoch();
 				ds << ts;
 
-				quint32 aacLen = aacData.size();
+				quint32 aacLen = aacWithADTS.size();
 				ds << aacLen;
-				ds.writeRawData(aacData.constData(), aacLen);
+				ds.writeRawData(aacWithADTS.constData(), aacWithADTS.size());
 
 				//m_ws.sendBinaryMessage(packet);
 				TaQTWebSocket::sendBinaryMessage(packet);
@@ -521,7 +612,7 @@ private slots:
 
 	void onReadyRead() {
 		QByteArray pcm = inputDevice->readAll();
-		encodeAndSend(pcm);
+		encodeAndSend(pcm, 1);
 
 		//// ===== 计算音量幅度 =====
 		//const int16_t* samples = reinterpret_cast<const int16_t*>(pcm.constData());
