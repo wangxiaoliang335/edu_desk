@@ -18,6 +18,7 @@
 #include <QAudioFormat>
 #include <QIODevice>
 #include <qprogressbar.h>
+#include <Windows.h>
 #include "CustomListDialog.h"
 #include "ClickableLabel.h"
 #include "TAHttpHandler.h"
@@ -278,7 +279,7 @@ public:
 			QByteArray empty;
 			encodeAndSend(empty, 0);
 			//btnTalk->setText("松开结束对讲");
-		});
+			});
 
 		// 松开按钮 -> 停止采集
 		connect(btnTalk, &QPushButton::released, this, [=]() {
@@ -303,7 +304,7 @@ public:
 
 			btnTalk->setStyleSheet("background-color: green; color: white; padding: 4px 8px; font-size:14px;");
 			btnTalk->setText("按住开始对讲");
-		});
+			});
 	}
 
 	void uploadAvatar(QString filePath)
@@ -422,7 +423,18 @@ public:
 			if (audioInput && audioInput->state() != QAudio::ActiveState) {
 				qWarning() << "⚠️ AudioInput 未处于 ActiveState, 当前状态:" << audioInput->state();
 			}
-		});
+			});
+
+		//// 打开本地存储文件
+		//localRecordFile.setFileName("test_local.aac"); // 也可以改成带时间戳
+		//if (localRecordFile.open(QIODevice::WriteOnly)) {
+		//	isLocalRecording = true;
+		//	qDebug() << "✅ 本地录音文件已打开: test_local.aac";
+		//}
+		//else {
+		//	qWarning() << "❌ 无法打开本地录音文件用于写入";
+		//	isLocalRecording = false;
+		//}
 	}
 
 	void stop() {
@@ -431,11 +443,16 @@ public:
 		if (frame) av_frame_free(&frame);
 		if (pkt) av_packet_free(&pkt);
 		if (swrCtx) swr_free(&swrCtx);
+
+		//if (isLocalRecording) {
+		//	localRecordFile.close();
+		//	isLocalRecording = false;
+		//	qDebug() << "📁 本地录音文件已关闭";
+		//}
 	}
 
 	void addADTSHeader(char* buf, int packetLen, int profile, int sampleRate, int channels)
 	{
-		// profile: 1=Main, 2=LC, 3=SSR
 		int freqIdx;
 		switch (sampleRate) {
 		case 96000: freqIdx = 0; break;
@@ -451,21 +468,18 @@ public:
 		case 11025: freqIdx = 10; break;
 		case 8000:  freqIdx = 11; break;
 		case 7350:  freqIdx = 12; break;
-		default:    freqIdx = 4; break; // 默认 44100
+		default:    freqIdx = 4; break;
 		}
 
-		int fullLen = packetLen + 7; // ADTS头长 + AAC数据长
-
-		buf[0] = 0xFF; // syncword 0xFFF高8位
-		buf[1] = 0xF1; // syncword低4位 + MPEG-4 (ID=0) + layer=00 + protection_absent=1
+		int fullLen = packetLen + 7;
+		buf[0] = 0xFF;
+		buf[1] = 0xF1;
 		buf[2] = ((profile - 1) << 6) | (freqIdx << 2) | (channels >> 2);
-		buf[3] = ((channels & 3) << 6) | ((fullLen & 0x1FFF) >> 11);
-		buf[4] = (fullLen & 0x7FF) >> 3;
-		buf[5] = ((fullLen & 7) << 5) | 0x1F; // 0x7FF buffer fullness
-		buf[6] = 0xFC; // number_of_raw_data_blocks_in_frame=0
+		buf[3] = ((channels & 3) << 6) | ((fullLen >> 11) & 0x03);
+		buf[4] = (fullLen >> 3) & 0xFF;
+		buf[5] = ((fullLen & 7) << 5) | 0x1F;
+		buf[6] = 0xFC;
 	}
-
-
 
 	void encodeAndSend(const QByteArray& pcm, quint8 flag) {
 		if (flag == 0 || flag == 2)
@@ -508,6 +522,9 @@ public:
 			return;
 		}
 
+		//sprintf(m_szTmp, "pcm size:%d\n", pcm.size());
+		//OutputDebugStringA(m_szTmp);
+
 		int16_t* pcmData = (int16_t*)pcm.data();
 		int numSamples = pcm.size() / (2 * codecCtx->channels);
 		const uint8_t* inData[1] = { (uint8_t*)pcmData };
@@ -526,6 +543,11 @@ public:
 				aacWithADTS.resize(aacData.size() + 7);
 				addADTSHeader(aacWithADTS.data(), aacData.size(), 2, 44100, 2); // LC, 44100Hz, stereo
 				memcpy(aacWithADTS.data() + 7, aacData.constData(), aacData.size());
+
+				//// 本地保存
+				//if (isLocalRecording && localRecordFile.isOpen()) {
+				//	localRecordFile.write(aacWithADTS);
+				//}
 
 				// ===== 打包帧 =====
 				quint8 frameType = 6; // 音频帧
@@ -611,8 +633,21 @@ private slots:
 	}
 
 	void onReadyRead() {
-		QByteArray pcm = inputDevice->readAll();
-		encodeAndSend(pcm, 1);
+		QByteArray data = inputDevice->readAll();
+		pcmBuffer.append(data);
+
+		int bytesPerSample = 2; // S16LE 每样本2字节
+		int samplesPerFrame = frame->nb_samples; // AAC LC固定为1024
+		int bytesPerFrame = samplesPerFrame * codecCtx->channels * bytesPerSample;
+
+		while (pcmBuffer.size() >= bytesPerFrame) {
+			QByteArray oneFrame = pcmBuffer.left(bytesPerFrame);
+			pcmBuffer.remove(0, bytesPerFrame);
+			encodeAndSend(oneFrame, 1); // flag=1 表示中间帧
+		}
+
+		//QByteArray pcm = inputDevice->readAll();
+		//encodeAndSend(pcm, 1);
 
 		//// ===== 计算音量幅度 =====
 		//const int16_t* samples = reinterpret_cast<const int16_t*>(pcm.constData());
@@ -654,4 +689,8 @@ private:
 	// 用于记录按下开始时间
 	qint64 pressStartMs = 0;
 	//QProgressBar* m_volumeBar = nullptr;
+	//QFile localRecordFile;
+	//bool isLocalRecording = false;
+	QByteArray pcmBuffer;        // 缓冲未编码的PCM数据
+	char m_szTmp[1024] = {0};
 };
