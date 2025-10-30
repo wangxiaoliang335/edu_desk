@@ -161,16 +161,16 @@ public:
         QVBoxLayout* mainLayout = new QVBoxLayout(this);
 
         // 顶部黄色圆形数字标签
-        QLabel* lblNum = new QLabel("2");
-        lblNum->setAlignment(Qt::AlignCenter);
-        lblNum->setFixedSize(30, 30);
-        lblNum->setStyleSheet("background-color: yellow; color: red; font-weight: bold; font-size: 16px; border-radius: 15px;");
-        mainLayout->addWidget(lblNum, 0, Qt::AlignCenter);
+        //QLabel* lblNum = new QLabel("2");
+        //lblNum->setAlignment(Qt::AlignCenter);
+        //lblNum->setFixedSize(30, 30);
+        //lblNum->setStyleSheet("background-color: yellow; color: red; font-weight: bold; font-size: 16px; border-radius: 15px;");
+        //mainLayout->addWidget(lblNum, 0, Qt::AlignCenter);
 
         // 班级区域
         QVBoxLayout* classLayout = new QVBoxLayout;
         QLabel* lblClassTitle = new QLabel("班级");
-        lblClassTitle->setStyleSheet("background-color:#3b73b8; color:white; font-weight:bold; padding:6px;");
+        lblClassTitle->setStyleSheet("background-color:#3b73b8; qproperty-alignment: AlignCenter; color:white; font-weight:bold; padding:6px;");
         classLayout->addWidget(lblClassTitle);
 
         QWidget* classListWidget = new QWidget;
@@ -185,7 +185,7 @@ public:
         // 教师区域
         QVBoxLayout* teacherLayout = new QVBoxLayout;
         QLabel* lblTeacherTitle = new QLabel("教师");
-        lblTeacherTitle->setStyleSheet("background-color:#3b73b8; color:white; font-weight:bold; padding:6px;");
+        lblTeacherTitle->setStyleSheet("background-color:#3b73b8; qproperty-alignment: AlignCenter; color:white; font-weight:bold; padding:6px;");
         teacherLayout->addWidget(lblTeacherTitle);
 
         QWidget* teacherListWidget = new QWidget;

@@ -17,6 +17,12 @@ struct Notification {
     QString updated_at;
 };
 
+struct GroupMemberInfo {
+    QString member_id;
+    QString member_name;
+    QString member_role;
+};
+
 class CommonInfo
 {
 public:

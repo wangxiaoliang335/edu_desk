@@ -91,6 +91,12 @@
     <ClCompile Include="TaQTWebSocket.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="QGroupInfo.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AudioReceiver.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="TAFloatingWidget.h">
@@ -180,10 +186,24 @@
     <QtMoc Include="TaQTWebSocket.h">
       <Filter>Header Files</Filter>
     </QtMoc>
+    <QtMoc Include="QGroupInfo.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="ClassTeacherDelDialog.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="AudioReceiver.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="Resource.qrc">
       <Filter>Resource Files</Filter>
     </QtRcc>
+  </ItemGroup>
+  <ItemGroup>
+    <QtUic Include="DialogButtonBottom.ui">
+      <Filter>Header Files</Filter>
+    </QtUic>
   </ItemGroup>
 </Project>

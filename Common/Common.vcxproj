@@ -135,12 +135,16 @@
     <QtMoc Include="AvatarLabel.h" />
     <QtMoc Include="NameLabel.h" />
     <QtMoc Include="ChatDialog.h" />
+    <QtMoc Include="ClassTeacherDelDialog.h" />
+    <QtMoc Include="AudioReceiver.h" />
     <ClInclude Include="CommonInfo.h" />
     <QtMoc Include="TaQTWebSocket.h" />
+    <QtMoc Include="QGroupInfo.h" />
     <ClInclude Include="UniqueNumberGenerator.h" />
     <ClInclude Include="util.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AudioReceiver.cpp" />
     <ClCompile Include="AvatarLabel.cpp" />
     <ClCompile Include="CommonInfo.h.cpp" />
     <ClCompile Include="FriendGroupDialog.cpp" />
@@ -148,6 +152,7 @@
     <ClCompile Include="NameLabel.cpp" />
     <ClCompile Include="PwdLoginModalDialog.cpp" />
     <ClCompile Include="QClassMgr.cpp" />
+    <ClCompile Include="QGroupInfo.cpp" />
     <ClCompile Include="QSchoolInfoWidget.cpp" />
     <ClCompile Include="RegisterDialog.cpp" />
     <ClCompile Include="ResetPwdDialog.cpp" />
@@ -163,6 +168,9 @@
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="Resource.qrc" />
+  </ItemGroup>
+  <ItemGroup>
+    <QtUic Include="DialogButtonBottom.ui" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">
