@@ -30,6 +30,7 @@
 #include "SchoolInfoDialog.h"
 #include "TAUserMenuDialog.h"
 #include "FriendGroupDialog.h"
+#include "AudioReceiver.h"
 #include "TAHttpHandler.h"
 #include "TaQTWebSocket.h"
 
@@ -118,6 +119,8 @@ private:
 	QPointer<TACHomeworkDialog> homeworkDialog;
 	QPointer<TACIMDialog> imDialog;
 	QPointer<FriendGroupDialog> friendGrpDlg;
+
+	QPointer<AudioReceiver> m_audioReceiver;
 	QPointer<TACDesktopManagerWidget> desktopManagerWidget;
 	QPointer<TACPrepareClassDialog> prepareClassDialog;
 	QPointer<TACClassWeekCourseScheduleDialog> classWeekCourseScheduldDialog;

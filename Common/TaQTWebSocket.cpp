@@ -23,6 +23,7 @@ void TaQTWebSocket::InitWebSocket(TaQTWebSocket* wsInstance)
     socket = new QWebSocket();
     connect(socket, &QWebSocket::connected, wsInstance, &TaQTWebSocket::onConnected);
     connect(socket, &QWebSocket::textMessageReceived, wsInstance, &TaQTWebSocket::onMessageReceived);
+    connect(socket, &QWebSocket::binaryMessageReceived, wsInstance, &TaQTWebSocket::onBinaryMessageReceived);
     //connect(btnOk, &QPushButton::clicked, this, &ClassTeacherDialog::sendBroadcast);
     //connect(btnOk, &QPushButton::clicked, this, &TaWebSocket::sendPrivateMessage);
 
@@ -46,6 +47,11 @@ void TaQTWebSocket::onMessageReceived(const QString& msg) {
         m_NoticeMsg.push_back(msg);
         emit newMessage(msg); // 发信号
     }
+}
+
+void TaQTWebSocket::onBinaryMessageReceived(const QByteArray& message)
+{
+    emit newBinaryMessage(message);
 }
 
 void TaQTWebSocket::sendBroadcast() {

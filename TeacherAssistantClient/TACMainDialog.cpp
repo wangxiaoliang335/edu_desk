@@ -280,6 +280,9 @@ void TACMainDialog::Init(QString qPhone, int user_id)
     friendGrpDlg->setBorderWidth(WIDGET_BORDER_WIDTH);
     friendGrpDlg->setRadius(30);
 
+    m_audioReceiver = new AudioReceiver(this, m_ws);
+    //m_audioReceiver->attachWebSocket(m_ws);
+
     homeworkDialog = new TACHomeworkDialog(this);
     homeworkDialog->setContent("语文<br>背诵《荷塘月色》第二段");
 

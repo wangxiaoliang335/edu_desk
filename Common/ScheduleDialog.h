@@ -24,6 +24,8 @@
 #include "TAHttpHandler.h"
 #include "ChatDialog.h"
 #include "CommonInfo.h"
+#include "QGroupInfo.h"
+#include "TAHttpHandler.h"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -60,13 +62,219 @@ public:
 		setWindowTitle("课程表");
 		resize(700, 500);
 		setStyleSheet("QPushButton { font-size:14px; } QLabel { font-size:14px; }");
-		m_taHttpHandler = new TAHttpHandler();
+		m_httpHandler = new TAHttpHandler(this);
+		if (m_httpHandler)
+		{
+			connect(m_httpHandler, &TAHttpHandler::success, this, [=](const QString& responseString) {
+				//成功消息就不发送了
+				QJsonDocument jsonDoc = QJsonDocument::fromJson(responseString.toUtf8());
+				if (jsonDoc.isObject()) {
+					QJsonObject obj = jsonDoc.object();
+					if (obj["friends"].isArray())
+					{
+						QJsonArray friendsArray = obj.value("friends").toArray();
+						//fLayout->addLayout(makeRowBtn("教师", QString::number(friendsArray.size()), "blue", "white"));
+						for (int i = 0; i < friendsArray.size(); i++)
+						{
+							QJsonObject friendObj = friendsArray.at(i).toObject();
+
+							// teacher_info 对象
+							QJsonObject teacherInfo = friendObj.value("teacher_info").toObject();
+							int id = teacherInfo.value("id").toInt();
+							QString name = teacherInfo.value("name").toString();
+							QString subject = teacherInfo.value("subject").toString();
+							QString idCard = teacherInfo.value("id_card").toString();
+
+							// user_details 对象
+							QJsonObject userDetails = friendObj.value("user_details").toObject();
+							QString phone = userDetails.value("phone").toString();
+							QString uname = userDetails.value("name").toString();
+							QString sex = userDetails.value("sex").toString();
+
+							/********************************************/
+							QString avatar = userDetails.value("avatar").toString();
+							QString strIdNumber = userDetails.value("id_number").toString();
+							QString avatarBase64 = userDetails.value("avatar_base64").toString();
+
+							// 没有文件名就用手机号或ID代替
+							if (avatar.isEmpty())
+								avatar = userDetails.value("id_number").toString() + "_" + ".png";
+
+							// 从最后一个 "/" 之后开始截取
+							QString fileName = avatar.section('/', -1);  // "320506197910016493_.png"
+							QString saveDir = QCoreApplication::applicationDirPath() + "/avatars/" + strIdNumber; // 保存图片目录
+							QDir().mkpath(saveDir);
+							QString filePath = saveDir + "/" + fileName;
+
+							if (avatarBase64.isEmpty()) {
+								qWarning() << "No avatar data for" << filePath;
+								//continue;
+							}
+							//m_userInfo.strHeadImagePath = filePath;
+
+							// Base64 解码成图片二进制数据
+							QByteArray imageData = QByteArray::fromBase64(avatarBase64.toUtf8());
+
+							// 写入文件（覆盖旧的）
+							QFile file(filePath);
+							if (!file.open(QIODevice::WriteOnly)) {
+								qWarning() << "Cannot open file for writing:" << filePath;
+								//continue;
+							}
+							file.write(imageData);
+							file.close();
+
+							/*if (fLayout)
+							{
+								fLayout->addLayout(makePairBtn(filePath, name, "green", "white", "", false));
+							}*/
+							/********************************************/
+						}
+
+						QJsonObject oTmp = obj["data"].toObject();
+						QString strTmp = oTmp["message"].toString();
+						qDebug() << "status:" << oTmp["code"].toString();
+						qDebug() << "msg:" << oTmp["message"].toString(); // 如果 msg 是中文，也能正常输出
+						//errLabel->setText(strTmp);
+						//user_id = oTmp["user_id"].toInt();
+					}
+					else if (obj["data"].isObject())
+					{
+						QJsonObject dataObj = obj["data"].toObject();
+						if (dataObj["members"].isArray())
+						{
+							//gAdminLayout->addLayout(makeRowBtn("管理", "1", "orange", "black"));
+							QJsonArray memberArray = dataObj["members"].toArray();
+							for (int i = 0; i < memberArray.size(); i++)
+							{
+								QJsonObject memberObj = memberArray.at(i).toObject();
+								QString groupmember_id = memberObj.value("id").toString();
+								QString groupmember_name = memberObj.value("name").toString();
+								QString groupmember_role = memberObj.value("role").toString();
+
+								GroupMemberInfo groupMemInfo;
+								groupMemInfo.member_id = groupmember_id;
+								groupMemInfo.member_name = groupmember_name;
+								groupMemInfo.member_role = groupmember_role;
+								m_groupMemberInfo.append(groupMemInfo);
+
+								//// 假设 avatarBase64 是 QString 类型，从 HTTP 返回的 JSON 中拿到
+								//QByteArray imageData = QByteArray::fromBase64(avatar_base64.toUtf8());
+								//QPixmap pixmap;
+								//pixmap.loadFromData(imageData);
+
+								//// 从最后一个 "/" 之后开始截取
+								//QString fileName = headImage_path.section('/', -1);  // "320506197910016493_.png"
+								//QString saveDir = QCoreApplication::applicationDirPath() + "/group_images/" + unique_group_id; // 保存图片目录
+								//QDir().mkpath(saveDir);
+								//QString filePath = saveDir + "/" + fileName;
+
+								//if (avatar_base64.isEmpty()) {
+								//	qWarning() << "No avatar data for" << filePath;
+								//	//continue;
+								//}
+								////m_userInfo.strHeadImagePath = filePath;
+
+								//// Base64 解码成图片二进制数据
+								//QByteArray imageData = QByteArray::fromBase64(avatar_base64.toUtf8());
+
+								//// 写入文件（覆盖旧的）
+								//QFile file(filePath);
+								//if (!file.open(QIODevice::WriteOnly)) {
+								//	qWarning() << "Cannot open file for writing:" << filePath;
+								//	//continue;
+								//}
+								//file.write(imageData);
+								//file.close();
+
+								//gAdminLayout->addLayout(makePairBtn(filePath, groupObj.value("nickname").toString(), "white", "red", unique_group_id, true));
+							}
+
+							if (m_groupInfo)
+							{
+								m_groupInfo->InitGroupMember(m_groupMemberInfo);
+							}
+						}
+						else if (dataObj["joingroups"].isArray())
+						{
+							//gJoinLayout->addLayout(makeRowBtn("加入", "3", "orange", "black"));
+							QJsonArray groupArray = dataObj["joingroups"].toArray();
+							for (int i = 0; i < groupArray.size(); i++)
+							{
+								QJsonObject groupObj = groupArray.at(i).toObject();
+								QString unique_group_id = groupObj.value("unique_group_id").toString();
+								QString avatar_base64 = groupObj.value("avatar_base64").toString();
+								QString headImage_path = groupObj.value("headImage_path").toString();
+								//// 假设 avatarBase64 是 QString 类型，从 HTTP 返回的 JSON 中拿到
+								//QByteArray imageData = QByteArray::fromBase64(avatar_base64.toUtf8());
+								//QPixmap pixmap;
+								//pixmap.loadFromData(imageData);
+
+								// 从最后一个 "/" 之后开始截取
+								QString fileName = headImage_path.section('/', -1);  // "320506197910016493_.png"
+								QString saveDir = QCoreApplication::applicationDirPath() + "/group_images/" + unique_group_id; // 保存图片目录
+								QDir().mkpath(saveDir);
+								QString filePath = saveDir + "/" + fileName;
+
+								if (avatar_base64.isEmpty()) {
+									qWarning() << "No avatar data for" << filePath;
+									//continue;
+								}
+								//m_userInfo.strHeadImagePath = filePath;
+
+								// Base64 解码成图片二进制数据
+								QByteArray imageData = QByteArray::fromBase64(avatar_base64.toUtf8());
+
+								// 写入文件（覆盖旧的）
+								QFile file(filePath);
+								if (!file.open(QIODevice::WriteOnly)) {
+									qWarning() << "Cannot open file for writing:" << filePath;
+									//continue;
+								}
+								file.write(imageData);
+								file.close();
+
+								//lblAvatar->setPixmap(pixmap.scaled(lblAvatar->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+								//lblAvatar->setScaledContents(true);
+
+								//gJoinLayout->addLayout(makePairBtn(filePath, groupObj.value("nickname").toString(), "white", "red", unique_group_id, false));
+							}
+						}
+					}
+				}
+				else
+				{
+					//errLabel->setText("网络错误");
+				}
+			});
+
+			connect(m_httpHandler, &TAHttpHandler::failed, this, [=](const QString& errResponseString) {
+				{
+					QJsonDocument jsonDoc = QJsonDocument::fromJson(errResponseString.toUtf8());
+					if (jsonDoc.isObject()) {
+						QJsonObject obj = jsonDoc.object();
+						if (obj["data"].isObject())
+						{
+							QJsonObject oTmp = obj["data"].toObject();
+							QString strTmp = oTmp["message"].toString();
+							qDebug() << "status:" << oTmp["code"].toString();
+							qDebug() << "msg:" << oTmp["message"].toString(); // 如果 msg 是中文，也能正常输出
+							//errLabel->setText(strTmp);
+						}
+					}
+					/*else
+					{
+						errLabel->setText("网络错误");
+					}*/
+				}
+			});
+		}
 
 		m_pWs = pWs;
-
 		m_chatDlg = new ChatDialog(this, m_pWs);
 		customListDlg = new CustomListDialog(this);
 		QVBoxLayout* mainLayout = new QVBoxLayout(this);
+		m_groupInfo = new QGroupInfo(this);
 
 		// 顶部：头像 + 班级信息 + 功能按钮 + 更多
 		QHBoxLayout* topLayout = new QHBoxLayout;
@@ -123,15 +331,15 @@ public:
 		);
 
 		connect(btnMore, &QPushButton::clicked, this, [=]() {
-			if (customListDlg && customListDlg->isHidden())
+			if (m_groupInfo && m_groupInfo->isHidden())
 			{
-				customListDlg->show();
+				m_groupInfo->show();
 			}
-			else if (customListDlg && !customListDlg->isHidden())
+			else if (m_groupInfo && !m_groupInfo->isHidden())
 			{
-				customListDlg->hide();
+				m_groupInfo->hide();
 			}
-			});
+		});
 
 		topLayout->addWidget(lblAvatar);
 		topLayout->addWidget(m_lblClass);
@@ -192,6 +400,70 @@ public:
 		timeIndicatorLayout->addWidget(lblTime);
 		timeIndicatorLayout->addStretch();
 		mainLayout->addLayout(timeIndicatorLayout);
+
+
+		// ===== 新增中排按钮 =====
+		QHBoxLayout* middleBtnLayout = new QHBoxLayout;
+		//QString greenStyle = "background-color: green; color: white; padding: 4px 8px;";
+
+		QPushButton* btnRandom = new QPushButton("随机点名");
+		QPushButton* btnAnalyse = new QPushButton("分断");
+		QPushButton* btnHeatmap = new QPushButton("热力图");
+		QPushButton* btnArrange = new QPushButton("排座");
+		QPushButton* btnMoreBottom = new QPushButton("...");
+		btnMoreBottom->setFixedSize(48, 24);
+		btnMoreBottom->setText("...");
+		btnMoreBottom->setStyleSheet(
+			"QPushButton {"
+			"background-color: transparent;"
+			"color: black;"
+			"font-weight: bold;"
+			"font-size: 16px;"
+			"border: none;"
+			"}"
+			"QPushButton:hover {"
+			"color: black;"
+			"background-color: transparent;"
+			"}"
+		);
+
+		connect(btnMoreBottom, &QPushButton::clicked, this, [=]() {
+			if (customListDlg && customListDlg->isHidden())
+			{
+				customListDlg->show();
+			}
+			else if (customListDlg && !customListDlg->isHidden())
+			{
+				customListDlg->hide();
+			}
+		});
+
+		btnRandom->setStyleSheet(greenStyle);
+		btnAnalyse->setStyleSheet(greenStyle);
+		btnHeatmap->setStyleSheet(greenStyle);
+		btnArrange->setStyleSheet(greenStyle);
+
+		middleBtnLayout->addStretch();
+		middleBtnLayout->addWidget(btnRandom);
+		middleBtnLayout->addWidget(btnAnalyse);
+		middleBtnLayout->addWidget(btnHeatmap);
+		middleBtnLayout->addWidget(btnArrange);
+		middleBtnLayout->addStretch();
+		middleBtnLayout->addWidget(btnMoreBottom);
+
+		mainLayout->addLayout(middleBtnLayout);
+
+		// ===== 讲台区域 =====
+		QHBoxLayout* podiumLayout = new QHBoxLayout;
+		QPushButton* btnPodium = new QPushButton("讲台");
+		btnPodium->setStyleSheet(greenStyle);
+		btnPodium->setFixedHeight(30);
+		btnPodium->setFixedWidth(80);
+		podiumLayout->addStretch();
+		podiumLayout->addWidget(btnPodium);
+		podiumLayout->addStretch();
+		mainLayout->addLayout(podiumLayout);
+
 
 		// 表格区域
 		QTableWidget* table = new QTableWidget(5, 8);
@@ -360,6 +632,16 @@ public:
 		UserInfo userInfo = CommonInfo::GetData();
 		m_userId = userInfo.teacher_unique_id;
 		m_userName = userInfo.strName;
+
+		if (m_groupInfo)
+		{
+			m_groupInfo->initData(groupName, unique_group_id);
+		}
+
+		QString url = "http://47.100.126.194:5000/group/members?";
+		url += "unique_group_id=";
+		url += unique_group_id;
+		m_httpHandler->get(url);
 	}
 
 	void start() {
@@ -686,11 +968,13 @@ private:
 	QString m_userName;
 	QPushButton* btnTalk = NULL;
 	bool m_isBeginTalk = false;
+	QGroupInfo* m_groupInfo;
+	TAHttpHandler* m_httpHandler = NULL;
 	// 用于记录按下开始时间
 	qint64 pressStartMs = 0;
 	//QProgressBar* m_volumeBar = nullptr;
 	//QFile localRecordFile;
 	//bool isLocalRecording = false;
 	QByteArray pcmBuffer;        // 缓冲未编码的PCM数据
-	char m_szTmp[1024] = {0};
+	QVector<GroupMemberInfo>  m_groupMemberInfo;
 };

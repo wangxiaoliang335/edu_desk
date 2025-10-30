@@ -19,10 +19,12 @@ public:
 	static void sendBinaryMessage(QByteArray packet);
 signals:
 	void newMessage(QString msg);
+	void newBinaryMessage(const QByteArray& msg);
 
 private slots:
 	void onConnected();
 	void onMessageReceived(const QString& msg);
+	void onBinaryMessageReceived(const QByteArray& message);
 	void sendBroadcast();
 	void sendHeartbeat();
 private:
