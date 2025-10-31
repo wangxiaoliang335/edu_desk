@@ -508,7 +508,7 @@ public:
 			{
 				m_chatDlg->show();
 			}
-			});
+		});
 
 		mainLayout->addWidget(inputWidget);
 

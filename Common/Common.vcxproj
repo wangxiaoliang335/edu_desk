@@ -140,6 +140,8 @@
     <ClInclude Include="CommonInfo.h" />
     <QtMoc Include="TaQTWebSocket.h" />
     <QtMoc Include="QGroupInfo.h" />
+    <QtMoc Include="CourseTableWidget.h" />
+    <QtMoc Include="CourseDialog.h" />
     <ClInclude Include="UniqueNumberGenerator.h" />
     <ClInclude Include="util.h" />
   </ItemGroup>

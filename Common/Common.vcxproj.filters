@@ -195,6 +195,12 @@
     <QtMoc Include="AudioReceiver.h">
       <Filter>Header Files</Filter>
     </QtMoc>
+    <QtMoc Include="CourseTableWidget.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="CourseDialog.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="Resource.qrc">

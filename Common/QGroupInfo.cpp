@@ -20,6 +20,16 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId)
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     m_classTeacherDlg = new ClassTeacherDialog(this);
     m_classTeacherDelDlg = new ClassTeacherDelDialog(this);
+    m_courseDlg = new CourseDialog();
+    m_courseDlg->setWindowTitle("课程表");
+    m_courseDlg->resize(800, 600);
+
+    // 设置一些课程
+    //m_courseDlg->setCourse(1, 0, "数学");
+    //m_courseDlg->setCourse(1, 1, "音乐");
+    //m_courseDlg->setCourse(2, 1, "语文", true); // 高亮
+    //m_courseDlg->setCourse(3, 4, "体育", true);
+
     m_classTeacherDlg->setWindowTitle(" ");
 
     // 顶部用户信息
@@ -47,10 +57,29 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId)
     editClassNum->setStyleSheet("color:red; font-size:18px; font-weight:bold;");
     mainLayout->addWidget(editClassNum);
 
+    QHBoxLayout* pHBoxLayut = new QHBoxLayout(this);
     // 班级课程表按钮
     QPushButton* btnSchedule = new QPushButton("班级课程表");
     btnSchedule->setStyleSheet("background-color:green; color:white; font-weight:bold;");
-    mainLayout->addWidget(btnSchedule);
+
+    pHBoxLayut->addWidget(btnSchedule);
+    pHBoxLayut->addStretch(2);
+    mainLayout->addLayout(pHBoxLayut);
+
+    connect(btnSchedule, &QPushButton::clicked, this, [=]() {
+        qDebug() << "红框区域被点击！";
+        if (m_courseDlg)
+        {
+            m_courseDlg->show();
+        }
+
+        // 这里可以弹出输入框、打开聊天功能等
+        /*if (m_chatDlg)
+        {
+            m_chatDlg->show();
+        }*/
+    });
+    
 
     // 好友列表
     QGroupBox* groupFriends = new QGroupBox("好友列表");
