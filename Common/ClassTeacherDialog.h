@@ -146,15 +146,6 @@ public:
                 }
                 });
         }
-        if (m_httpHandler)
-        {
-            //QMap<QString, QString> params;
-            //params["id_card"] = "320506197910016493";
-            QString url = "http://47.100.126.194:5000/friends?";
-            url += "id_card=";
-            url += "320506197910016493";
-            m_httpHandler->get(url);
-        }
 
         m_scheduleDlg = new ScheduleDialog(this, pWs);
         m_scheduleDlg->InitWebSocket();
@@ -176,9 +167,9 @@ public:
         QWidget* classListWidget = new QWidget;
         classListLayout = new QVBoxLayout(classListWidget);
         classListLayout->setSpacing(8);
-        addPersonRow(classListLayout, ":/icons/avatar1.png", "软件开发工程师", "", "", "", "", NULL);
-        addPersonRow(classListLayout, ":/icons/avatar2.png", "苏州-UI-已入职", "", "", "", "", NULL);
-        addPersonRow(classListLayout, ":/icons/avatar3.png", "平平淡淡", "", "", "", "", NULL);
+        // 初始化班级单选分组，保证互斥
+        classGroup = new QButtonGroup(this);
+        classGroup->setExclusive(true);
         classLayout->addWidget(classListWidget);
         mainLayout->addLayout(classLayout);
 
@@ -213,7 +204,7 @@ public:
         connect(btnOk, &QPushButton::clicked, this, [=]() {
             if (m_scheduleDlg && m_scheduleDlg->isHidden())
             {
-            QAbstractButton* checked = sexGroup->checkedButton();
+            QAbstractButton* checked = classGroup->checkedButton();
             if (!checked) {
                 qWarning() << "没有选中的教师";
                 return;
@@ -226,6 +217,24 @@ public:
             }
             accept();
         });
+    }
+
+    void InitData()
+    {
+        UserInfo userInfo = CommonInfo::GetData();
+        if (m_httpHandler)
+        {
+            QString url = "http://47.100.126.194:5000/friends?";
+            url += "id_card=";
+            url += userInfo.strIdNumber;
+            m_httpHandler->get(url);
+        }
+
+        // 如已有学校ID，则拉取班级列表
+        if (!userInfo.schoolId.isEmpty())
+        {
+            fetchClassesByPrefix(userInfo.schoolId);
+        }
     }
 
     QVector<QString> getNoticeMsg()
@@ -259,6 +268,72 @@ public:
     }
 
 private:
+    void clearLayout(QVBoxLayout* layout)
+    {
+        if (!layout) return;
+        QLayoutItem* child;
+        while ((child = layout->takeAt(0)) != nullptr)
+        {
+            if (child->widget()) child->widget()->deleteLater();
+            delete child;
+        }
+    }
+
+    void fetchClassesByPrefix(const QString& schoolId)
+    {
+        if (schoolId.isEmpty()) return;
+        QString prefix = schoolId;
+        if (prefix.length() != 6 || !prefix.toInt()) {
+            QMessageBox::warning(this, "错误", "请输入6位数字前缀");
+            return;
+        }
+
+        QJsonObject jsonObj;
+        jsonObj["prefix"] = prefix;
+        QJsonDocument doc(jsonObj);
+        QByteArray reqData = doc.toJson(QJsonDocument::Compact);
+
+        QNetworkAccessManager* manager = new QNetworkAccessManager(this);
+        QNetworkRequest request(QUrl("http://47.100.126.194:5000/getClassesByPrefix"));
+        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        QNetworkReply* reply = manager->post(request, reqData);
+        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+            if (reply->error() == QNetworkReply::NoError) {
+                QByteArray response_data = reply->readAll();
+                QJsonDocument respDoc = QJsonDocument::fromJson(response_data);
+                if (respDoc.isObject()) {
+                    QJsonObject root = respDoc.object();
+                    QJsonObject dataObj = root.value("data").toObject();
+                    int code = dataObj.value("code").toInt();
+                    QString message = dataObj.value("message").toString();
+                    if (code != 200) {
+                        QMessageBox::warning(this, "查询失败", message);
+                        reply->deleteLater();
+                        return;
+                    }
+                    QJsonArray classes = dataObj.value("classes").toArray();
+                    clearLayout(classListLayout);
+                    bool first = true;
+                    for (const QJsonValue& val : classes) {
+                        QJsonObject cls = val.toObject();
+                        QString stage = cls.value("school_stage").toString();
+                        QString grade = cls.value("grade").toString();
+                        QString className = cls.value("class_name").toString();
+                        QString classCode = cls.value("class_code").toString();
+
+                        // 展示名称：学段+年级+班名 或 仅班名
+                        QString display = className.isEmpty() ? (grade.isEmpty() ? stage : (stage + grade)) : (stage + grade + className);
+                        addPersonRow(classListLayout, ":/icons/avatar1.png", display, "", classCode, grade, className, classGroup, first);
+                        if (first) first = false;
+                    }
+                }
+            } else {
+                QMessageBox::critical(this, "网络错误", reply->errorString());
+            }
+            reply->deleteLater();
+        });
+    }
+
     void addPersonRow(QVBoxLayout* parentLayout, const QString& iconPath, const QString& name, const QString phone, const QString teacher_unique_id,
         QString grade, QString class_taught, QButtonGroup* pBtnGroup, bool checked = false)
     {
@@ -266,7 +341,7 @@ private:
         QRadioButton* radio = new QRadioButton;
         radio->setChecked(checked);
         radio->setProperty("phone", phone); // 可以是 int / QString / QVariant
-        radio->setProperty("teacher_unique_id", teacher_unique_id); // 可以是 int / QString / QVariant
+        radio->setProperty("teacher_unique_id", teacher_unique_id); // 可以是 int / QString / QVariant 班级是班级id, 教师是教师id
         radio->setProperty("grade", grade);
         radio->setProperty("class_taught", class_taught);
         radio->setProperty("name", name);
@@ -368,13 +443,23 @@ private:
 				qWarning() << "没有选中的教师";
 				return;
 			}
+
+            QAbstractButton* classChecked = classGroup->checkedButton();
+            if (!classChecked)
+            {
+                qWarning() << "没有选中的班级";
+                return;
+            }
+
 			// 取出按钮上绑定的私有数据
 			QString phone = checked->property("phone").toString();
 			QString teacher_unique_id = checked->property("teacher_unique_id").toString();
-            QString grade = checked->property("grade").toString();
-            QString class_taught = checked->property("class_taught").toString();
+            QString grade = classChecked->property("grade").toString();
+            QString class_taught = classChecked->property("class_taught").toString();
             QString name = checked->property("name").toString();
 			qDebug() << "当前选中教师 Phone:" << phone << "  唯一编号:" << teacher_unique_id;
+
+            QString class_unique_id = classChecked->property("teacher_unique_id").toString();
 
 			//QJsonObject obj;
 			//obj["teacher_unique_id"] = teacher_unique_id;
@@ -403,7 +488,9 @@ private:
             createGroupMsg["nickname"] = grade + class_taught + "的班级群";
             createGroupMsg["owner_id"] = userinfo.teacher_unique_id;
             createGroupMsg["owner_name"] = userinfo.strName;
-
+            createGroupMsg["school_id"] = userinfo.schoolId;
+            createGroupMsg["class_id"] = class_unique_id;
+            
             // 成员数组
             QJsonArray members;
             QJsonObject m1;
@@ -467,6 +554,8 @@ private:
     QVBoxLayout* teacherListLayout = NULL;
     QVBoxLayout* classListLayout = NULL;
     QButtonGroup* sexGroup = new QButtonGroup(this);
+    QButtonGroup* classGroup = NULL;
+    QString m_schoolId;
     //QWebSocket* socket = NULL;
     //QTimer* heartbeatTimer;
     QPushButton* btnOk = NULL;

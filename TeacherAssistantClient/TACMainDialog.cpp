@@ -83,6 +83,7 @@ void TACMainDialog::Init(QString qPhone, int user_id)
                                 m_userInfo.strIsAdministrator = oUserInfo.at(0)["is_administrator"].toString();
                                 m_userInfo.avatar = oUserInfo.at(0)["avatar"].toString();
                                 m_userInfo.strIdNumber = oUserInfo.at(0)["id_number"].toString();
+                                m_userInfo.schoolId = oUserInfo.at(0)["schoolId"].toString();
                                 int iteacher_unique_id = oUserInfo.at(0)["teacher_unique_id"].toInt();
                                 m_userInfo.teacher_unique_id = QString("%1").arg(iteacher_unique_id, 6, 10, QChar('0'));
                                 QString avatarBase64 = oUserInfo.at(0)["avatar_base64"].toString();

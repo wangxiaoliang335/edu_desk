@@ -11,6 +11,7 @@ public:
 	TACAddGroupWidget(QWidget *parent, TaQTWebSocket* pWs);
 	~TACAddGroupWidget();
 
+	void InitData();
 	void InitWebSocket();
 	QVector<QString> getNoticeMsg();
 protected:

@@ -47,7 +47,7 @@ QSchoolInfoWidget::QSchoolInfoWidget(QWidget *parent)
                                     {
                                         //if (schoolSub[0].is)
                                         {
-                                            lblCode->setText(QString::number(schoolSub["id"].toInt()).rightJustified(6, '0'));
+                                            lblCode->setText(schoolSub["id"].toString());
                                         }
                                         /*else if (schoolSub[0].toString())
                                         {

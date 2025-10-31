@@ -515,6 +515,10 @@ public:
             url += userInfo.teacher_unique_id;
             m_httpHandler->get(url);
         }
+        if (addGroupWidget)
+        {
+            addGroupWidget->InitData();
+        }
     }
 
     void InitWebSocket()

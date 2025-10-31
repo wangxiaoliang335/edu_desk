@@ -89,6 +89,14 @@ void TACAddGroupWidget::InitWebSocket()
 	}
 }
 
+void TACAddGroupWidget::InitData()
+{
+	if (m_classTeacherDlg)
+	{
+		m_classTeacherDlg->InitData();
+	}
+}
+
 QVector<QString> TACAddGroupWidget::getNoticeMsg()
 {
 	if (m_classTeacherDlg)
