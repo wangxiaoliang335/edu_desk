@@ -1,4 +1,4 @@
-#include "CommonInfo.h"
+﻿#include "CommonInfo.h"
 
-// ������붨�徲̬��Ա����һ�Σ���������Ӵ���
+// 这里必须定义静态成员变量一次，否则会链接错误
 UserInfo CommonInfo::m_userInfo;

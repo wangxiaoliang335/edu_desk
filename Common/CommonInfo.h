@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 #include "TABaseDialog.h"
 
 struct Notification {
@@ -45,5 +45,5 @@ private:
     static UserInfo m_userInfo;
 };
 
-// ÕâÀï±ØĞë¶¨Òå¾²Ì¬³ÉÔ±±äÁ¿Ò»´Î£¬·ñÔò»áÁ´½Ó´íÎó
+// è¿™é‡Œå¿…é¡»å®šä¹‰é™æ€æˆå‘˜å˜é‡ä¸€æ¬¡ï¼Œå¦åˆ™ä¼šé“¾æ¥é”™è¯¯
 //UserInfo CommonInfo::m_userInfo;

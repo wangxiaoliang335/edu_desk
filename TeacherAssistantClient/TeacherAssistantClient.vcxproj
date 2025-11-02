@@ -68,7 +68,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>C:\workspace\obs\TeacherAssistant\Common;..\Common;..\ffmpeg-n6.0.1-win64-gpl-shared-6.0\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\workspace\obs\TeacherAssistant\Common;..\Common;..\ffmpeg-n6.0.1-win64-gpl-shared-6.0\include;..\Common\QXlsx\header;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
     </ClCompile>
     <Link>

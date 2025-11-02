@@ -18,6 +18,9 @@
 #include <QAudioFormat>
 #include <QIODevice>
 #include <qprogressbar.h>
+#include <QPoint>
+#include <QBrush>
+#include <QColor>
 #include <Windows.h>
 #include "CustomListDialog.h"
 #include "ClickableLabel.h"
@@ -26,6 +29,7 @@
 #include "CommonInfo.h"
 #include "QGroupInfo.h"
 #include "TAHttpHandler.h"
+#include "ArrangeSeatDialog.h"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -453,6 +457,21 @@ public:
 
 		mainLayout->addLayout(middleBtnLayout);
 
+		// 创建排座对话框
+		arrangeSeatDlg = new ArrangeSeatDialog(this);
+
+		// 连接排座按钮点击事件
+		connect(btnArrange, &QPushButton::clicked, this, [=]() {
+			if (arrangeSeatDlg && arrangeSeatDlg->isHidden()) {
+				arrangeSeatDlg->show();
+			} else if (arrangeSeatDlg && !arrangeSeatDlg->isHidden()) {
+				arrangeSeatDlg->hide();
+			} else {
+				arrangeSeatDlg = new ArrangeSeatDialog(this);
+				arrangeSeatDlg->show();
+			}
+		});
+
 		// ===== 讲台区域 =====
 		QHBoxLayout* podiumLayout = new QHBoxLayout;
 		QPushButton* btnPodium = new QPushButton("讲台");
@@ -465,12 +484,157 @@ public:
 		mainLayout->addLayout(podiumLayout);
 
 
-		// 表格区域
-		QTableWidget* table = new QTableWidget(5, 8);
-		table->horizontalHeader()->setVisible(false);
-		table->verticalHeader()->setVisible(false);
-		table->setStyleSheet("QTableWidget { gridline-color:blue; } QHeaderView::section { background-color:blue; }");
-		mainLayout->addWidget(table);
+		// 座位表格区域 - 重新设计座位布局
+		// 第1行：4个座位（过道两侧各2个）
+		// 第2-4行：每行9个座位（左列3个 + 中列3个 + 右列3个，中间有两条过道）
+		// 总共31个座位
+		seatTable = new QTableWidget(4, 11); // 4行，11列（包含过道列）
+		seatTable->horizontalHeader()->setVisible(false);
+		seatTable->verticalHeader()->setVisible(false);
+		seatTable->setStyleSheet(
+			"QTableWidget { "
+			"background-color: #f5f5dc; "
+			"gridline-color: #ccc; "
+			"border: 1px solid #ccc; "
+			"}"
+			"QTableWidget::item { "
+			"padding: 5px; "
+			"}"
+		);
+		
+		// 设置列宽和行高
+		for (int col = 0; col < 11; ++col) {
+			seatTable->setColumnWidth(col, 50);
+		}
+		for (int row = 0; row < 4; ++row) {
+			seatTable->setRowHeight(row, 50);
+		}
+		
+		// 初始化所有单元格，为每个单元格创建按钮
+		for (int row = 0; row < 4; ++row) {
+			for (int col = 0; col < 11; ++col) {
+				QPushButton* btn = new QPushButton("");
+				btn->setStyleSheet(
+					"QPushButton { "
+					"background-color: #dc3545; "
+					"color: white; "
+					"border: 1px solid #ccc; "
+					"border-radius: 4px; "
+					"padding: 5px; "
+					"font-size: 12px; "
+					"}"
+					"QPushButton:hover { "
+					"background-color: #c82333; "
+					"}"
+					"QPushButton:pressed { "
+					"background-color: #bd2130; "
+					"}"
+				);
+				btn->setProperty("row", row);
+				btn->setProperty("col", col);
+				
+				// 连接按钮点击事件
+				connect(btn, &QPushButton::clicked, this, [=]() {
+					qDebug() << "座位按钮被点击: 行" << row << "列" << col;
+				});
+				
+				seatTable->setCellWidget(row, col, btn);
+			}
+		}
+		
+		// 第1行布局：4个座位（过道两侧各2个）
+		// 左侧2个座位：列0-1，右侧2个座位：列9-10，中间列2-8合并为过道
+		seatTable->setSpan(0, 2, 1, 7); // 合并第1行的列2-8作为中央过道
+		QPushButton* aisle1Btn = qobject_cast<QPushButton*>(seatTable->cellWidget(0, 2));
+		if (aisle1Btn) {
+			aisle1Btn->setEnabled(false);
+			aisle1Btn->setStyleSheet(
+				"QPushButton { "
+				"background-color: #f0f0f0; "
+				"border: 1px solid #ccc; "
+				"}"
+			);
+		}
+		
+		// 第2-4行布局：每行9个座位
+		// 左列3个：列0-2，过道列3，中列3个：列4-6，过道列7，右列3个：列8-10
+		for (int row = 1; row < 4; ++row) {
+			// 左列座位：列0-2
+			for (int col = 0; col < 3; ++col) {
+				QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
+				if (btn) {
+					btn->setText(""); // 可以显示座位号或学生姓名
+					btn->setProperty("isSeat", true);
+				}
+			}
+			
+			// 左过道：列3
+			QPushButton* aisleLeftBtn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, 3));
+			if (aisleLeftBtn) {
+				aisleLeftBtn->setEnabled(false);
+				aisleLeftBtn->setStyleSheet(
+					"QPushButton { "
+					"background-color: #f0f0f0; "
+					"border: 1px solid #ccc; "
+					"}"
+				);
+			}
+			
+			// 中列座位：列4-6
+			for (int col = 4; col < 7; ++col) {
+				QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
+				if (btn) {
+					btn->setText("");
+					btn->setProperty("isSeat", true);
+				}
+			}
+			
+			// 右过道：列7
+			QPushButton* aisleRightBtn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, 7));
+			if (aisleRightBtn) {
+				aisleRightBtn->setEnabled(false);
+				aisleRightBtn->setStyleSheet(
+					"QPushButton { "
+					"background-color: #f0f0f0; "
+					"border: 1px solid #ccc; "
+					"}"
+				);
+			}
+			
+			// 右列座位：列8-10
+			for (int col = 8; col < 11; ++col) {
+				QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
+				if (btn) {
+					btn->setText("");
+					btn->setProperty("isSeat", true);
+				}
+			}
+		}
+		
+		// 第1行的座位
+		// 左侧2个座位：列0-1
+		for (int col = 0; col < 2; ++col) {
+			QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(0, col));
+			if (btn) {
+				btn->setText("");
+				btn->setProperty("isSeat", true);
+			}
+		}
+		// 右侧2个座位：列9-10
+		for (int col = 9; col < 11; ++col) {
+			QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(0, col));
+			if (btn) {
+				btn->setText("");
+				btn->setProperty("isSeat", true);
+			}
+		}
+		
+		// 设置表格选择模式
+		seatTable->setSelectionBehavior(QAbstractItemView::SelectItems);
+		seatTable->setSelectionMode(QAbstractItemView::SingleSelection);
+		seatTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+		
+		mainLayout->addWidget(seatTable);
 
 		// 红框消息输入栏
 		QHBoxLayout* inputLayout = new QHBoxLayout;
@@ -977,4 +1141,6 @@ private:
 	//bool isLocalRecording = false;
 	QByteArray pcmBuffer;        // 缓冲未编码的PCM数据
 	QVector<GroupMemberInfo>  m_groupMemberInfo;
+	QTableWidget* seatTable = nullptr; // 座位表格
+	ArrangeSeatDialog* arrangeSeatDlg = nullptr; // 排座对话框
 };

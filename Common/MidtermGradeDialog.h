@@ -22,6 +22,7 @@
 #include <QIODevice>
 #include <QLineEdit>
 #include <QCursor>
+#include <QMap>
 #include <algorithm>
 
 class MidtermGradeDialog : public QDialog
@@ -158,6 +159,91 @@ public:
         // 右键菜单用于删除行
         table->setContextMenuPolicy(Qt::CustomContextMenu);
         connect(table, &QTableWidget::customContextMenuRequested, this, &MidtermGradeDialog::onTableContextMenu);
+    }
+
+    // 导入Excel数据
+    void importData(const QStringList& headers, const QList<QStringList>& dataRows)
+    {
+        if (!table) return;
+
+        // 清空现有数据
+        table->setRowCount(0);
+
+        // 获取列索引映射
+        QMap<QString, int> headerMap;
+        for (int i = 0; i < headers.size(); ++i) {
+            headerMap[headers[i]] = i;
+        }
+
+        // 获取固定列的索引
+        int colId = -1, colName = -1, colChinese = -1, colMath = -1, colEnglish = -1, colTotal = -1;
+        
+        // 在表格中找到对应的列
+        for (int col = 0; col < table->columnCount(); ++col) {
+            QTableWidgetItem* headerItem = table->horizontalHeaderItem(col);
+            if (!headerItem) continue;
+            QString headerText = headerItem->text();
+            
+            if (headerText == "学号") colId = col;
+            else if (headerText == "姓名") colName = col;
+            else if (headerText == "语文") colChinese = col;
+            else if (headerText == "数学") colMath = col;
+            else if (headerText == "英语") colEnglish = col;
+            else if (headerText == "总分") colTotal = col;
+        }
+
+        // 导入数据
+        for (const QStringList& rowData : dataRows) {
+            if (rowData.size() != headers.size()) continue; // 跳过列数不匹配的行
+
+            int row = table->rowCount();
+            table->insertRow(row);
+
+            // 初始化所有单元格
+            for (int col = 0; col < table->columnCount(); ++col) {
+                QTableWidgetItem* item = new QTableWidgetItem("");
+                item->setTextAlignment(Qt::AlignCenter);
+                table->setItem(row, col, item);
+            }
+
+            // 填充数据
+            if (colId >= 0 && headerMap.contains("学号")) {
+                int srcCol = headerMap["学号"];
+                if (srcCol < rowData.size()) {
+                    table->item(row, colId)->setText(rowData[srcCol]);
+                }
+            }
+            if (colName >= 0 && headerMap.contains("姓名")) {
+                int srcCol = headerMap["姓名"];
+                if (srcCol < rowData.size()) {
+                    table->item(row, colName)->setText(rowData[srcCol]);
+                }
+            }
+            if (colChinese >= 0 && headerMap.contains("语文")) {
+                int srcCol = headerMap["语文"];
+                if (srcCol < rowData.size()) {
+                    table->item(row, colChinese)->setText(rowData[srcCol]);
+                }
+            }
+            if (colMath >= 0 && headerMap.contains("数学")) {
+                int srcCol = headerMap["数学"];
+                if (srcCol < rowData.size()) {
+                    table->item(row, colMath)->setText(rowData[srcCol]);
+                }
+            }
+            if (colEnglish >= 0 && headerMap.contains("英语")) {
+                int srcCol = headerMap["英语"];
+                if (srcCol < rowData.size()) {
+                    table->item(row, colEnglish)->setText(rowData[srcCol]);
+                }
+            }
+            if (colTotal >= 0 && headerMap.contains("总分")) {
+                int srcCol = headerMap["总分"];
+                if (srcCol < rowData.size()) {
+                    table->item(row, colTotal)->setText(rowData[srcCol]);
+                }
+            }
+        }
     }
 
 private slots:
