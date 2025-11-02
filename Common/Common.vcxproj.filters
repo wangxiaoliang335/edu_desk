@@ -82,7 +82,7 @@
     <ClCompile Include="NameLabel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="CommonInfo.h.cpp">
+    <ClCompile Include="CommonInfo.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="FriendGroupDialog.cpp">

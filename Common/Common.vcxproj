@@ -151,7 +151,7 @@
   <ItemGroup>
     <ClCompile Include="AudioReceiver.cpp" />
     <ClCompile Include="AvatarLabel.cpp" />
-    <ClCompile Include="CommonInfo.h.cpp" />
+    <ClCompile Include="CommonInfo.cpp" />
     <ClCompile Include="FriendGroupDialog.cpp" />
     <ClCompile Include="ModalDialog.cpp" />
     <ClCompile Include="NameLabel.cpp" />
