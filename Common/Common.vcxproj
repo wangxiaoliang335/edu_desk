@@ -132,6 +132,8 @@
     <QtMoc Include="FriendNotifyDialog.h" />
     <QtMoc Include="GroupNotifyDialog.h" />
     <QtMoc Include="CustomListDialog.h" />
+    <QtMoc Include="MidtermGradeDialog.h" />
+    <QtMoc Include="StudentPhysiqueDialog.h" />
     <QtMoc Include="AvatarLabel.h" />
     <QtMoc Include="NameLabel.h" />
     <QtMoc Include="ChatDialog.h" />

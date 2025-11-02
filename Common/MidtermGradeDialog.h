@@ -1,0 +1,476 @@
+﻿#pragma once
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QTableWidget>
+#include <QPushButton>
+#include <QLabel>
+#include <QTextEdit>
+#include <QColorDialog>
+#include <QMessageBox>
+#include <QToolTip>
+#include <QHeaderView>
+#include <QMenu>
+#include <QContextMenuEvent>
+#include <QInputDialog>
+#include <QFileDialog>
+#include <QStandardItemModel>
+#include <QSortFilterProxyModel>
+#include <QSet>
+#include <QTextStream>
+#include <QFile>
+#include <QIODevice>
+#include <QLineEdit>
+#include <QCursor>
+#include <algorithm>
+
+class MidtermGradeDialog : public QDialog
+{
+    Q_OBJECT
+
+public:
+    MidtermGradeDialog(QWidget* parent = nullptr) : QDialog(parent)
+    {
+        setWindowTitle("期中成绩表");
+        resize(1200, 800);
+        setStyleSheet("background-color: #f5f5dc; font-size:14px;");
+
+        QVBoxLayout* mainLayout = new QVBoxLayout(this);
+        mainLayout->setSpacing(10);
+        mainLayout->setContentsMargins(15, 15, 15, 15);
+
+        // 标题
+        QLabel* lblTitle = new QLabel("期中成绩表");
+        lblTitle->setStyleSheet("background-color: #d3d3d3; color: black; font-size: 16px; font-weight: bold; padding: 8px; border-radius: 4px;");
+        lblTitle->setAlignment(Qt::AlignCenter);
+        mainLayout->addWidget(lblTitle);
+
+        // 顶部按钮行
+        QHBoxLayout* btnLayout = new QHBoxLayout;
+        btnLayout->setSpacing(8);
+
+        QString btnStyle = "QPushButton { background-color: green; color: white; padding: 6px 12px; border-radius: 4px; font-size: 14px; }"
+                          "QPushButton:hover { background-color: #006400; }";
+
+        btnAddRow = new QPushButton("添加行");
+        btnDeleteColumn = new QPushButton("删除列");
+        btnAddColumn = new QPushButton("添加列");
+        btnFontColor = new QPushButton("字体颜色");
+        btnBgColor = new QPushButton("背景色");
+        btnDescOrder = new QPushButton("倒序");
+        btnAscOrder = new QPushButton("正序");
+        btnExport = new QPushButton("导出");
+
+        btnAddRow->setStyleSheet(btnStyle);
+        btnDeleteColumn->setStyleSheet(btnStyle);
+        btnAddColumn->setStyleSheet(btnStyle);
+        btnFontColor->setStyleSheet(btnStyle);
+        btnBgColor->setStyleSheet(btnStyle);
+        btnDescOrder->setStyleSheet(btnStyle);
+        btnAscOrder->setStyleSheet(btnStyle);
+        btnExport->setStyleSheet(btnStyle);
+
+        btnLayout->addWidget(btnAddRow);
+        btnLayout->addWidget(btnDeleteColumn);
+        btnLayout->addWidget(btnAddColumn);
+        btnLayout->addWidget(btnFontColor);
+        btnLayout->addWidget(btnBgColor);
+        btnLayout->addWidget(btnDescOrder);
+        btnLayout->addWidget(btnAscOrder);
+        btnLayout->addWidget(btnExport);
+        btnLayout->addStretch();
+
+        mainLayout->addLayout(btnLayout);
+
+        // 说明文本框
+        QLabel* lblDesc = new QLabel("说明:");
+        lblDesc->setStyleSheet("font-weight: bold; color: black;");
+        mainLayout->addWidget(lblDesc);
+
+        textDescription = new QTextEdit;
+        textDescription->setPlaceholderText("在此处添加表格说明...");
+        textDescription->setFixedHeight(60);
+        textDescription->setStyleSheet("background-color: #ffa500; color: black; padding: 5px; border: 1px solid #888;");
+        textDescription->setPlainText("说明:该表为期中成绩表。语文总分120、数学总分120");
+        mainLayout->addWidget(textDescription);
+
+        // 表格
+        table = new QTableWidget(6, 8); // 初始6行，8列（学号、姓名、语文、数学、英语、总分 + 2个空白列）
+        QStringList headers = { "学号", "姓名", "语文", "数学", "英语", "总分", "", "" };
+        table->setHorizontalHeaderLabels(headers);
+
+        // 表格样式
+        table->setStyleSheet(
+            "QTableWidget { background-color: white; gridline-color: #ddd; }"
+            "QTableWidget::item { padding: 5px; }"
+            "QHeaderView::section { background-color: #4169e1; color: white; font-weight: bold; padding: 8px; }"
+        );
+        table->setAlternatingRowColors(true);
+        table->setStyleSheet(table->styleSheet() + 
+            "QTableWidget { alternate-background-color: #e6f3ff; }"
+        );
+
+        table->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::SelectedClicked);
+        table->setSelectionBehavior(QAbstractItemView::SelectItems);
+        table->setSelectionMode(QAbstractItemView::SingleSelection);
+        table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+
+        // 初始化表格数据
+        for (int row = 0; row < table->rowCount(); ++row) {
+            for (int col = 0; col < table->columnCount(); ++col) {
+                QTableWidgetItem* item = new QTableWidgetItem("");
+                item->setTextAlignment(Qt::AlignCenter);
+                table->setItem(row, col, item);
+            }
+        }
+
+        // 添加示例数据
+        if (table->item(0, 2)) table->item(0, 2)->setText("100");
+        if (table->item(0, 3)) table->item(0, 3)->setText("89");
+        if (table->item(1, 2)) table->item(1, 2)->setText("90");
+        if (table->item(1, 3)) table->item(1, 3)->setText("78");
+        if (table->item(2, 2)) table->item(2, 2)->setText("97");
+        if (table->item(2, 3)) table->item(2, 3)->setText("80");
+        if (table->item(3, 2)) table->item(3, 2)->setText("67");
+        if (table->item(3, 3)) table->item(3, 3)->setText("97");
+
+        mainLayout->addWidget(table);
+
+        // 固定列索引（不能删除的列）
+        fixedColumns = { 0, 1, 2, 3, 4, 5 }; // 学号、姓名、语文、数学、英语、总分
+        nameColumnIndex = 1; // 姓名列索引
+
+        // 连接信号和槽
+        connect(btnAddRow, &QPushButton::clicked, this, &MidtermGradeDialog::onAddRow);
+        connect(btnDeleteColumn, &QPushButton::clicked, this, &MidtermGradeDialog::onDeleteColumn);
+        connect(btnAddColumn, &QPushButton::clicked, this, &MidtermGradeDialog::onAddColumn);
+        connect(btnFontColor, &QPushButton::clicked, this, &MidtermGradeDialog::onFontColor);
+        connect(btnBgColor, &QPushButton::clicked, this, &MidtermGradeDialog::onBgColor);
+        connect(btnDescOrder, &QPushButton::clicked, this, &MidtermGradeDialog::onDescOrder);
+        connect(btnAscOrder, &QPushButton::clicked, this, &MidtermGradeDialog::onAscOrder);
+        connect(btnExport, &QPushButton::clicked, this, &MidtermGradeDialog::onExport);
+
+        // 单元格点击和悬浮事件
+        connect(table, &QTableWidget::cellClicked, this, &MidtermGradeDialog::onCellClicked);
+        connect(table, &QTableWidget::cellEntered, this, &MidtermGradeDialog::onCellEntered);
+        table->setMouseTracking(true);
+
+        // 右键菜单用于删除行
+        table->setContextMenuPolicy(Qt::CustomContextMenu);
+        connect(table, &QTableWidget::customContextMenuRequested, this, &MidtermGradeDialog::onTableContextMenu);
+    }
+
+private slots:
+    void onAddRow()
+    {
+        int currentRow = table->currentRow();
+        if (currentRow < 0) {
+            currentRow = table->rowCount() - 1;
+        }
+        int insertRow = currentRow + 1;
+        table->insertRow(insertRow);
+
+        // 初始化新行的所有单元格
+        for (int col = 0; col < table->columnCount(); ++col) {
+            QTableWidgetItem* item = new QTableWidgetItem("");
+            item->setTextAlignment(Qt::AlignCenter);
+            table->setItem(insertRow, col, item);
+        }
+    }
+
+    void onDeleteColumn()
+    {
+        int currentCol = table->currentColumn();
+        if (currentCol < 0) {
+            QMessageBox::information(this, "提示", "请先选择要删除的列");
+            return;
+        }
+
+        // 检查是否是固定列
+        if (fixedColumns.contains(currentCol)) {
+            QMessageBox::warning(this, "警告", "不能删除固定列（学号、姓名、语文、数学、英语、总分）");
+            return;
+        }
+
+        int ret = QMessageBox::question(this, "确认", "确定要删除这一列吗？", 
+                                        QMessageBox::Yes | QMessageBox::No);
+        if (ret == QMessageBox::Yes) {
+            table->removeColumn(currentCol);
+            // 更新固定列索引（删除列后，后续列的索引会变化）
+            QSet<int> newFixedColumns;
+            for (int col : fixedColumns) {
+                if (col < currentCol) {
+                    newFixedColumns.insert(col);
+                } else if (col > currentCol) {
+                    newFixedColumns.insert(col - 1);
+                }
+            }
+            fixedColumns = newFixedColumns;
+            if (nameColumnIndex > currentCol) {
+                nameColumnIndex--;
+            }
+        }
+    }
+
+    void onAddColumn()
+    {
+        bool ok;
+        QString columnName = QInputDialog::getText(this, "添加列", "请输入列名:", 
+                                                   QLineEdit::Normal, "", &ok);
+        if (!ok || columnName.isEmpty()) {
+            return;
+        }
+
+        // 在姓名列后添加
+        int insertCol = nameColumnIndex + 1;
+        table->insertColumn(insertCol);
+        table->setHorizontalHeaderItem(insertCol, new QTableWidgetItem(columnName));
+
+        // 初始化新列的所有单元格
+        for (int row = 0; row < table->rowCount(); ++row) {
+            QTableWidgetItem* item = new QTableWidgetItem("");
+            item->setTextAlignment(Qt::AlignCenter);
+            table->setItem(row, insertCol, item);
+        }
+
+        // 更新固定列索引（插入列后，姓名列之后的固定列索引会变化）
+        QSet<int> newFixedColumns;
+        for (int col : fixedColumns) {
+            if (col <= nameColumnIndex) {
+                newFixedColumns.insert(col); // 姓名列及其之前的列索引不变
+            } else {
+                newFixedColumns.insert(col + 1); // 姓名列之后的列索引+1
+            }
+        }
+        fixedColumns = newFixedColumns;
+        // nameColumnIndex 不变，因为姓名列索引没有变化
+    }
+
+    void onFontColor()
+    {
+        QTableWidgetItem* item = table->currentItem();
+        if (!item) {
+            QMessageBox::information(this, "提示", "请先选择要设置字体颜色的单元格");
+            return;
+        }
+
+        QColor color = QColorDialog::getColor(item->foreground().color(), this, "选择字体颜色");
+        if (color.isValid()) {
+            item->setForeground(QBrush(color));
+        }
+    }
+
+    void onBgColor()
+    {
+        QTableWidgetItem* item = table->currentItem();
+        if (!item) {
+            QMessageBox::information(this, "提示", "请先选择要设置背景色的单元格");
+            return;
+        }
+
+        QColor color = QColorDialog::getColor(item->background().color(), this, "选择背景色");
+        if (color.isValid()) {
+            item->setBackground(QBrush(color));
+        }
+    }
+
+    void onDescOrder()
+    {
+        sortTable(false); // false表示倒序
+    }
+
+    void onAscOrder()
+    {
+        sortTable(true); // true表示正序
+    }
+
+    void onExport()
+    {
+        QString fileName = QFileDialog::getSaveFileName(this, "导出成绩表", "", "CSV文件 (*.csv);;所有文件 (*.*)");
+        if (fileName.isEmpty()) {
+            return;
+        }
+
+        QFile file(fileName);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QMessageBox::critical(this, "错误", "无法创建文件");
+            return;
+        }
+
+        QTextStream out(&file);
+        out.setCodec("UTF-8");
+        
+        // 写入UTF-8 BOM以支持Excel正确显示中文
+        out << "\xEF\xBB\xBF";
+
+        // 导出说明
+        QString desc = textDescription->toPlainText();
+        if (!desc.isEmpty()) {
+            out << desc << "\n\n";
+        }
+
+        // 导出表头
+        for (int col = 0; col < table->columnCount(); ++col) {
+            QTableWidgetItem* headerItem = table->horizontalHeaderItem(col);
+            QString headerText = headerItem ? headerItem->text() : "";
+            if (!headerText.isEmpty()) {
+                out << headerText;
+            }
+            if (col < table->columnCount() - 1) {
+                out << ",";
+            }
+        }
+        out << "\n";
+
+        // 导出数据
+        for (int row = 0; row < table->rowCount(); ++row) {
+            for (int col = 0; col < table->columnCount(); ++col) {
+                QTableWidgetItem* item = table->item(row, col);
+                QString text = item ? item->text() : "";
+                out << text;
+                if (col < table->columnCount() - 1) {
+                    out << ",";
+                }
+            }
+            out << "\n";
+        }
+
+        file.close();
+        QMessageBox::information(this, "成功", "导出完成！");
+    }
+
+    void onCellClicked(int row, int column)
+    {
+        showCellComment(row, column);
+    }
+
+    void onCellEntered(int row, int column)
+    {
+        // 鼠标悬浮时显示注释提示
+        QTableWidgetItem* item = table->item(row, column);
+        if (item) {
+            QString comment = item->data(Qt::UserRole).toString();
+            if (!comment.isEmpty()) {
+                QToolTip::showText(QCursor::pos(), comment, table);
+            }
+        }
+    }
+
+    void onTableContextMenu(const QPoint& pos)
+    {
+        QTableWidgetItem* item = table->itemAt(pos);
+        if (!item) return;
+
+        int row = item->row();
+        QMenu menu(this);
+        
+        QAction* editCommentAction = menu.addAction("编辑注释");
+        QAction* deleteRowAction = menu.addAction("删除行");
+
+        QAction* selectedAction = menu.exec(table->viewport()->mapToGlobal(pos));
+        
+        if (selectedAction == editCommentAction) {
+            showCellComment(row, item->column());
+        } else if (selectedAction == deleteRowAction) {
+            int ret = QMessageBox::question(this, "确认", "确定要删除这一行吗？", 
+                                            QMessageBox::Yes | QMessageBox::No);
+            if (ret == QMessageBox::Yes) {
+                table->removeRow(row);
+            }
+        }
+    }
+
+private:
+    void sortTable(bool ascending)
+    {
+        int sortColumn = table->currentColumn();
+        if (sortColumn < 0) {
+            QMessageBox::information(this, "提示", "请先选择要排序的列");
+            return;
+        }
+
+        // 获取所有行数据
+        QList<QList<QTableWidgetItem*>> rowsData;
+        for (int row = 0; row < table->rowCount(); ++row) {
+            QList<QTableWidgetItem*> rowData;
+            for (int col = 0; col < table->columnCount(); ++col) {
+                QTableWidgetItem* item = table->item(row, col);
+                if (item) {
+                    // 创建新的item副本
+                    QTableWidgetItem* newItem = item->clone();
+                    rowData.append(newItem);
+                } else {
+                    rowData.append(new QTableWidgetItem(""));
+                }
+            }
+            rowsData.append(rowData);
+        }
+
+        // 按指定列排序
+        std::sort(rowsData.begin(), rowsData.end(), [sortColumn, ascending](const QList<QTableWidgetItem*>& a, const QList<QTableWidgetItem*>& b) {
+            if (sortColumn >= a.size() || sortColumn >= b.size()) return false;
+            QString textA = a[sortColumn] ? a[sortColumn]->text() : "";
+            QString textB = b[sortColumn] ? b[sortColumn]->text() : "";
+            
+            // 尝试转换为数字
+            bool okA, okB;
+            double numA = textA.toDouble(&okA);
+            double numB = textB.toDouble(&okB);
+            
+            if (okA && okB) {
+                return ascending ? (numA < numB) : (numA > numB);
+            } else {
+                return ascending ? (textA < textB) : (textA > textB);
+            }
+        });
+
+        // 重新设置表格数据
+        table->setRowCount(rowsData.size());
+        for (int row = 0; row < rowsData.size(); ++row) {
+            for (int col = 0; col < rowsData[row].size(); ++col) {
+                table->setItem(row, col, rowsData[row][col]);
+            }
+        }
+    }
+
+    void showCellComment(int row, int column)
+    {
+        QTableWidgetItem* item = table->item(row, column);
+        if (!item) {
+            item = new QTableWidgetItem("");
+            item->setTextAlignment(Qt::AlignCenter);
+            table->setItem(row, column, item);
+        }
+
+        QString currentComment = item->data(Qt::UserRole).toString();
+        bool ok;
+        QString comment = QInputDialog::getMultiLineText(this, "单元格注释", 
+                                                         QString("单元格 (%1, %2) 的注释:").arg(row + 1).arg(column + 1),
+                                                         currentComment, &ok);
+        if (ok) {
+            item->setData(Qt::UserRole, comment);
+            // 如果有注释，用特殊背景色标记
+            if (!comment.isEmpty()) {
+                item->setBackground(QBrush(QColor(255, 255, 200))); // 浅黄色
+            } else {
+                item->setBackground(QBrush()); // 恢复默认
+            }
+        }
+    }
+
+private:
+    QTableWidget* table;
+    QTextEdit* textDescription;
+    QPushButton* btnAddRow;
+    QPushButton* btnDeleteColumn;
+    QPushButton* btnAddColumn;
+    QPushButton* btnFontColor;
+    QPushButton* btnBgColor;
+    QPushButton* btnDescOrder;
+    QPushButton* btnAscOrder;
+    QPushButton* btnExport;
+    
+    QSet<int> fixedColumns; // 固定列索引集合（不能删除的列）
+    int nameColumnIndex; // 姓名列索引
+};
+
