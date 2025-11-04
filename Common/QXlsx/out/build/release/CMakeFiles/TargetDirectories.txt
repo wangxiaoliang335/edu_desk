@@ -1,0 +1,10 @@
+E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release/CMakeFiles/package.dir
+E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release/CMakeFiles/QXlsx.dir
+E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release/CMakeFiles/package_source.dir
+E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release/CMakeFiles/install/local.dir
+E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release/CMakeFiles/install.dir
+E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release/CMakeFiles/edit_cache.dir
+E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release/CMakeFiles/rebuild_cache.dir
+E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release/CMakeFiles/list_install_components.dir
+E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release/CMakeFiles/QXlsx_autogen_timestamp_deps.dir
+E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release/CMakeFiles/QXlsx_autogen.dir

@@ -1,0 +1,640 @@
+{
+	"BUILD_DIR" : "E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release/QXlsx_autogen",
+	"CMAKE_BINARY_DIR" : "E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release",
+	"CMAKE_CURRENT_BINARY_DIR" : "E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release",
+	"CMAKE_CURRENT_SOURCE_DIR" : "E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx",
+	"CMAKE_EXECUTABLE" : "C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+	"CMAKE_LIST_FILES" : 
+	[
+		"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/CMakeLists.txt",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeDetermineSystem.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeSystem.cmake.in",
+		"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release/CMakeFiles/3.20.21032501-MSVC_2/CMakeSystem.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeSystemSpecificInitialize.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeDetermineCXXCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeDetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Platform/Windows-Determine-CXX.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeDetermineCompilerId.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeCompilerIdDetection.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/ADSP-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/ARMCC-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/ARMClang-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/AppleClang-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/Clang-DetermineCompilerInternal.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/Borland-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/Clang-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/Clang-DetermineCompilerInternal.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/Comeau-CXX-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/Compaq-CXX-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/Cray-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/Embarcadero-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/Fujitsu-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/GHS-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/GNU-CXX-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/HP-CXX-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/IAR-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/Intel-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/IntelLLVM-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/MSVC-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/NVHPC-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/NVIDIA-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/OpenWatcom-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/PGI-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/PathScale-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/SCO-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/SunPro-CXX-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/TI-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/VisualAge-CXX-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/IBMCPP-CXX-DetermineVersionInternal.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/Watcom-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/XL-CXX-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/IBMCPP-CXX-DetermineVersionInternal.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/XLClang-CXX-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/zOS-CXX-DetermineCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/IBMCPP-CXX-DetermineVersionInternal.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeFindBinUtils.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeCXXCompiler.cmake.in",
+		"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release/CMakeFiles/3.20.21032501-MSVC_2/CMakeCXXCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeSystemSpecificInformation.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeGenericSystem.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeInitializeConfigs.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Platform/Windows.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Platform/WindowsPaths.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeCXXInformation.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeLanguageInformation.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/MSVC-CXX.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Compiler/CMakeCommonCompilerMacros.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Platform/Windows-MSVC-CXX.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Platform/Windows-MSVC.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeDetermineRCCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeRCCompiler.cmake.in",
+		"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release/CMakeFiles/3.20.21032501-MSVC_2/CMakeRCCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeRCInformation.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeTestRCCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeCommonLanguageInclude.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeTestCXXCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeTestCompilerCommon.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeDetermineCompilerABI.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeParseImplicitIncludeInfo.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeParseImplicitLinkInfo.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeParseLibraryArchitecture.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeTestCompilerCommon.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeCXXCompilerABI.cpp",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeDetermineCompileFeatures.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/Internal/FeatureTesting.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeCXXCompiler.cmake.in",
+		"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release/CMakeFiles/3.20.21032501-MSVC_2/CMakeCXXCompiler.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/GNUInstallDirs.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5/Qt5ConfigVersion.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5/Qt5Config.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5/Qt5ConfigVersion.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5/Qt5Config.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5/Qt5ModuleLocation.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Core/Qt5CoreConfigVersion.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Core/Qt5CoreConfig.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Core/Qt5CoreConfigExtras.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Core/Qt5CoreConfigExtrasMkspecDir.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Core/Qt5CoreMacros.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CMakeParseArguments.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Gui/Qt5GuiConfigVersion.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Gui/Qt5GuiConfig.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Gui/Qt5Gui_QGifPlugin.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Gui/Qt5Gui_QICNSPlugin.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Gui/Qt5Gui_QICOPlugin.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Gui/Qt5Gui_QJpegPlugin.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Gui/Qt5Gui_QMinimalIntegrationPlugin.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Gui/Qt5Gui_QOffscreenIntegrationPlugin.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Gui/Qt5Gui_QSvgIconPlugin.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Gui/Qt5Gui_QSvgPlugin.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Gui/Qt5Gui_QTgaPlugin.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Gui/Qt5Gui_QTiffPlugin.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Gui/Qt5Gui_QTuioTouchPlugin.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Gui/Qt5Gui_QWbmpPlugin.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Gui/Qt5Gui_QWebpPlugin.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Gui/Qt5Gui_QWindowsDirect2DIntegrationPlugin.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Gui/Qt5Gui_QWindowsIntegrationPlugin.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Gui/Qt5Gui_QXdgDesktopPortalThemePlugin.cmake",
+		"D:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5Gui/Qt5GuiConfigExtras.cmake",
+		"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/cmake/modules/qxlsx-config.cmake.in",
+		"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/cmake/modules/qxlsx-config-version.cmake.in",
+		"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/cmake/modules/CPackConfig.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CPack.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Modules/CPackComponent.cmake",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Templates/CPackConfig.cmake.in",
+		"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.20/Templates/CPackConfig.cmake.in"
+	],
+	"CMAKE_SOURCE_DIR" : "E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx",
+	"DEP_FILE" : "E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release/QXlsx_autogen/deps",
+	"DEP_FILE_RULE_NAME" : "QXlsx_autogen/timestamp",
+	"HEADERS" : 
+	[
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxabstractooxmlfile.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxabstractooxmlfile.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxabstractooxmlfile_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxabstractooxmlfile_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxabstractsheet.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxabstractsheet.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxabstractsheet_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxabstractsheet_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxcell.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxcell.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxcell_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxcell_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxcellformula.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxcellformula.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxcellformula_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxcellformula_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxcelllocation.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxcelllocation.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxcellrange.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxcellrange.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxcellreference.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxcellreference.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxchart.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxchart.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxchart_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxchart_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxchartsheet.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxchartsheet.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxchartsheet_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxchartsheet_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxcolor_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxcolor_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxconditionalformatting.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxconditionalformatting.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxconditionalformatting_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxconditionalformatting_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxcontenttypes_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxcontenttypes_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxdatavalidation.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxdatavalidation.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxdatavalidation_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxdatavalidation_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxdatetype.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxdatetype.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxdocpropsapp_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxdocpropsapp_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxdocpropscore_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxdocpropscore_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxdocument.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxdocument.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxdocument_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxdocument_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxdrawing_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxdrawing_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxdrawinganchor_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxdrawinganchor_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxformat.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxformat.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxformat_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxformat_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxglobal.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxglobal.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxmediafile_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxmediafile_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxnumformatparser_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxnumformatparser_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxrelationships_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxrelationships_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxrichstring.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxrichstring.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxrichstring_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxrichstring_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxsharedstrings_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxsharedstrings_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxsimpleooxmlfile_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxsimpleooxmlfile_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxstyles_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxstyles_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxtheme_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxtheme_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxutility_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxutility_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxworkbook.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxworkbook.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxworkbook_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxworkbook_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxworksheet.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxworksheet.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxworksheet_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxworksheet_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxzipreader_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxzipreader_p.cpp",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header/xlsxzipwriter_p.h",
+			"Mu",
+			"6OFTS6FJJP/moc_xlsxzipwriter_p.cpp",
+			null
+		]
+	],
+	"HEADER_EXTENSIONS" : [ "h", "hh", "h++", "hm", "hpp", "hxx", "in", "txx" ],
+	"INCLUDE_DIR" : "E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release/QXlsx_autogen/include",
+	"MOC_COMPILATION_FILE" : "E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release/QXlsx_autogen/mocs_compilation.cpp",
+	"MOC_DEFINITIONS" : 
+	[
+		"QT_CORE_LIB",
+		"QT_DISABLE_DEPRECATED_BEFORE=0x060200",
+		"QT_GUI_LIB",
+		"QT_NO_CAST_FROM_ASCII",
+		"QT_NO_CAST_FROM_BYTEARRAY",
+		"QT_NO_CAST_TO_ASCII",
+		"QT_NO_DEBUG",
+		"QT_NO_KEYWORDS",
+		"QT_NO_SIGNALS_SLOTS_KEYWORDS",
+		"QT_NO_URL_CAST_FROM_STRING",
+		"QT_USE_FAST_OPERATOR_PLUS",
+		"QT_USE_QSTRINGBUILDER",
+		"WIN32"
+	],
+	"MOC_DEPEND_FILTERS" : 
+	[
+		[
+			"Q_PLUGIN_METADATA",
+			"[\n][ \t]*Q_PLUGIN_METADATA[ \t]*\\([^\\)]*FILE[ \t]*\"([^\"]+)\""
+		]
+	],
+	"MOC_INCLUDES" : 
+	[
+		"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release",
+		"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx",
+		"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header",
+		"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/header",
+		"D:/Qt/5.15.2/msvc2019_64/include",
+		"D:/Qt/5.15.2/msvc2019_64/include/QtCore",
+		"D:/Qt/5.15.2/msvc2019_64/mkspecs/win32-msvc",
+		"D:/Qt/5.15.2/msvc2019_64/include/QtGui/5.15.2",
+		"D:/Qt/5.15.2/msvc2019_64/include/QtGui/5.15.2/QtGui",
+		"D:/Qt/5.15.2/msvc2019_64/include/QtGui",
+		"D:/Qt/5.15.2/msvc2019_64/include/QtANGLE",
+		"D:/Qt/5.15.2/msvc2019_64/include/QtCore/5.15.2",
+		"D:/Qt/5.15.2/msvc2019_64/include/QtCore/5.15.2/QtCore"
+	],
+	"MOC_MACRO_NAMES" : [ "Q_OBJECT", "Q_GADGET", "Q_NAMESPACE", "Q_NAMESPACE_EXPORT" ],
+	"MOC_OPTIONS" : [],
+	"MOC_PATH_PREFIX" : false,
+	"MOC_PREDEFS_CMD" : [],
+	"MOC_PREDEFS_FILE" : "",
+	"MOC_RELAXED_MODE" : false,
+	"MOC_SKIP" : [],
+	"MULTI_CONFIG" : false,
+	"PARALLEL" : 4,
+	"PARSE_CACHE_FILE" : "E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release/CMakeFiles/QXlsx_autogen.dir/ParseCache.txt",
+	"QT_MOC_EXECUTABLE" : "D:/Qt/5.15.2/msvc2019_64/bin/moc.exe",
+	"QT_UIC_EXECUTABLE" : "",
+	"QT_VERSION_MAJOR" : 5,
+	"QT_VERSION_MINOR" : 15,
+	"SETTINGS_FILE" : "E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/out/build/release/CMakeFiles/QXlsx_autogen.dir/AutogenUsed.txt",
+	"SOURCES" : 
+	[
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxabstractooxmlfile.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxabstractsheet.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxcell.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxcellformula.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxcelllocation.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxcellrange.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxcellreference.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxchart.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxchartsheet.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxcolor.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxconditionalformatting.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxcontenttypes.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxdatavalidation.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxdatetype.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxdocpropsapp.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxdocpropscore.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxdocument.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxdrawing.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxdrawinganchor.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxformat.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxmediafile.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxnumformatparser.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxrelationships.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxrichstring.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxsharedstrings.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxsimpleooxmlfile.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxstyles.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxtheme.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxutility.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxworkbook.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxworksheet.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxzipreader.cpp",
+			"Mu",
+			null
+		],
+		[
+			"E:/BaiduNetdiskDownload/QXlsx-1.4.6/QXlsx-1.4.6/QXlsx/source/xlsxzipwriter.cpp",
+			"Mu",
+			null
+		]
+	],
+	"VERBOSITY" : 0
+}
