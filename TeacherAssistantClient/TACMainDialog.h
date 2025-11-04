@@ -33,6 +33,8 @@
 #include "AudioReceiver.h"
 #include "TAHttpHandler.h"
 #include "TaQTWebSocket.h"
+#include "TIMCloud.h"
+#include "GenerateTestUserSig.h"
 
 class TACMainDialog : public QDialog
 {
@@ -42,7 +44,8 @@ public:
 	TACMainDialog(QWidget *parent = nullptr);
 	~TACMainDialog();
 	void Init(QString qPhone, int user_id);
-    //void InitWebSocket();
+	bool InitSDK();
+	void Login(std::string userid);
 protected:
 	void paintEvent(QPaintEvent* event) override;
 	void resizeEvent(QResizeEvent* event) override;

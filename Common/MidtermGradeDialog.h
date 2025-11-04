@@ -23,6 +23,12 @@
 #include <QLineEdit>
 #include <QCursor>
 #include <QMap>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 #include <algorithm>
 
 class MidtermGradeDialog : public QDialog
@@ -61,6 +67,7 @@ public:
         btnDescOrder = new QPushButton("倒序");
         btnAscOrder = new QPushButton("正序");
         btnExport = new QPushButton("导出");
+        btnUpload = new QPushButton("上传服务器");
 
         btnAddRow->setStyleSheet(btnStyle);
         btnDeleteColumn->setStyleSheet(btnStyle);
@@ -70,6 +77,8 @@ public:
         btnDescOrder->setStyleSheet(btnStyle);
         btnAscOrder->setStyleSheet(btnStyle);
         btnExport->setStyleSheet(btnStyle);
+        btnUpload->setStyleSheet("QPushButton { background-color: blue; color: white; padding: 6px 12px; border-radius: 4px; font-size: 14px; }"
+                                 "QPushButton:hover { background-color: #0000CD; }");
 
         btnLayout->addWidget(btnAddRow);
         btnLayout->addWidget(btnDeleteColumn);
@@ -79,6 +88,7 @@ public:
         btnLayout->addWidget(btnDescOrder);
         btnLayout->addWidget(btnAscOrder);
         btnLayout->addWidget(btnExport);
+        btnLayout->addWidget(btnUpload);
         btnLayout->addStretch();
 
         mainLayout->addLayout(btnLayout);
@@ -150,6 +160,10 @@ public:
         connect(btnDescOrder, &QPushButton::clicked, this, &MidtermGradeDialog::onDescOrder);
         connect(btnAscOrder, &QPushButton::clicked, this, &MidtermGradeDialog::onAscOrder);
         connect(btnExport, &QPushButton::clicked, this, &MidtermGradeDialog::onExport);
+        connect(btnUpload, &QPushButton::clicked, this, &MidtermGradeDialog::onUpload);
+        
+        // 初始化网络管理器
+        networkManager = new QNetworkAccessManager(this);
 
         // 单元格点击和悬浮事件
         connect(table, &QTableWidget::cellClicked, this, &MidtermGradeDialog::onCellClicked);
@@ -425,6 +439,230 @@ private slots:
         QMessageBox::information(this, "成功", "导出完成！");
     }
 
+    void onUpload()
+    {
+        // 检查表格是否有数据
+        if (table->rowCount() == 0) {
+            QMessageBox::warning(this, "提示", "表格中没有数据，无法上传！");
+            return;
+        }
+
+        // 创建输入对话框
+        QDialog* inputDialog = new QDialog(this);
+        inputDialog->setWindowTitle("上传成绩单");
+        inputDialog->setModal(true);
+        inputDialog->resize(400, 300);
+
+        QVBoxLayout* dialogLayout = new QVBoxLayout(inputDialog);
+
+        QLabel* lblClassId = new QLabel("班级ID (class_id):");
+        QLineEdit* editClassId = new QLineEdit();
+        editClassId->setPlaceholderText("例如: class_1001");
+
+        QLabel* lblExamName = new QLabel("考试名称 (exam_name):");
+        QLineEdit* editExamName = new QLineEdit();
+        editExamName->setPlaceholderText("例如: 期中考试");
+        editExamName->setText("期中考试"); // 默认值
+
+        QLabel* lblTerm = new QLabel("学期 (term):");
+        QLineEdit* editTerm = new QLineEdit();
+        editTerm->setPlaceholderText("例如: 2025-2026-1");
+
+        QLabel* lblRemark = new QLabel("备注 (remark):");
+        QLineEdit* editRemark = new QLineEdit();
+        editRemark->setPlaceholderText("例如: 2025年春季学期期中考试");
+
+        dialogLayout->addWidget(lblClassId);
+        dialogLayout->addWidget(editClassId);
+        dialogLayout->addWidget(lblExamName);
+        dialogLayout->addWidget(editExamName);
+        dialogLayout->addWidget(lblTerm);
+        dialogLayout->addWidget(editTerm);
+        dialogLayout->addWidget(lblRemark);
+        dialogLayout->addWidget(editRemark);
+
+        QHBoxLayout* btnLayout = new QHBoxLayout();
+        QPushButton* btnOk = new QPushButton("确定");
+        QPushButton* btnCancel = new QPushButton("取消");
+        btnLayout->addStretch();
+        btnLayout->addWidget(btnOk);
+        btnLayout->addWidget(btnCancel);
+        dialogLayout->addLayout(btnLayout);
+
+        connect(btnOk, &QPushButton::clicked, inputDialog, &QDialog::accept);
+        connect(btnCancel, &QPushButton::clicked, inputDialog, &QDialog::reject);
+
+        if (inputDialog->exec() != QDialog::Accepted) {
+            delete inputDialog;
+            return;
+        }
+
+        QString classId = editClassId->text().trimmed();
+        QString examName = editExamName->text().trimmed();
+        QString term = editTerm->text().trimmed();
+        QString remark = editRemark->text().trimmed();
+
+        if (classId.isEmpty() || examName.isEmpty() || term.isEmpty()) {
+            QMessageBox::warning(this, "错误", "请填写必填项：班级ID、考试名称、学期！");
+            delete inputDialog;
+            return;
+        }
+
+        delete inputDialog;
+
+        // 从表格中读取数据
+        QJsonArray scoresArray;
+        
+        // 获取列索引
+        int colId = -1, colName = -1, colChinese = -1, colMath = -1, colEnglish = -1;
+        for (int col = 0; col < table->columnCount(); ++col) {
+            QTableWidgetItem* headerItem = table->horizontalHeaderItem(col);
+            if (!headerItem) continue;
+            QString headerText = headerItem->text();
+            if (headerText == "学号") colId = col;
+            else if (headerText == "姓名") colName = col;
+            else if (headerText == "语文") colChinese = col;
+            else if (headerText == "数学") colMath = col;
+            else if (headerText == "英语") colEnglish = col;
+        }
+
+        if (colId < 0 || colName < 0) {
+            QMessageBox::warning(this, "错误", "表格中缺少必要列：学号、姓名！");
+            return;
+        }
+
+        // 读取每一行数据
+        for (int row = 0; row < table->rowCount(); ++row) {
+            QTableWidgetItem* idItem = table->item(row, colId);
+            QTableWidgetItem* nameItem = table->item(row, colName);
+            
+            if (!idItem || !nameItem) continue;
+            
+            QString studentId = idItem->text().trimmed();
+            QString studentName = nameItem->text().trimmed();
+            
+            // 至少要有学号或姓名
+            if (studentId.isEmpty() && studentName.isEmpty()) {
+                continue; // 跳过空行
+            }
+
+            QJsonObject scoreObj;
+            if (!studentId.isEmpty()) {
+                scoreObj["student_id"] = studentId;
+            }
+            if (!studentName.isEmpty()) {
+                scoreObj["student_name"] = studentName;
+            }
+
+            // 读取成绩
+            if (colChinese >= 0) {
+                QTableWidgetItem* item = table->item(row, colChinese);
+                if (item && !item->text().trimmed().isEmpty()) {
+                    bool ok;
+                    int score = item->text().toInt(&ok);
+                    if (ok) {
+                        scoreObj["chinese"] = score;
+                    }
+                }
+            }
+            if (colMath >= 0) {
+                QTableWidgetItem* item = table->item(row, colMath);
+                if (item && !item->text().trimmed().isEmpty()) {
+                    bool ok;
+                    int score = item->text().toInt(&ok);
+                    if (ok) {
+                        scoreObj["math"] = score;
+                    }
+                }
+            }
+            if (colEnglish >= 0) {
+                QTableWidgetItem* item = table->item(row, colEnglish);
+                if (item && !item->text().trimmed().isEmpty()) {
+                    bool ok;
+                    int score = item->text().toInt(&ok);
+                    if (ok) {
+                        scoreObj["english"] = score;
+                    }
+                }
+            }
+
+            scoresArray.append(scoreObj);
+        }
+
+        if (scoresArray.isEmpty()) {
+            QMessageBox::warning(this, "错误", "没有有效的学生数据！");
+            return;
+        }
+
+        // 构造请求 JSON
+        QJsonObject requestObj;
+        requestObj["class_id"] = classId;
+        requestObj["exam_name"] = examName;
+        requestObj["term"] = term;
+        if (!remark.isEmpty()) {
+            requestObj["remark"] = remark;
+        }
+        requestObj["scores"] = scoresArray;
+
+        QJsonDocument doc(requestObj);
+        QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+
+        // 发送 POST 请求
+        QString url = "http://47.100.126.194:5000/student-scores/save";
+        QNetworkRequest request;
+        request.setUrl(QUrl(url));
+        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+        QNetworkReply* reply = networkManager->post(request, jsonData);
+
+        // 显示上传中提示
+        QMessageBox* progressMsg = new QMessageBox(this);
+        progressMsg->setWindowTitle("上传中");
+        progressMsg->setText("正在上传成绩数据到服务器...");
+        progressMsg->setStandardButtons(QMessageBox::NoButton);
+        progressMsg->show();
+
+        // 处理响应
+        connect(reply, &QNetworkReply::finished, this, [=]() {
+            progressMsg->close();
+            progressMsg->deleteLater();
+
+            if (reply->error() == QNetworkReply::NoError) {
+                QByteArray responseData = reply->readAll();
+                QJsonDocument responseDoc = QJsonDocument::fromJson(responseData);
+                
+                if (responseDoc.isObject()) {
+                    QJsonObject responseObj = responseDoc.object();
+                    int code = responseObj["code"].toInt();
+                    
+                    if (code == 200) {
+                        QJsonObject dataObj = responseObj["data"].toObject();
+                        QString message = dataObj["message"].toString();
+                        int insertedCount = dataObj["inserted_count"].toInt();
+                        
+                        QMessageBox::information(this, "上传成功", 
+                            QString("上传成功！\n\n%1\n共插入 %2 条记录").arg(message).arg(insertedCount));
+                    } else {
+                        QString errorMsg = responseObj["message"].toString();
+                        QMessageBox::warning(this, "上传失败", 
+                            QString("服务器返回错误：\n%1").arg(errorMsg));
+                    }
+                } else {
+                    QMessageBox::information(this, "上传成功", "数据已成功上传到服务器！");
+                }
+            } else {
+                QString errorString = reply->errorString();
+                QByteArray errorData = reply->readAll();
+                QString errorMsg = QString::fromUtf8(errorData);
+                
+                QMessageBox::critical(this, "上传失败", 
+                    QString("网络错误：%1\n%2").arg(errorString).arg(errorMsg));
+            }
+            
+            reply->deleteLater();
+        });
+    }
+
     void onCellClicked(int row, int column)
     {
         showCellComment(row, column);
@@ -555,6 +793,8 @@ private:
     QPushButton* btnDescOrder;
     QPushButton* btnAscOrder;
     QPushButton* btnExport;
+    QPushButton* btnUpload;
+    QNetworkAccessManager* networkManager;
     
     QSet<int> fixedColumns; // 固定列索引集合（不能删除的列）
     int nameColumnIndex; // 姓名列索引

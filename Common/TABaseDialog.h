@@ -9,6 +9,7 @@
 #include <QLabel>
 
 typedef struct tagUserInfo {
+    QString strUserId;
     QString strPhone;
     QString strName;
     QString strSex;

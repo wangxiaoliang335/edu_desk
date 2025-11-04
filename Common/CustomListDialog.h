@@ -11,6 +11,7 @@
 #include <QMessageBox>
 #include <QIODevice>
 #include <QFileInfo>
+#include <QTimer>
 #include "MidtermGradeDialog.h"
 #include "StudentPhysiqueDialog.h"
 #include "xlsxdocument.h"
@@ -141,17 +142,55 @@ private slots:
                 m_midtermGradeDlg = new MidtermGradeDialog(this);
             }
             m_midtermGradeDlg->importData(headers, dataRows);
+            
             QMessageBox::information(this, "导入成功", 
                 QString("已成功导入期中成绩单！\n共%1行数据。").arg(dataRows.size()));
+            
             m_midtermGradeDlg->show();
+            
+            // 延迟询问是否立即上传（等待对话框显示完成）
+            QTimer::singleShot(300, this, [=]() {
+                QMessageBox msgBox(m_midtermGradeDlg);
+                msgBox.setWindowTitle("上传确认");
+                msgBox.setText("是否立即上传到服务器？");
+                msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+                msgBox.setDefaultButton(QMessageBox::Yes);
+                msgBox.button(QMessageBox::Yes)->setText("立即上传");
+                msgBox.button(QMessageBox::No)->setText("稍后上传");
+                
+                int ret = msgBox.exec();
+                if (ret == QMessageBox::Yes) {
+                    // 直接调用上传方法
+                    QMetaObject::invokeMethod(m_midtermGradeDlg, "onUpload", Qt::QueuedConnection);
+                }
+            });
         } else if (isStudentPhysique) {
             if (!m_studentPhysiqueDlg) {
                 m_studentPhysiqueDlg = new StudentPhysiqueDialog(this);
             }
             m_studentPhysiqueDlg->importData(headers, dataRows);
+            
             QMessageBox::information(this, "导入成功", 
                 QString("已成功导入学生体质统计表！\n共%1行数据。").arg(dataRows.size()));
+            
             m_studentPhysiqueDlg->show();
+            
+            // 延迟询问是否立即上传（等待对话框显示完成）
+            QTimer::singleShot(300, this, [=]() {
+                QMessageBox msgBox(m_studentPhysiqueDlg);
+                msgBox.setWindowTitle("上传确认");
+                msgBox.setText("是否立即上传到服务器？");
+                msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+                msgBox.setDefaultButton(QMessageBox::Yes);
+                msgBox.button(QMessageBox::Yes)->setText("立即上传");
+                msgBox.button(QMessageBox::No)->setText("稍后上传");
+                
+                int ret = msgBox.exec();
+                if (ret == QMessageBox::Yes) {
+                    // 直接调用上传方法
+                    QMetaObject::invokeMethod(m_studentPhysiqueDlg, "onUpload", Qt::QueuedConnection);
+                }
+            });
         } else {
             QMessageBox::warning(this, "提示", 
                 "无法识别表格类型！\n\n"

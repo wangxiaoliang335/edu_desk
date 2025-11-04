@@ -1,7 +1,12 @@
 ﻿#pragma execution_character_set("utf-8")
 #include <QScreen>
+#include <QJsonObject>
+#include <QJsonDocument>
+#include <windows.h>
+#include <tchar.h>
 #include "TACMainDialog.h"
 #include "CommonInfo.h"
+#include "common/Base.h"
 
 TaQTWebSocket* TACMainDialog::m_ws = NULL;
 
@@ -44,6 +49,11 @@ void TACMainDialog::Init(QString qPhone, int user_id)
 
     m_ws = new TaQTWebSocket(this);
 
+    if (InitSDK())
+    {
+        Login(std::to_string(user_id));
+    }
+
     m_httpHandler = new TAHttpHandler(this);
     if (m_httpHandler)
     {
@@ -71,6 +81,7 @@ void TACMainDialog::Init(QString qPhone, int user_id)
                             QJsonArray oUserInfo = oTmp["userinfo"].toArray();
                             if (oUserInfo.size() > 0)
                             {
+                                m_userInfo.strUserId = user_id;
                                 m_userInfo.strPhone = oUserInfo.at(0)["phone"].toString();
                                 m_userInfo.strName = oUserInfo.at(0)["name"].toString();
                                 m_userInfo.strSex = oUserInfo.at(0)["sex"].toString();
@@ -415,4 +426,90 @@ void TACMainDialog::resizeEvent(QResizeEvent* event)
 {
     QDialog::resizeEvent(event);
     this->update();
+}
+
+bool TACMainDialog::InitSDK() { //初始化ImSDK
+    //获取配置
+    QJsonObject json_user_config;
+    json_user_config[kTIMUserConfigIsReadReceipt] = true;  // 开启已读回执
+
+    QJsonObject json_socks5_value;
+    json_socks5_value[kTIMSocks5ProxyInfoIp] = "111.222.333.444";
+    json_socks5_value[kTIMSocks5ProxyInfoPort] = 8888;
+    json_socks5_value[kTIMSocks5ProxyInfoUserName] = "";
+    json_socks5_value[kTIMSocks5ProxyInfoPassword] = "";
+    QJsonObject json_config;
+    json_config[kTIMSetConfigUserConfig] = json_user_config;
+    //json_config[kTIMSetConfigSocks5ProxyInfo] = json_socks5_value;
+    json_config[kTIMSetConfigUserDefineData] = "1.3.4.5.6.7";
+
+    QJsonDocument jsonConfigDoc(json_config);
+    QByteArray jsonConfigBytes = jsonConfigDoc.toJson(QJsonDocument::Compact);
+    TIMSetConfig(jsonConfigBytes.constData(), [](int32_t code, const char* desc, const char* json_param, const void* user_data) {
+        //CIMWnd* ths = (CIMWnd*)user_data;
+        //ths->Logf("config", kTIMLog_Info, json_param);
+        }, this);
+
+    // 初始化
+    std::string sdkappid = std::to_string(GenerateTestUserSig::instance().getSDKAppID());
+    //std::string path = Wide2UTF8(m_LogPath->GetText().GetData());
+
+    TCHAR szTPath[MAX_PATH] = { 0 };
+    ::GetModuleFileName(NULL, szTPath, MAX_PATH); //获取工具目录
+    int len = _tcslen(szTPath);
+    for (int i = len; i >= 0; i--) {
+        if ((szTPath[i] == '/') || (szTPath[i] == '\\')) {
+            szTPath[i] = 0;
+            break;
+        }
+    }
+
+    uint64_t sdk_app_id = atoi(sdkappid.c_str());
+
+    std::string json_init_cfg;
+
+    QJsonObject json_value_init;
+    json_value_init[kTIMSdkConfigLogFilePath] = QString::fromStdString(Wide2UTF8(szTPath));
+    json_value_init[kTIMSdkConfigConfigFilePath] = QString::fromStdString(Wide2UTF8(szTPath));
+
+    QJsonDocument jsonInitDoc(json_value_init);
+    QByteArray jsonInitBytes = jsonInitDoc.toJson(QJsonDocument::Compact);
+    if (TIM_SUCC == TIMInit(sdk_app_id, jsonInitBytes.constData()))
+    {
+        qDebug() << "TIMInit succeeded!";
+        return true;
+    }
+    else
+    {
+        qDebug() << "TIMInit failed!";
+        return false;
+    }
+    //ChangeMainView(INITSDK_VIEW, LOGIN_VIEW);
+    //Logf("InitSdk", kTIMLog_Info, "sdkappid:%s Log&Cfg path:%s", sdkappid.c_str(), path.c_str());
+}
+
+void TACMainDialog::Login(std::string userid) { //登入
+    //std::string userid = m_UserIdEdit->GetText().GetStringA();
+    std::string usersig = GenerateTestUserSig::instance().genTestUserSig(userid);
+    //login_id = userid;
+    TIMLogin(userid.c_str(), usersig.c_str(), [](int32_t code, const char* desc, const char* json_param, const void* user_data) {
+        TACMainDialog* ths = (TACMainDialog*)user_data;
+        if (code != ERR_SUCC) { // 登入失败
+            //ths->Logf("Login", kTIMLog_Error, "Failure!code:%d desc", code, desc);
+            return;
+        }
+        ////登入成功
+        //ths->Log("Login", kTIMLog_Info, "Success!");
+        //ths->ChangeMainView(LOGIN_VIEW, MAIN_LOGIC_VIEW);
+        //ths->SetControlVisible(_T("logout_btn"), true);
+        //ths->SetControlVisible(_T("test_btn"), true);
+
+        //ths->SetControlVisible(_T("cur_login_info"), true);
+        //ths->SetControlText(_T("cur_login_info"), UTF82Wide(ths->login_id).c_str());
+        //ths->InitConvList();
+        //ths->GetGroupJoinedList();
+        }, this);
+
+    //Logf("Login", kTIMLog_Info, "User Id:%s Sig:%s", userid.c_str(), usersig.c_str());
+    //SetControlText(_T("cur_loginid_lbl"), UTF82Wide(userid).c_str());
 }

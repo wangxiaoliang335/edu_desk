@@ -12,11 +12,15 @@
 #include <QStyle>
 #include <QDir>
 #include <qpainterpath.h>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
 #include "ScheduleDialog.h"
 #include "FriendNotifyDialog.h"
 #include "TACAddGroupWidget.h"
 #include "GroupNotifyDialog.h"
 #include "TAHttpHandler.h"
+#include "ImSDK/includes/TIMCloud.h"
 #include <QMap>
 
 class RowItem : public QFrame {
@@ -519,6 +523,54 @@ public:
         {
             addGroupWidget->InitData();
         }
+
+        GetGroupJoinedList();
+    }
+
+    void GetGroupJoinedList() { // 已加入群列表
+    // 获取群列表
+        int ret = TIMGroupGetJoinedGroupList([](int32_t code, const char* desc, const char* json_param, const void* user_data) {
+            if (strlen(json_param) == 0) {
+                return;
+            }
+            QJsonParseError parseError;
+            QJsonDocument jsonDoc = QJsonDocument::fromJson(QByteArray(json_param), &parseError);
+            if (parseError.error != QJsonParseError::NoError) {
+                //CIMWnd::GetInst().Logf("GetJoinedGroup", kTIMLog_Error, "Json Parse Joined Group List!Failure! error:%s", parseError.errorString().toStdString().c_str());
+                qDebug() << "JSON Parse Error:" << parseError.errorString();
+                return;
+            }
+            if (!jsonDoc.isArray()) {
+                qDebug() << "JSON is not an array!";
+                return;
+            }
+            QJsonArray json_group_list = jsonDoc.array();
+            //CIMWnd::GetInst().Logf("GroupList", kTIMLog_Info, json_param);
+            for (int i = 0; i < json_group_list.size(); i++) {
+                QJsonObject group = json_group_list[i].toObject();
+
+                // 获取已加入群的基本信息
+                std::string groupid = group[kTIMGroupBaseInfoGroupId].toString().toStdString();
+                std::string groupName = group[kTIMGroupBaseInfoGroupName].toString().toStdString();
+                bool flag = false;
+                //for (std::size_t i = 0; i < CIMWnd::GetInst().groups.size(); i++) {
+                //    if (CIMWnd::GetInst().groups[i].id == groupid) {
+                //        CIMWnd::GetInst().groups[i].name = groupName;
+                //        flag = true;
+                //        break;
+                //    }
+                //}
+                //if (false == flag) { // 获取群组成员
+                //    GroupInfo group;
+                //    group.id = groupid;
+                //    group.name = groupName;
+                //    CIMWnd::GetInst().groups.push_back(group);
+                //}
+            }
+            //CIMWnd::GetInst().GetGroupInfoList();
+            }, this);
+        //Logf("Init", kTIMLog_Info, "TIMGroupGetJoinedGroupList ret %d", ret);
+        qDebug() << "TIMGroupGetJoinedGroupList ret:" << ret;
     }
 
     void InitWebSocket()
