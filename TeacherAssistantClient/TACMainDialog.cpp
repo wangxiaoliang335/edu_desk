@@ -81,7 +81,7 @@ void TACMainDialog::Init(QString qPhone, int user_id)
                             QJsonArray oUserInfo = oTmp["userinfo"].toArray();
                             if (oUserInfo.size() > 0)
                             {
-                                m_userInfo.strUserId = user_id;
+                                m_userInfo.strUserId = std::to_string(user_id).c_str();
                                 m_userInfo.strPhone = oUserInfo.at(0)["phone"].toString();
                                 m_userInfo.strName = oUserInfo.at(0)["name"].toString();
                                 m_userInfo.strSex = oUserInfo.at(0)["sex"].toString();

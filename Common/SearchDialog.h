@@ -13,8 +13,17 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QSet>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QInputDialog>
+#include <QMessageBox>
+#include <QDateTime>
 #include "TAHttpHandler.h"
 #include "CommonInfo.h"
+#include "ImSDK/includes/TIMCloud.h"
+#include "ImSDK/includes/TIMCloudDef.h"
 
 class SearchDialog : public QDialog
 {
@@ -103,6 +112,11 @@ public:
 private slots:
     void onSearchClicked()
     {
+        // 获取当前用户信息
+        //UserInfo userInfo = CommonInfo::GetData();
+        // 获取已加入的群组列表（用于判断是否已加入）
+        loadJoinedGroups();
+
         QString searchKey = m_editSearch->text().trimmed();
         if (searchKey.isEmpty()) {
             return;
@@ -110,6 +124,7 @@ private slots:
 
         // 获取当前用户信息
         UserInfo userInfo = CommonInfo::GetData();
+        m_currentUserId = userInfo.teacher_unique_id;
         if (userInfo.schoolId.isEmpty()) {
             qDebug() << "学校ID为空，无法搜索";
             return;
@@ -187,10 +202,77 @@ private slots:
                     desc = "群组ID: " + groupId;
                 }
 
+                // 判断当前用户是否已经是该群的成员
+                bool isMember = m_joinedGroupIds.contains(groupId);
+
                 // 添加搜索结果项
                 addListItem(m_listLayout, "", groupName, QString::number(memberNum), 
-                           classid.isEmpty() ? "群组" : "班级群", desc, groupId);
+                           classid.isEmpty() ? "群组" : "班级群", desc, groupId, isMember);
             }
+        }
+    }
+
+    void loadJoinedGroups()
+    {
+        // 通过/groups/by-teacher接口获取当前用户的群组列表
+        UserInfo userInfo = CommonInfo::GetData();
+        if (m_httpHandler && !userInfo.teacher_unique_id.isEmpty())
+        {
+            QUrl url("http://47.100.126.194:5000/groups/by-teacher");
+            QUrlQuery query;
+            query.addQueryItem("teacher_unique_id", userInfo.teacher_unique_id);
+            url.setQuery(query);
+            
+            // 使用临时标志来区分这个请求是用于加载已加入群组列表的
+            // 由于TAHttpHandler的success信号会触发handleSearchResponse，我们需要区分
+            // 这里直接使用QNetworkAccessManager来避免冲突
+            QNetworkAccessManager* tempManager = new QNetworkAccessManager(this);
+            QNetworkRequest request(url);
+            QNetworkReply* reply = tempManager->get(request);
+            
+            connect(reply, &QNetworkReply::finished, this, [=]() {
+                if (reply->error() == QNetworkReply::NoError) {
+                    QByteArray data = reply->readAll();
+                    QJsonParseError parseError;
+                    QJsonDocument jsonDoc = QJsonDocument::fromJson(data, &parseError);
+                    if (parseError.error == QJsonParseError::NoError && jsonDoc.isObject()) {
+                        QJsonObject obj = jsonDoc.object();
+                        if (obj["data"].isObject()) {
+                            QJsonObject dataObj = obj["data"].toObject();
+                            
+                            // 处理群主群组列表
+                            if (dataObj["owner_groups"].isArray()) {
+                                QJsonArray ownerGroups = dataObj["owner_groups"].toArray();
+                                for (int i = 0; i < ownerGroups.size(); i++) {
+                                    QJsonObject group = ownerGroups[i].toObject();
+                                    QString groupId = group["group_id"].toString();
+                                    if (!groupId.isEmpty()) {
+                                        m_joinedGroupIds.insert(groupId);
+                                    }
+                                }
+                            }
+                            
+                            // 处理成员群组列表
+                            if (dataObj["member_groups"].isArray()) {
+                                QJsonArray memberGroups = dataObj["member_groups"].toArray();
+                                for (int i = 0; i < memberGroups.size(); i++) {
+                                    QJsonObject group = memberGroups[i].toObject();
+                                    QString groupId = group["group_id"].toString();
+                                    if (!groupId.isEmpty()) {
+                                        m_joinedGroupIds.insert(groupId);
+                                    }
+                                }
+                            }
+                            
+                            qDebug() << "已加载已加入群组列表，共" << m_joinedGroupIds.size() << "个群组";
+                        }
+                    }
+                } else {
+                    qDebug() << "加载已加入群组列表失败:" << reply->errorString();
+                }
+                reply->deleteLater();
+                tempManager->deleteLater();
+            });
         }
     }
 
@@ -207,10 +289,139 @@ private slots:
         m_listLayout->addStretch(); // 重新添加stretch
     }
 
+private slots:
+    void onJoinGroupClicked(const QString& groupId, const QString& groupName)
+    {
+        // 获取当前用户信息
+        UserInfo userInfo = CommonInfo::GetData();
+        QString userId = userInfo.teacher_unique_id; // 使用strUserId作为用户ID
+        QString userName = userInfo.strName;
+        
+        if (userId.isEmpty() || userName.isEmpty()) {
+            QMessageBox::warning(this, "错误", "用户信息不完整，无法加入群组！");
+            return;
+        }
+        
+        // 弹出输入框让用户输入加入理由
+        bool ok;
+        QString reason = QInputDialog::getText(this, "申请加入群组", 
+            QString("请输入加入群组 \"%1\" 的理由：").arg(groupName),
+            QLineEdit::Normal, "", &ok);
+        
+        if (!ok || reason.isEmpty()) {
+            return; // 用户取消或未输入理由
+        }
+        
+        // 创建一个结构体来保存回调需要的数据
+        struct JoinGroupCallbackData {
+            SearchDialog* dlg;
+            QString groupId;
+            QString groupName;
+            QString userId;
+            QString userName;
+            QString reason;
+        };
+        
+        JoinGroupCallbackData* callbackData = new JoinGroupCallbackData;
+        callbackData->dlg = this;
+        callbackData->groupId = groupId;
+        callbackData->groupName = groupName;
+        callbackData->userId = userId;
+        callbackData->userName = userName;
+        callbackData->reason = reason;
+        
+        // 先调用腾讯SDK的申请加入群组接口
+        QByteArray groupIdBytes = groupId.toUtf8();
+        QByteArray reasonBytes = reason.toUtf8();
+        
+        int ret = TIMGroupJoin(groupIdBytes.constData(), reasonBytes.constData(),
+            [](int32_t code, const char* desc, const char* json_params, const void* user_data) {
+                JoinGroupCallbackData* data = (JoinGroupCallbackData*)user_data;
+                SearchDialog* dlg = data->dlg;
+                
+                if (code == TIM_SUCC) {
+                    qDebug() << "腾讯SDK申请加入群组成功:" << data->groupId;
+                    
+                    // 腾讯SDK成功，现在调用自己的服务器接口
+                    dlg->sendJoinGroupRequestToServer(data->groupId, data->userId, data->userName, data->reason);
+                    
+                    // 显示成功消息
+                    QMessageBox::information(dlg, "申请成功", 
+                        QString("已成功申请加入群组 \"%1\"！\n等待管理员审核。").arg(data->groupName));
+                } else {
+                    QString errorDesc = QString::fromUtf8(desc ? desc : "未知错误");
+                    QString errorMsg = QString("申请加入群组失败\n错误码: %1\n错误描述: %2").arg(code).arg(errorDesc);
+                    qDebug() << errorMsg;
+                    QMessageBox::critical(dlg, "申请失败", errorMsg);
+                }
+                
+                // 释放回调数据
+                delete data;
+            }, callbackData);
+        
+        if (ret != TIM_SUCC) {
+            QString errorMsg = QString("调用TIMGroupJoin接口失败，错误码: %1").arg(ret);
+            qDebug() << errorMsg;
+            QMessageBox::critical(this, "错误", errorMsg);
+            delete callbackData;
+        }
+    }
+    
+    void sendJoinGroupRequestToServer(const QString& groupId, const QString& userId, 
+                                     const QString& userName, const QString& reason)
+    {
+        // 构造发送到服务器的JSON数据
+        QJsonObject requestData;
+        requestData["group_id"] = groupId;
+        requestData["user_id"] = userId;
+        requestData["user_name"] = userName;
+        requestData["reason"] = reason;
+        
+        // 转换为JSON字符串
+        QJsonDocument doc(requestData);
+        QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+        
+        // 发送POST请求到服务器
+        QString url = "http://47.100.126.194:5000/groups/join";
+        
+        // 使用QNetworkAccessManager发送POST请求
+        QNetworkAccessManager* manager = new QNetworkAccessManager(this);
+        QNetworkRequest networkRequest;
+        networkRequest.setUrl(QUrl(url));
+        networkRequest.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        
+        QNetworkReply* reply = manager->post(networkRequest, jsonData);
+        
+        connect(reply, &QNetworkReply::finished, this, [=]() {
+            if (reply->error() == QNetworkReply::NoError) {
+                QByteArray response = reply->readAll();
+                qDebug() << "服务器响应:" << QString::fromUtf8(response);
+                
+                // 解析响应
+                QJsonParseError parseError;
+                QJsonDocument jsonDoc = QJsonDocument::fromJson(response, &parseError);
+                if (parseError.error == QJsonParseError::NoError && jsonDoc.isObject()) {
+                    QJsonObject obj = jsonDoc.object();
+                    if (obj["code"].toInt() == 200) {
+                        qDebug() << "加入群组请求已发送到服务器";
+                    } else {
+                        QString message = obj["message"].toString();
+                        qDebug() << "服务器返回错误:" << message;
+                    }
+                }
+            } else {
+                qDebug() << "发送加入群组请求到服务器失败:" << reply->errorString();
+            }
+            
+            reply->deleteLater();
+            manager->deleteLater();
+        });
+    }
+
 private:
     void addListItem(QVBoxLayout* parent, const QString& iconPath,
         const QString& name, const QString& memberCount,
-        const QString& tag, const QString& desc, const QString& groupId = "")
+        const QString& tag, const QString& desc, const QString& groupId = "", bool isMember = false)
     {
         QHBoxLayout* itemLayout = new QHBoxLayout;
         QLabel* avatar = new QLabel;
@@ -225,16 +436,26 @@ private:
         infoLayout->addWidget(lblName);
         infoLayout->addWidget(lblDesc);
 
-        QPushButton* btnJoin = new QPushButton("加入");
+        QPushButton* btnJoin = new QPushButton(isMember ? "已加入" : "加入");
+        
+        // 根据是否已加入设置按钮样式和状态
+        if (isMember) {
+            // 已加入：灰化按钮，禁用
+            btnJoin->setEnabled(false);
+            btnJoin->setStyleSheet("background-color: gray; color: white; padding: 4px 8px;");
+        } else {
+            // 未加入：可点击
+            btnJoin->setEnabled(true);
         btnJoin->setStyleSheet("background-color: lightblue; padding: 4px 8px;");
+            
+            // 连接加入按钮点击事件
+            connect(btnJoin, &QPushButton::clicked, this, [=]() {
+                onJoinGroupClicked(groupId, name);
+            });
+        }
+        
         btnJoin->setProperty("group_id", groupId);
         btnJoin->setProperty("group_name", name);
-
-        // 连接加入按钮点击事件
-        connect(btnJoin, &QPushButton::clicked, this, [=]() {
-            qDebug() << "加入群组:" << groupId << name;
-            // TODO: 实现加入群组的逻辑
-        });
 
         itemLayout->addWidget(avatar);
         itemLayout->addLayout(infoLayout);
@@ -254,4 +475,6 @@ private:
     QScrollArea* m_scrollArea = nullptr;
     QWidget* m_listContainer = nullptr;
     QVBoxLayout* m_listLayout = nullptr;
+    QString m_currentUserId; // 当前用户ID
+    QSet<QString> m_joinedGroupIds; // 已加入的群组ID集合
 };
