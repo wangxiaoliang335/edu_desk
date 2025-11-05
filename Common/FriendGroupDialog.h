@@ -93,6 +93,85 @@ public:
                 QJsonDocument jsonDoc = QJsonDocument::fromJson(responseString.toUtf8());
                 if (jsonDoc.isObject()) {
                     QJsonObject obj = jsonDoc.object();
+                    
+                    // 处理群组信息（/groups/by-teacher 接口返回）
+                    if (obj["data"].isObject()) {
+                        QJsonObject dataObj = obj["data"].toObject();
+                        
+                        // 处理群主群组列表（owner_groups）
+                        if (dataObj["owner_groups"].isArray()) {
+                            // 只在第一次添加标题
+                            if (gAdminLayout && gAdminLayout->count() == 0) {
+                                gAdminLayout->addLayout(makeRowBtn("管理", "1", "orange", "black"));
+                            }
+                            
+                            QJsonArray ownerGroupsArray = dataObj["owner_groups"].toArray();
+                            for (int i = 0; i < ownerGroupsArray.size(); i++) {
+                                QJsonObject groupObj = ownerGroupsArray[i].toObject();
+                                QString groupId = groupObj["group_id"].toString();
+                                QString groupName = groupObj["group_name"].toString();
+                                
+                                // 处理群组头像（如果有）
+                                QString avatarPath = "";
+                                QString faceUrl = groupObj["face_url"].toString();
+                                if (!faceUrl.isEmpty()) {
+                                    // 从 face_url 中提取文件名
+                                    QString fileName = faceUrl.section('/', -1);
+                                    QString saveDir = QCoreApplication::applicationDirPath() + "/group_images/" + groupId;
+                                    QDir().mkpath(saveDir);
+                                    avatarPath = saveDir + "/" + fileName;
+                                }
+                                
+                                // 如果没有头像，使用默认路径或空字符串
+                                if (avatarPath.isEmpty()) {
+                                    avatarPath = ""; // 或者设置一个默认头像路径
+                                }
+                                
+                                // 添加到管理布局（群主群组）
+                                if (gAdminLayout) {
+                                    gAdminLayout->addLayout(makePairBtn(avatarPath, groupName, "white", "red", groupId, true));
+                                }
+                            }
+                        }
+                        
+                        // 处理成员群组列表（member_groups）
+                        if (dataObj["member_groups"].isArray()) {
+                            // 只在第一次添加标题
+                            if (gJoinLayout && gJoinLayout->count() == 0) {
+                                gJoinLayout->addLayout(makeRowBtn("加入", "3", "orange", "black"));
+                            }
+                            
+                            QJsonArray memberGroupsArray = dataObj["member_groups"].toArray();
+                            for (int i = 0; i < memberGroupsArray.size(); i++) {
+                                QJsonObject groupObj = memberGroupsArray[i].toObject();
+                                QString groupId = groupObj["group_id"].toString();
+                                QString groupName = groupObj["group_name"].toString();
+                                
+                                // 处理群组头像（如果有）
+                                QString avatarPath = "";
+                                QString faceUrl = groupObj["face_url"].toString();
+                                if (!faceUrl.isEmpty()) {
+                                    // 从 face_url 中提取文件名
+                                    QString fileName = faceUrl.section('/', -1);
+                                    QString saveDir = QCoreApplication::applicationDirPath() + "/group_images/" + groupId;
+                                    QDir().mkpath(saveDir);
+                                    avatarPath = saveDir + "/" + fileName;
+                                }
+                                
+                                // 如果没有头像，使用默认路径或空字符串
+                                if (avatarPath.isEmpty()) {
+                                    avatarPath = ""; // 或者设置一个默认头像路径
+                                }
+                                
+                                // 添加到加入布局（非群主群组）
+                                if (gJoinLayout) {
+                                    gJoinLayout->addLayout(makePairBtn(avatarPath, groupName, "white", "red", groupId, false));
+                                }
+                            }
+                        }
+                    }
+                    
+                    // 处理好友信息（原有逻辑）
                     if (obj["friends"].isArray())
                     {
                         QJsonArray friendsArray = obj.value("friends").toArray();
@@ -502,6 +581,12 @@ public:
 
     void InitData()
     {
+        if (addGroupWidget)
+        {
+            addGroupWidget->InitData();
+        }
+
+        GetGroupJoinedList();
         if (m_httpHandler)
         {
             UserInfo userInfo = CommonInfo::GetData();
@@ -510,22 +595,12 @@ public:
             url += userInfo.strIdNumber;
             m_httpHandler->get(url);
 
-            url = "http://47.100.126.194:5000/groups?";
-            url += "group_admin_id=";
-            url += userInfo.teacher_unique_id;
-            m_httpHandler->get(url);
-
-            url = "http://47.100.126.194:5000/member/groups?";
-            url += "unique_member_id=";
-            url += userInfo.teacher_unique_id;
-            m_httpHandler->get(url);
+            // 调用获取群组信息的接口
+            QString groupUrl = "http://47.100.126.194:5000/groups/by-teacher?";
+            groupUrl += "teacher_unique_id=";
+            groupUrl += userInfo.teacher_unique_id;
+            m_httpHandler->get(groupUrl);
         }
-        if (addGroupWidget)
-        {
-            addGroupWidget->InitData();
-        }
-
-        GetGroupJoinedList();
     }
 
     void GetGroupJoinedList() { // 已加入群列表

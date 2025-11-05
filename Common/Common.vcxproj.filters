@@ -367,11 +367,6 @@
     </QtRcc>
   </ItemGroup>
   <ItemGroup>
-    <QtUic Include="DialogButtonBottom.ui">
-      <Filter>Header Files</Filter>
-    </QtUic>
-  </ItemGroup>
-  <ItemGroup>
     <None Include="zlib\zlib.cmake">
       <Filter>zlib</Filter>
     </None>

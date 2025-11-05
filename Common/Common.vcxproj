@@ -223,9 +223,6 @@
     <QtRcc Include="Resource.qrc" />
   </ItemGroup>
   <ItemGroup>
-    <QtUic Include="DialogButtonBottom.ui" />
-  </ItemGroup>
-  <ItemGroup>
     <None Include="zlib\zlib.cmake" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

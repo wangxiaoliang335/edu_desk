@@ -463,7 +463,7 @@ private:
 			QString teacher_unique_id = checked->property("teacher_unique_id").toString();
             QString grade = classChecked->property("grade").toString();
             QString class_taught = classChecked->property("class_taught").toString();
-            QString name = checked->property("name").toString();
+            QString teacher_name = checked->property("name").toString();
 			qDebug() << "当前选中教师 Phone:" << phone << "  唯一编号:" << teacher_unique_id;
 
             QString class_unique_id = classChecked->property("teacher_unique_id").toString();
@@ -489,7 +489,7 @@ private:
             QString groupName = grade + class_taught + "的班级群";
             
             // 使用腾讯SDK创建群组
-            createGroupWithTIMSDK(groupName, teacher_unique_id, class_unique_id, userinfo);
+            createGroupWithTIMSDK(groupName, teacher_unique_id, teacher_name, class_unique_id, userinfo);
             
             // 创建群（保留原有的WebSocket消息逻辑）
             QJsonObject createGroupMsg;
@@ -507,7 +507,7 @@ private:
             QJsonArray members;
             QJsonObject m1;
             m1["unique_member_id"] = teacher_unique_id;
-            m1["member_name"] = name;
+            m1["member_name"] = teacher_name;
             m1["group_role"] = 0;
             members.append(m1);
             createGroupMsg["members"] = members;
@@ -584,7 +584,7 @@ private:
     }
     
     // 使用腾讯SDK创建群组
-    void createGroupWithTIMSDK(const QString& groupName, const QString& teacherUniqueId, 
+    void createGroupWithTIMSDK(const QString& groupName, const QString& teacherUniqueId, const QString teacher_name,
                                const QString& classUniqueId, const UserInfo& userinfo) {
         // 构造创建群组的参数（使用Qt JSON）
         QJsonObject createGroupParam;
@@ -704,6 +704,7 @@ private:
             ClassTeacherDialog* dlg;
             QString groupName;
             QString teacherUniqueId;
+            QString teacher_name;
             QString classUniqueId;
             UserInfo userInfo;
         };
@@ -713,6 +714,7 @@ private:
         callbackData->groupName = groupName;
         callbackData->teacherUniqueId = teacherUniqueId;
         callbackData->classUniqueId = classUniqueId;
+        callbackData->teacher_name = teacher_name;
         callbackData->userInfo = userinfo;
         
         // 直接使用QByteArray的constData()，确保是UTF-8编码的C字符串
@@ -751,7 +753,7 @@ private:
                         
                         // 上传群组信息到服务器
                         if (data->dlg && data->dlg->m_httpHandler) {
-                            data->dlg->uploadGroupInfoToServer(groupId, data->groupName, data->teacherUniqueId, 
+                            data->dlg->uploadGroupInfoToServer(groupId, data->groupName, data->teacher_name, data->teacherUniqueId,
                                                                data->classUniqueId, data->userInfo);
                         }
                         
@@ -773,7 +775,7 @@ private:
     }
     
     // 上传群组信息到服务器
-    void uploadGroupInfoToServer(const QString& groupId, const QString& groupName, 
+    void uploadGroupInfoToServer(const QString& groupId, const QString& groupName, const QString teacher_name,
                                  const QString& teacherUniqueId, const QString& classUniqueId,
                                  const UserInfo& userinfo) {
         // 构造群组信息对象（参考FriendGroupDialog的格式）
@@ -832,6 +834,7 @@ private:
         memberInfo["self_role"] = (int)kTIMMemberRole_Owner; // 群主角色，确保是整数类型
         memberInfo["self_msg_flag"] = 0; // 自己的消息接收选项
         memberInfo["unread_num"] = 0; // 未读消息数，刚创建时为0
+        memberInfo["user_name"] = userinfo.strName;
         
         groupObj["member_info"] = memberInfo;
         
@@ -868,6 +871,7 @@ private:
             invitedMemberInfo["self_role"] = (int)kTIMMemberRole_Normal; // 普通成员角色
             invitedMemberInfo["self_msg_flag"] = 0;
             invitedMemberInfo["unread_num"] = 0;
+            invitedMemberInfo["user_name"] = teacher_name;
             
             invitedGroupObj["member_info"] = invitedMemberInfo;
             

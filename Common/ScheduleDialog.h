@@ -21,6 +21,8 @@
 #include <QPoint>
 #include <QBrush>
 #include <QColor>
+#include <QUrl>
+#include <QUrlQuery>
 #include <Windows.h>
 #include "CustomListDialog.h"
 #include "ClickableLabel.h"
@@ -145,55 +147,47 @@ public:
 					else if (obj["data"].isObject())
 					{
 						QJsonObject dataObj = obj["data"].toObject();
+						
+						// 处理 /groups/members 接口返回的成员列表
 						if (dataObj["members"].isArray())
 						{
-							//gAdminLayout->addLayout(makeRowBtn("管理", "1", "orange", "black"));
+							m_groupMemberInfo.clear(); // 清空之前的成员列表
+							
 							QJsonArray memberArray = dataObj["members"].toArray();
 							for (int i = 0; i < memberArray.size(); i++)
 							{
-								QJsonObject memberObj = memberArray.at(i).toObject();
-								QString groupmember_id = memberObj.value("id").toString();
-								QString groupmember_name = memberObj.value("name").toString();
-								QString groupmember_role = memberObj.value("role").toString();
-
+								QJsonObject memberObj = memberArray[i].toObject();
+								
+								// 获取成员信息
+								QString member_id = memberObj["user_id"].toString();
+								QString member_name = memberObj["user_name"].toString();
+								if (member_name.isEmpty()) {
+									member_name = memberObj["member_name"].toString();
+								}
+								
+								// 判断角色：self_role 400 表示群主（Owner），1 表示普通成员（Normal）
+								int self_role = memberObj["self_role"].toInt();
+								QString member_role = "成员"; // 默认是成员
+								if (self_role == 400) { // kTIMMemberRole_Owner
+									member_role = "群主";
+								}
+								
+								// 如果接口返回的是 role 字符串，也可以直接使用
+								if (memberObj.contains("role")) {
+									QString roleStr = memberObj["role"].toString();
+									if (roleStr == "owner" || roleStr == "Owner" || roleStr == "群主") {
+										member_role = "群主";
+									}
+								}
+								
 								GroupMemberInfo groupMemInfo;
-								groupMemInfo.member_id = groupmember_id;
-								groupMemInfo.member_name = groupmember_name;
-								groupMemInfo.member_role = groupmember_role;
+								groupMemInfo.member_id = member_id;
+								groupMemInfo.member_name = member_name;
+								groupMemInfo.member_role = member_role;
 								m_groupMemberInfo.append(groupMemInfo);
-
-								//// 假设 avatarBase64 是 QString 类型，从 HTTP 返回的 JSON 中拿到
-								//QByteArray imageData = QByteArray::fromBase64(avatar_base64.toUtf8());
-								//QPixmap pixmap;
-								//pixmap.loadFromData(imageData);
-
-								//// 从最后一个 "/" 之后开始截取
-								//QString fileName = headImage_path.section('/', -1);  // "320506197910016493_.png"
-								//QString saveDir = QCoreApplication::applicationDirPath() + "/group_images/" + unique_group_id; // 保存图片目录
-								//QDir().mkpath(saveDir);
-								//QString filePath = saveDir + "/" + fileName;
-
-								//if (avatar_base64.isEmpty()) {
-								//	qWarning() << "No avatar data for" << filePath;
-								//	//continue;
-								//}
-								////m_userInfo.strHeadImagePath = filePath;
-
-								//// Base64 解码成图片二进制数据
-								//QByteArray imageData = QByteArray::fromBase64(avatar_base64.toUtf8());
-
-								//// 写入文件（覆盖旧的）
-								//QFile file(filePath);
-								//if (!file.open(QIODevice::WriteOnly)) {
-								//	qWarning() << "Cannot open file for writing:" << filePath;
-								//	//continue;
-								//}
-								//file.write(imageData);
-								//file.close();
-
-								//gAdminLayout->addLayout(makePairBtn(filePath, groupObj.value("nickname").toString(), "white", "red", unique_group_id, true));
 							}
 
+							// 设置到 m_groupInfo 对话框的好友列表
 							if (m_groupInfo)
 							{
 								m_groupInfo->InitGroupMember(m_groupMemberInfo);
@@ -802,10 +796,16 @@ public:
 			m_groupInfo->initData(groupName, unique_group_id);
 		}
 
-		QString url = "http://47.100.126.194:5000/group/members?";
-		url += "unique_group_id=";
-		url += unique_group_id;
-		m_httpHandler->get(url);
+		// 调用获取群组成员列表的接口
+		if (m_httpHandler && !unique_group_id.isEmpty())
+		{
+			// 使用QUrl和QUrlQuery来正确编码URL参数（特别是#等特殊字符）
+			QUrl url("http://47.100.126.194:5000/groups/members");
+			QUrlQuery query;
+			query.addQueryItem("group_id", unique_group_id);
+			url.setQuery(query);
+			m_httpHandler->get(url.toString());
+		}
 	}
 
 	void start() {
