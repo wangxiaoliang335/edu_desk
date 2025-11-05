@@ -21,6 +21,7 @@
 #include "GroupNotifyDialog.h"
 #include "TAHttpHandler.h"
 #include "ImSDK/includes/TIMCloud.h"
+#include "CommonInfo.h"
 #include <QMap>
 
 class RowItem : public QFrame {
@@ -530,13 +531,14 @@ public:
     void GetGroupJoinedList() { // 已加入群列表
     // 获取群列表
         int ret = TIMGroupGetJoinedGroupList([](int32_t code, const char* desc, const char* json_param, const void* user_data) {
+            FriendGroupDialog* ths = (FriendGroupDialog*)user_data;
+            
             if (strlen(json_param) == 0) {
                 return;
             }
             QJsonParseError parseError;
             QJsonDocument jsonDoc = QJsonDocument::fromJson(QByteArray(json_param), &parseError);
             if (parseError.error != QJsonParseError::NoError) {
-                //CIMWnd::GetInst().Logf("GetJoinedGroup", kTIMLog_Error, "Json Parse Joined Group List!Failure! error:%s", parseError.errorString().toStdString().c_str());
                 qDebug() << "JSON Parse Error:" << parseError.errorString();
                 return;
             }
@@ -545,29 +547,101 @@ public:
                 return;
             }
             QJsonArray json_group_list = jsonDoc.array();
-            //CIMWnd::GetInst().Logf("GroupList", kTIMLog_Info, json_param);
+            
+            // 获取当前用户信息
+            UserInfo userInfo = CommonInfo::GetData();
+            QString userId = userInfo.teacher_unique_id; // 或使用其他用户ID字段
+            
+            // 构造上传到服务器的JSON数据
+            QJsonArray groupsArray;
+            
             for (int i = 0; i < json_group_list.size(); i++) {
                 QJsonObject group = json_group_list[i].toObject();
-
-                // 获取已加入群的基本信息
-                std::string groupid = group[kTIMGroupBaseInfoGroupId].toString().toStdString();
-                std::string groupName = group[kTIMGroupBaseInfoGroupName].toString().toStdString();
-                bool flag = false;
-                //for (std::size_t i = 0; i < CIMWnd::GetInst().groups.size(); i++) {
-                //    if (CIMWnd::GetInst().groups[i].id == groupid) {
-                //        CIMWnd::GetInst().groups[i].name = groupName;
-                //        flag = true;
-                //        break;
-                //    }
-                //}
-                //if (false == flag) { // 获取群组成员
-                //    GroupInfo group;
-                //    group.id = groupid;
-                //    group.name = groupName;
-                //    CIMWnd::GetInst().groups.push_back(group);
-                //}
+                
+                // 获取群组基础信息
+                QString groupid = group[kTIMGroupBaseInfoGroupId].toString();
+                QString groupName = group[kTIMGroupBaseInfoGroupName].toString();
+                
+                // 构造群组信息对象
+                QJsonObject groupObj;
+                
+                // 群组基础信息
+                groupObj["group_id"] = groupid;
+                groupObj["group_name"] = groupName.isEmpty() ? group[kTIMGroupDetialInfoGroupName].toString() : groupName;
+                groupObj["group_type"] = group[kTIMGroupBaseInfoGroupType].toInt();
+                groupObj["face_url"] = group[kTIMGroupBaseInfoFaceUrl].toString();
+                groupObj["info_seq"] = group[kTIMGroupBaseInfoInfoSeq].toInt();
+                groupObj["latest_seq"] = group[kTIMGroupBaseInfoLastestSeq].toInt();
+                groupObj["is_shutup_all"] = group[kTIMGroupBaseInfoIsShutupAll].toBool();
+                
+                // 群组详细信息
+                groupObj["detail_group_id"] = group[kTIMGroupDetialInfoGroupId].toString();
+                groupObj["detail_group_name"] = group[kTIMGroupDetialInfoGroupName].toString();
+                groupObj["detail_group_type"] = group[kTIMGroupDetialInfoGroupType].toInt();
+                groupObj["detail_face_url"] = group[kTIMGroupDetialInfoFaceUrl].toString();
+                groupObj["create_time"] = group[kTIMGroupDetialInfoCreateTime].toInt();
+                groupObj["detail_info_seq"] = group[kTIMGroupDetialInfoInfoSeq].toInt();
+                groupObj["introduction"] = group[kTIMGroupDetialInfoIntroduction].toString();
+                groupObj["notification"] = group[kTIMGroupDetialInfoNotification].toString();
+                groupObj["last_info_time"] = group[kTIMGroupDetialInfoLastInfoTime].toInt();
+                groupObj["last_msg_time"] = group[kTIMGroupDetialInfoLastMsgTime].toInt();
+                groupObj["next_msg_seq"] = group[kTIMGroupDetialInfoNextMsgSeq].toInt();
+                groupObj["member_num"] = group[kTIMGroupDetialInfoMemberNum].toInt();
+                groupObj["max_member_num"] = group[kTIMGroupDetialInfoMaxMemberNum].toInt();
+                groupObj["online_member_num"] = group[kTIMGroupDetialInfoOnlineMemberNum].toInt();
+                //groupObj["owner_identifier"] = group[kTIMGroupDetialInfoOwnerIdentifier].toString();
+                groupObj["add_option"] = group[kTIMGroupDetialInfoAddOption].toInt();
+                groupObj["visible"] = group[kTIMGroupDetialInfoVisible].toInt();
+                groupObj["searchable"] = group[kTIMGroupDetialInfoSearchable].toInt();
+                groupObj["detail_is_shutup_all"] = group[kTIMGroupDetialInfoIsShutupAll].toBool();
+                
+                // 读取自定义字段（班级ID和学校ID）
+                QJsonArray customInfo = group[kTIMGroupDetialInfoCustomInfo].toArray();
+                for (int j = 0; j < customInfo.size(); j++) {
+                    QJsonObject customItem = customInfo[j].toObject();
+                    QString key = customItem[kTIMGroupInfoCustemStringInfoKey].toString();
+                    QString value = customItem[kTIMGroupInfoCustemStringInfoValue].toString();
+                    // 兼容旧的带下划线格式和新的无下划线格式
+                    if (key == "class_id" || key == "classid") {
+                        groupObj["classid"] = value;
+                    } else if (key == "school_id" || key == "schoolid") {
+                        groupObj["schoolid"] = value;
+                    }
+                }
+                
+                // 用户在该群组中的信息
+                QJsonObject selfInfo = group[kTIMGroupBaseInfoSelfInfo].toObject();
+                QJsonObject memberInfo;
+                memberInfo["user_id"] = userId;
+                memberInfo["readed_seq"] = group[kTIMGroupBaseInfoReadedSeq].toInt();
+                memberInfo["msg_flag"] = group[kTIMGroupBaseInfoMsgFlag].toInt();
+                memberInfo["join_time"] = selfInfo[kTIMGroupSelfInfoJoinTime].toInt();
+                memberInfo["self_role"] = selfInfo[kTIMGroupSelfInfoRole].toInt();
+                memberInfo["self_msg_flag"] = selfInfo[kTIMGroupSelfInfoMsgFlag].toInt();
+                memberInfo["unread_num"] = selfInfo[kTIMGroupSelfInfoUnReadNum].toInt();
+                
+                groupObj["member_info"] = memberInfo;
+                
+                groupsArray.append(groupObj);
             }
-            //CIMWnd::GetInst().GetGroupInfoList();
+            
+            // 构造最终的上传JSON
+            QJsonObject uploadData;
+            uploadData["user_id"] = userId;
+            uploadData["groups"] = groupsArray;
+            
+            // 转换为JSON字符串
+            QJsonDocument uploadDoc(uploadData);
+            QByteArray jsonData = uploadDoc.toJson(QJsonDocument::Compact);
+            
+            // 上传到服务器
+            if (ths->m_httpHandler) {
+                QString url = "http://47.100.126.194:5000/groups/sync";
+                ths->m_httpHandler->post(url, jsonData);
+                qDebug() << "上传群组信息到服务器，共" << groupsArray.size() << "个群组";
+            }
+            
+            //CIMWnd::GetInst().Logf("GroupList", kTIMLog_Info, json_param);
             }, this);
         //Logf("Init", kTIMLog_Info, "TIMGroupGetJoinedGroupList ret %d", ret);
         qDebug() << "TIMGroupGetJoinedGroupList ret:" << ret;

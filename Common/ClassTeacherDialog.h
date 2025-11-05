@@ -15,6 +15,13 @@
 #include "TAHttpHandler.h"
 #include "CommonInfo.h"
 #include "TaQTWebSocket.h"
+#include "ImSDK/includes/TIMCloud.h"
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QJsonParseError>
+#include <QMessageBox>
+#include <QDateTime>
 
 class ClassTeacherDialog : public QDialog
 {
@@ -479,13 +486,18 @@ private:
 			//}
 
             UserInfo userinfo = CommonInfo::GetData();
-            // 创建群
+            QString groupName = grade + class_taught + "的班级群";
+            
+            // 使用腾讯SDK创建群组
+            createGroupWithTIMSDK(groupName, teacher_unique_id, class_unique_id, userinfo);
+            
+            // 创建群（保留原有的WebSocket消息逻辑）
             QJsonObject createGroupMsg;
             createGroupMsg["type"] = "3";
             createGroupMsg["permission_level"] = 1;
             createGroupMsg["headImage_path"] = "/images/group.png";
             createGroupMsg["group_type"] = 1;
-            createGroupMsg["nickname"] = grade + class_taught + "的班级群";
+            createGroupMsg["nickname"] = groupName;
             createGroupMsg["owner_id"] = userinfo.teacher_unique_id;
             createGroupMsg["owner_name"] = userinfo.strName;
             createGroupMsg["school_id"] = userinfo.schoolId;
@@ -506,10 +518,10 @@ private:
             QString prettyString = QString::fromUtf8(doc.toJson(QJsonDocument::Indented));
             qDebug() << "美化格式:" << prettyString;
 
-            if (!prettyString.isEmpty()) {
-            	//socket->sendTextMessage(QString("to:%1:%2").arg(teacher_unique_id, prettyString));
-                TaQTWebSocket::sendPrivateMessage(QString("to:%1:%2").arg(teacher_unique_id, prettyString));
-            }
+            //if (!prettyString.isEmpty()) {
+            //	//socket->sendTextMessage(QString("to:%1:%2").arg(teacher_unique_id, prettyString));
+            //    TaQTWebSocket::sendPrivateMessage(QString("to:%1:%2").arg(teacher_unique_id, prettyString));
+            //}
         }
 
         //void sendPrivateMessage() {
@@ -547,6 +559,337 @@ private:
             //    socket->sendTextMessage("ping");
             //}
         }
+
+private:
+    // 将TIMResult错误码转换为错误描述字符串
+    static QString getTIMResultErrorString(int errorCode) {
+        switch (errorCode) {
+            case TIM_SUCC:
+                return "成功";
+            case TIM_ERR_SDKUNINIT:
+                return "ImSDK未初始化";
+            case TIM_ERR_NOTLOGIN:
+                return "用户未登录";
+            case TIM_ERR_JSON:
+                return "错误的Json格式或Json Key - 请检查JSON参数格式是否正确，特别是字段名称和数据类型";
+            case TIM_ERR_PARAM:
+                return "参数错误 - 请检查传入的参数是否有效";
+            case TIM_ERR_CONV:
+                return "无效的会话";
+            case TIM_ERR_GROUP:
+                return "无效的群组";
+            default:
+                return QString("未知错误码: %1").arg(errorCode);
+        }
+    }
+    
+    // 使用腾讯SDK创建群组
+    void createGroupWithTIMSDK(const QString& groupName, const QString& teacherUniqueId, 
+                               const QString& classUniqueId, const UserInfo& userinfo) {
+        // 构造创建群组的参数（使用Qt JSON）
+        QJsonObject createGroupParam;
+        
+        // 必填字段：群组名称
+        if (groupName.isEmpty()) {
+            QMessageBox::critical(this, "错误", "群组名称不能为空！");
+            return;
+        }
+        createGroupParam[kTIMCreateGroupParamGroupName] = groupName;
+        
+        // 可选：指定群组ID，如果不指定，服务器会自动生成
+        // createGroupParam[kTIMCreateGroupParamGroupId] = "class_" + classUniqueId;
+        
+        // 群组类型（可选，默认为Public）
+        createGroupParam[kTIMCreateGroupParamGroupType] = (int)kTIMGroup_Public; // 确保是整数类型
+        
+        // 加群选项（可选，默认为Any）
+        createGroupParam[kTIMCreateGroupParamAddOption] = (int)kTIMGroupAddOpt_Any; // 确保是整数类型
+        
+        // 最大成员数（可选）
+        createGroupParam[kTIMCreateGroupParamMaxMemberCount] = 2000;
+        
+        // 群组简介（可选，但如果不为空则添加）
+        QString introduction = QString("班级群：%1").arg(groupName);
+        if (!introduction.isEmpty()) {
+            createGroupParam[kTIMCreateGroupParamIntroduction] = introduction;
+        }
+        
+        // 群组公告（可选，但如果不为空则添加）
+        QString notification = QString("欢迎加入%1").arg(groupName);
+        if (!notification.isEmpty()) {
+            createGroupParam[kTIMCreateGroupParamNotification] = notification;
+        }
+        
+        // 注意：腾讯IM SDK的自定义字段需要在控制台预先配置才能使用
+        // 而且注释显示 kTIMCreateGroupParamCustomInfo 是"只读(选填)"，可能在创建时不能设置
+        // 暂时不添加自定义字段，班级ID和学校ID会在上传到服务器时保存
+        
+        // TODO: 如果需要在腾讯IM SDK中保存自定义字段，需要：
+        // 1. 在腾讯云控制台配置自定义字段（classid, schoolid）
+        // 2. 然后取消下面的注释
+        /*
+        QJsonArray customInfoArray;
+        if (!classUniqueId.isEmpty()) {
+            QJsonObject customClassId;
+            customClassId[kTIMGroupInfoCustemStringInfoKey] = "classid";
+            customClassId[kTIMGroupInfoCustemStringInfoValue] = classUniqueId;
+            customInfoArray.append(customClassId);
+        }
+        if (!userinfo.schoolId.isEmpty()) {
+            QJsonObject customSchoolId;
+            customSchoolId[kTIMGroupInfoCustemStringInfoKey] = "schoolid";
+            customSchoolId[kTIMGroupInfoCustemStringInfoValue] = userinfo.schoolId;
+            customInfoArray.append(customSchoolId);
+        }
+        if (!customInfoArray.isEmpty()) {
+            createGroupParam[kTIMCreateGroupParamCustomInfo] = customInfoArray;
+        }
+        */
+        
+        // 构造初始成员数组
+        // 注意：创建者会自动成为群主，不需要在成员数组中指定
+        // 只添加被邀请的其他成员
+        QJsonArray memberArray;
+        if (teacherUniqueId != userinfo.teacher_unique_id && !teacherUniqueId.isEmpty()) {
+            QJsonObject invitedMemberInfo;
+            invitedMemberInfo[kTIMGroupMemberInfoIdentifier] = teacherUniqueId; // 被邀请的教师ID
+            // 注意：在创建群组时，初始成员的角色应该设置为 1 (Normal)
+            // 0 = None, 1 = Normal, 2 = Admin, 3 = Owner
+            // 创建者自动成为Owner，所以这里只能设置为Normal
+            invitedMemberInfo[kTIMGroupMemberInfoMemberRole] = (int)kTIMMemberRole_Normal; // 设置为普通成员，确保是整数类型
+            memberArray.append(invitedMemberInfo);
+        }
+        
+        // 只有当成员数组不为空时才添加
+        if (!memberArray.isEmpty()) {
+            createGroupParam[kTIMCreateGroupParamGroupMemberArray] = memberArray;
+        }
+        
+        // 转换为JSON字符串
+        QJsonDocument doc(createGroupParam);
+        
+        // 验证JSON是否有效
+        if (doc.isNull() || doc.isEmpty()) {
+            QMessageBox::critical(this, "错误", "生成的JSON参数为空或无效！");
+            return;
+        }
+        
+        // 使用Compact格式生成JSON，确保UTF-8编码
+        QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+        
+        // 验证JSON字符串是否有效
+        QJsonParseError parseError;
+        QJsonDocument verifyDoc = QJsonDocument::fromJson(jsonData, &parseError);
+        if (parseError.error != QJsonParseError::NoError) {
+            QString errorMsg = QString("JSON格式验证失败: %1\n位置: %2").arg(parseError.errorString()).arg(parseError.offset);
+            qDebug() << errorMsg;
+            QMessageBox::critical(this, "JSON格式错误", errorMsg);
+            return;
+        }
+        
+        // 输出格式化的JSON用于调试
+        QByteArray formattedJson = doc.toJson(QJsonDocument::Indented);
+        qDebug() << "========== 创建群组参数（格式化）==========";
+        qDebug() << QString::fromUtf8(formattedJson);
+        qDebug() << "========== 创建群组参数（紧凑格式，UTF-8字节）==========";
+        qDebug() << jsonData;
+        qDebug() << "========== 创建群组参数（字符串形式）==========";
+        qDebug() << QString::fromUtf8(jsonData);
+        qDebug() << "========== JSON字节数组长度 ==========";
+        qDebug() << jsonData.length();
+        
+        // 调用腾讯SDK创建群组接口
+        // 创建一个结构体来保存回调需要的数据
+        struct CreateGroupCallbackData {
+            ClassTeacherDialog* dlg;
+            QString groupName;
+            QString teacherUniqueId;
+            QString classUniqueId;
+            UserInfo userInfo;
+        };
+        
+        CreateGroupCallbackData* callbackData = new CreateGroupCallbackData;
+        callbackData->dlg = this;
+        callbackData->groupName = groupName;
+        callbackData->teacherUniqueId = teacherUniqueId;
+        callbackData->classUniqueId = classUniqueId;
+        callbackData->userInfo = userinfo;
+        
+        // 直接使用QByteArray的constData()，确保是UTF-8编码的C字符串
+        const char* jsonCStr = jsonData.constData();
+        
+        qDebug() << "========== 传递给TIMGroupCreate的JSON字符串（UTF-8）==========";
+        qDebug() << jsonCStr;
+        qDebug() << "========== 传递给TIMGroupCreate的JSON字符串（QString）==========";
+        qDebug() << QString::fromUtf8(jsonCStr);
+        
+        int ret = TIMGroupCreate(jsonCStr, 
+            [](int32_t code, const char* desc, const char* json_params, const void* user_data) {
+                CreateGroupCallbackData* data = (CreateGroupCallbackData*)user_data;
+                if (!data || !data->dlg) {
+                    delete data;
+                    return;
+                }
+                
+                if (ERR_SUCC != code) {
+                    // 创建群组失败
+                    QString errorMsg = QString("创建群组失败: %1 (错误码: %2)").arg(QString::fromUtf8(desc)).arg(code);
+                    qDebug() << errorMsg;
+                    QMessageBox::critical(data->dlg, "创建群组失败", errorMsg);
+                    delete data;
+                    return;
+                }
+                
+                // 创建群组成功，解析返回的群组ID
+                if (json_params) {
+                    QJsonParseError parseError;
+                    QJsonDocument respDoc = QJsonDocument::fromJson(QString::fromUtf8(json_params).toUtf8(), &parseError);
+                    if (parseError.error == QJsonParseError::NoError && respDoc.isObject()) {
+                        QJsonObject resultObj = respDoc.object();
+                        QString groupId = resultObj[kTIMCreateGroupResultGroupId].toString();
+                        qDebug() << "创建群组成功，群组ID:" << groupId;
+                        
+                        // 上传群组信息到服务器
+                        if (data->dlg && data->dlg->m_httpHandler) {
+                            data->dlg->uploadGroupInfoToServer(groupId, data->groupName, data->teacherUniqueId, 
+                                                               data->classUniqueId, data->userInfo);
+                        }
+                        
+                        QMessageBox::information(data->dlg, "创建群组成功", 
+                            QString("群组创建成功！\n群组ID: %1").arg(groupId));
+                    }
+                }
+                
+                delete data;
+            }, callbackData);
+        
+        if (TIM_SUCC != ret) {
+            QString errorDesc = getTIMResultErrorString(ret);
+            QString errorMsg = QString("调用TIMGroupCreate接口失败\n错误码: %1\n错误描述: %2").arg(ret).arg(errorDesc);
+            qDebug() << errorMsg;
+            qDebug() << "请检查上述JSON参数格式是否正确";
+            QMessageBox::critical(this, "创建群组失败", errorMsg);
+        }
+    }
+    
+    // 上传群组信息到服务器
+    void uploadGroupInfoToServer(const QString& groupId, const QString& groupName, 
+                                 const QString& teacherUniqueId, const QString& classUniqueId,
+                                 const UserInfo& userinfo) {
+        // 构造群组信息对象（参考FriendGroupDialog的格式）
+        QJsonObject groupObj;
+        
+        // 群组基础信息
+        groupObj["group_id"] = groupId;
+        groupObj["group_name"] = groupName;
+        groupObj["group_type"] = kTIMGroup_Public; // 公开群
+        groupObj["face_url"] = ""; // 创建时未设置头像
+        groupObj["info_seq"] = 0;
+        groupObj["latest_seq"] = 0;
+        groupObj["is_shutup_all"] = false;
+        
+        // 群组详细信息
+        groupObj["detail_group_id"] = groupId;
+        groupObj["detail_group_name"] = groupName;
+        groupObj["detail_group_type"] = kTIMGroup_Public;
+        groupObj["detail_face_url"] = "";
+        groupObj["create_time"] = QDateTime::currentDateTime().toSecsSinceEpoch(); // 当前时间戳
+        groupObj["detail_info_seq"] = 0;
+        groupObj["introduction"] = QString("班级群：%1").arg(groupName);
+        groupObj["notification"] = QString("欢迎加入%1").arg(groupName);
+        groupObj["last_info_time"] = QDateTime::currentDateTime().toSecsSinceEpoch();
+        groupObj["last_msg_time"] = 0;
+        groupObj["next_msg_seq"] = 0;
+        // 计算成员数量：群主 + 被邀请的成员
+        int memberCount = 1; // 群主
+        if (teacherUniqueId != userinfo.teacher_unique_id && !teacherUniqueId.isEmpty()) {
+            memberCount = 2; // 群主 + 被邀请的教师
+        }
+        groupObj["member_num"] = memberCount;
+        groupObj["max_member_num"] = 2000;
+        groupObj["online_member_num"] = 0;
+        groupObj["owner_identifier"] = userinfo.teacher_unique_id; // 群主ID
+        groupObj["add_option"] = kTIMGroupAddOpt_Any;
+        groupObj["visible"] = 2; // 默认可见
+        groupObj["searchable"] = 2; // 默认可搜索
+        groupObj["detail_is_shutup_all"] = false;
+        // 添加自定义字段：班级ID和学校ID（这些字段会从腾讯IM SDK的自定义字段中读取）
+        groupObj["classid"] = classUniqueId;
+        groupObj["schoolid"] = userinfo.schoolId;
+        
+        // 注意：腾讯IM SDK的自定义字段存储在 group_detial_info_custom_info 中
+        // 可以通过以下方式访问：
+        // QJsonArray customInfo = group[kTIMGroupDetialInfoCustomInfo].toArray();
+        // 遍历 customInfo 数组，查找 key 为 "class_id" 和 "school_id" 的项
+        
+        // 用户在该群组中的信息（当前登录用户的信息，即群主信息）
+        // 注意：member_info 是当前用户（上传者）在该群组中的信息
+        QJsonObject memberInfo;
+        memberInfo["user_id"] = userinfo.teacher_unique_id; // 当前用户的ID（群主）
+        memberInfo["readed_seq"] = 0; // 刚创建群组，已读消息序列号为0
+        memberInfo["msg_flag"] = 0; // 消息接收选项，默认为0
+        memberInfo["join_time"] = QDateTime::currentDateTime().toSecsSinceEpoch(); // 加入时间（创建时间）
+        memberInfo["self_role"] = (int)kTIMMemberRole_Owner; // 群主角色，确保是整数类型
+        memberInfo["self_msg_flag"] = 0; // 自己的消息接收选项
+        memberInfo["unread_num"] = 0; // 未读消息数，刚创建时为0
+        
+        groupObj["member_info"] = memberInfo;
+        
+        // 构造groups数组（当前用户/群主）
+        QJsonArray groupsArray;
+        groupsArray.append(groupObj);
+        
+        // 构造最终的上传JSON（当前用户/群主）
+        QJsonObject uploadData;
+        uploadData["user_id"] = userinfo.teacher_unique_id; // 当前用户的ID（群主）
+        uploadData["groups"] = groupsArray;
+        
+        // 转换为JSON字符串
+        QJsonDocument uploadDoc(uploadData);
+        QByteArray jsonData = uploadDoc.toJson(QJsonDocument::Compact);
+        
+        // 上传当前用户（群主）的群组信息到服务器
+        QString url = "http://47.100.126.194:5000/groups/sync";
+        m_httpHandler->post(url, jsonData);
+        qDebug() << "上传群主群组信息到服务器，群组ID:" << groupId;
+        qDebug() << "上传JSON:" << QString::fromUtf8(jsonData);
+        
+        // 如果有被邀请的成员，也需要为被邀请的成员创建群组信息并上传
+        if (teacherUniqueId != userinfo.teacher_unique_id && !teacherUniqueId.isEmpty()) {
+            // 为被邀请的成员创建群组信息对象
+            QJsonObject invitedGroupObj = groupObj; // 复制群组基本信息
+            
+            // 创建被邀请成员的 member_info
+            QJsonObject invitedMemberInfo;
+            invitedMemberInfo["user_id"] = teacherUniqueId; // 被邀请成员的ID
+            invitedMemberInfo["readed_seq"] = 0;
+            invitedMemberInfo["msg_flag"] = 0;
+            invitedMemberInfo["join_time"] = QDateTime::currentDateTime().toSecsSinceEpoch(); // 加入时间（创建时间）
+            invitedMemberInfo["self_role"] = (int)kTIMMemberRole_Normal; // 普通成员角色
+            invitedMemberInfo["self_msg_flag"] = 0;
+            invitedMemberInfo["unread_num"] = 0;
+            
+            invitedGroupObj["member_info"] = invitedMemberInfo;
+            
+            // 构造被邀请成员的groups数组
+            QJsonArray invitedGroupsArray;
+            invitedGroupsArray.append(invitedGroupObj);
+            
+            // 构造被邀请成员的上传JSON
+            QJsonObject invitedUploadData;
+            invitedUploadData["user_id"] = teacherUniqueId; // 被邀请成员的ID
+            invitedUploadData["groups"] = invitedGroupsArray;
+            
+            // 转换为JSON字符串
+            QJsonDocument invitedUploadDoc(invitedUploadData);
+            QByteArray invitedJsonData = invitedUploadDoc.toJson(QJsonDocument::Compact);
+            
+            // 上传被邀请成员的群组信息到服务器
+            m_httpHandler->post(url, invitedJsonData);
+            qDebug() << "上传被邀请成员群组信息到服务器，群组ID:" << groupId << "，成员ID:" << teacherUniqueId;
+            qDebug() << "上传JSON:" << QString::fromUtf8(invitedJsonData);
+        }
+    }
 
 private:
     ScheduleDialog* m_scheduleDlg = NULL;
