@@ -42,6 +42,9 @@ public:
                 QJsonDocument jsonDoc = QJsonDocument::fromJson(responseString.toUtf8());
                 if (jsonDoc.isObject()) {
                     QJsonObject obj = jsonDoc.object();
+
+                    clearLayout(teacherListLayout);   //获取到好友之后，先清空一下列表在添加
+
                     if (obj["friends"].isArray())
                     {
                         QJsonArray friendsArray = obj.value("friends").toArray();

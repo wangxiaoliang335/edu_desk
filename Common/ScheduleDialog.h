@@ -324,6 +324,20 @@ public:
 				}
 			}
 		});
+		
+		// 连接群聊解散信号，当群聊被解散时关闭窗口并刷新父窗口
+		connect(m_groupInfo, &QGroupInfo::groupDismissed, this, [this](const QString& groupId) {
+			// 如果解散的是当前群组
+			if (groupId == m_unique_group_id) {
+				qDebug() << "群聊被解散，关闭群聊窗口，群组ID:" << groupId;
+				
+				// 发出信号通知父窗口刷新群列表
+				emit this->groupLeft(groupId);
+				
+				// 关闭当前窗口
+				this->close();
+			}
+		});
 
 		// 顶部：头像 + 班级信息 + 功能按钮 + 更多
 		QHBoxLayout* topLayout = new QHBoxLayout;

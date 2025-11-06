@@ -2,6 +2,14 @@
 #include "ClassTeacherDialog.h"
 #include "ClassTeacherDelDialog.h"
 
+// 解散群聊回调数据结构
+struct DismissGroupCallbackData {
+    QGroupInfo* dlg;
+    QString groupId;
+    QString userId;
+    QString userName;
+};
+
 QGroupInfo::QGroupInfo(QWidget* parent)
 	: QDialog(parent)
 {
@@ -157,6 +165,8 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId)
     
     // 连接退出群聊按钮的点击事件
     connect(m_btnExit, &QPushButton::clicked, this, &QGroupInfo::onExitGroupClicked);
+    // 连接解散群聊按钮的点击事件
+    connect(m_btnDismiss, &QPushButton::clicked, this, &QGroupInfo::onDismissGroupClicked);
 }
 
 void QGroupInfo::InitGroupMember(QVector<GroupMemberInfo> groupMemberInfo)
@@ -443,6 +453,138 @@ void QGroupInfo::sendExitGroupRequestToServer(const QString& groupId, const QStr
             qDebug() << "发送退出群聊请求到服务器失败:" << reply->errorString();
             QMessageBox::warning(this, "退出失败", 
                 QString("网络错误: %1").arg(reply->errorString()));
+        }
+        
+        reply->deleteLater();
+        manager->deleteLater();
+    });
+}
+
+void QGroupInfo::onDismissGroupClicked()
+{
+    if (m_groupNumberId.isEmpty()) {
+        QMessageBox::warning(this, "错误", "群组ID为空，无法解散群聊");
+        return;
+    }
+    
+    // 确认对话框
+    int ret = QMessageBox::question(this, "确认解散", 
+        QString("确定要解散群聊 \"%1\" 吗？\n解散后所有成员将被移除，此操作不可恢复！").arg(m_groupName),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::No);
+    
+    if (ret != QMessageBox::Yes) {
+        return;
+    }
+    
+    // 获取当前用户信息
+    UserInfo userInfo = CommonInfo::GetData();
+    QString userId = userInfo.teacher_unique_id;
+    QString userName = userInfo.strName;
+    
+    qDebug() << "开始解散群聊，群组ID:" << m_groupNumberId << "，用户ID:" << userId;
+    
+    // 构造回调数据结构
+    DismissGroupCallbackData* callbackData = new DismissGroupCallbackData;
+    callbackData->dlg = this;
+    callbackData->groupId = m_groupNumberId;
+    callbackData->userId = userId;
+    callbackData->userName = userName;
+    
+    // 调用腾讯SDK的解散群聊接口
+    QByteArray groupIdBytes = m_groupNumberId.toUtf8();
+    int retCode = TIMGroupDelete(groupIdBytes.constData(),
+        [](int32_t code, const char* desc, const char* json_params, const void* user_data) {
+            DismissGroupCallbackData* data = (DismissGroupCallbackData*)user_data;
+            QGroupInfo* dlg = data->dlg;
+            
+            if (code == TIM_SUCC) {
+                qDebug() << "腾讯SDK解散群聊成功:" << data->groupId;
+                
+                // 腾讯SDK成功，现在调用自己的服务器接口（传递回调数据以便后续释放）
+                dlg->sendDismissGroupRequestToServer(data->groupId, data->userId, data);
+            } else {
+                QString errorDesc = QString::fromUtf8(desc ? desc : "未知错误");
+                QString errorMsg = QString("解散群聊失败\n错误码: %1\n错误描述: %2").arg(code).arg(errorDesc);
+                qDebug() << errorMsg;
+                QMessageBox::critical(dlg, "解散失败", errorMsg);
+                
+                // 释放回调数据
+                delete data;
+            }
+        }, callbackData);
+    
+    if (retCode != TIM_SUCC) {
+        QString errorMsg = QString("调用TIMGroupDelete接口失败，错误码: %1").arg(retCode);
+        qDebug() << errorMsg;
+        QMessageBox::critical(this, "错误", errorMsg);
+        delete callbackData;
+    }
+}
+
+void QGroupInfo::sendDismissGroupRequestToServer(const QString& groupId, const QString& userId, void* callbackData)
+{
+    // 构造发送到服务器的JSON数据
+    QJsonObject requestData;
+    requestData["group_id"] = groupId;
+    requestData["user_id"] = userId;
+    
+    // 转换为JSON字符串
+    QJsonDocument doc(requestData);
+    QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+    
+    // 发送POST请求到服务器（假设解散接口为 /groups/dismiss，如果不同请修改）
+    QString url = "http://47.100.126.194:5000/groups/dismiss";
+    
+    // 使用QNetworkAccessManager发送POST请求
+    QNetworkAccessManager* manager = new QNetworkAccessManager(this);
+    QNetworkRequest networkRequest;
+    networkRequest.setUrl(QUrl(url));
+    networkRequest.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    
+    QNetworkReply* reply = manager->post(networkRequest, jsonData);
+    
+    connect(reply, &QNetworkReply::finished, this, [=]() {
+        if (reply->error() == QNetworkReply::NoError) {
+            QByteArray response = reply->readAll();
+            qDebug() << "服务器响应:" << QString::fromUtf8(response);
+            
+            // 解析响应
+            QJsonParseError parseError;
+            QJsonDocument jsonDoc = QJsonDocument::fromJson(response, &parseError);
+            if (parseError.error == QJsonParseError::NoError && jsonDoc.isObject()) {
+                QJsonObject obj = jsonDoc.object();
+                if (obj["code"].toInt() == 200) {
+                    qDebug() << "解散群聊请求已发送到服务器";
+                    
+                    // 服务器响应成功，发出群聊解散信号，通知父窗口刷新群列表
+                    emit this->groupDismissed(groupId);
+                    
+                    // 显示成功消息
+                    QMessageBox::information(this, "解散成功", 
+                        QString("已成功解散群聊 \"%1\"！").arg(m_groupName));
+                    
+                    // 关闭对话框
+                    this->accept();
+                } else {
+                    QString message = obj["message"].toString();
+                    qDebug() << "服务器返回错误:" << message;
+                    QMessageBox::warning(this, "解散失败", 
+                        QString("服务器返回错误: %1").arg(message));
+                }
+            } else {
+                qDebug() << "解析服务器响应失败";
+                QMessageBox::warning(this, "解散失败", "解析服务器响应失败");
+            }
+        } else {
+            qDebug() << "发送解散群聊请求到服务器失败:" << reply->errorString();
+            QMessageBox::warning(this, "解散失败", 
+                QString("网络错误: %1").arg(reply->errorString()));
+        }
+        
+        // 释放回调数据（如果提供了）
+        if (callbackData) {
+            delete (DismissGroupCallbackData*)callbackData;
         }
         
         reply->deleteLater();

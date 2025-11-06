@@ -73,11 +73,14 @@ public:
     
 signals:
     void memberLeftGroup(const QString& groupId, const QString& leftUserId); // 成员退出群聊信号，传递退出的用户ID
+    void groupDismissed(const QString& groupId); // 群聊解散信号，通知父窗口刷新群列表
 
 private:
     void updateButtonStates(); // 根据当前用户角色更新按钮状态
     void onExitGroupClicked(); // 退出群聊按钮点击处理
+    void onDismissGroupClicked(); // 解散群聊按钮点击处理
     void sendExitGroupRequestToServer(const QString& groupId, const QString& userId, const QString& leftUserId); // 发送退出群聊请求到服务器
+    void sendDismissGroupRequestToServer(const QString& groupId, const QString& userId, void* callbackData = nullptr); // 发送解散群聊请求到服务器
     QString m_groupName;
     QString m_groupNumberId;
     QVector<GroupMemberInfo> m_groupMemberInfo;
