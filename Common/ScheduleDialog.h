@@ -23,6 +23,7 @@
 #include <QColor>
 #include <QUrl>
 #include <QUrlQuery>
+#include <QGroupInfo.h>
 #include <Windows.h>
 #include "CustomListDialog.h"
 #include "ClickableLabel.h"

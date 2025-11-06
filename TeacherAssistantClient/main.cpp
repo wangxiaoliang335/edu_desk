@@ -7,6 +7,8 @@
 #include <QMutexLocker>
 #include <QDir>
 #include <QTime>
+#include <QSslSocket>
+#include <QSslConfiguration>
 #include "common.h"
 #include "TACApp.h"
 #ifdef _WIN32
@@ -124,10 +126,10 @@ void debugOutputHandler(QtMsgType type, const QMessageLogContext& context, const
 	}
 
 #ifdef Q_OS_WIN
-	// ·¢ËÍµ½ Visual Studio µÄÊä³ö´°¿Ú
+	// ï¿½ï¿½ï¿½Íµï¿½ Visual Studio ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	OutputDebugStringA((QString(prefix) + QString(localMsg)).toLocal8Bit().data());
 #else
-	// Mac/LinuxÖ±½Ó·¢µ½±ê×¼Êä³ö£¬Ò²»á±» Qt Creator ²¶»ñ
+	// Mac/LinuxÖ±ï¿½Ó·ï¿½ï¿½ï¿½ï¿½ï¿½×¼ï¿½ï¿½ï¿½ï¿½ï¿½Ò²ï¿½á±» Qt Creator ï¿½ï¿½ï¿½ï¿½
 	fprintf(stderr, "%s%s
 		", prefix, localMsg.constData());
 #endif
@@ -137,7 +139,7 @@ int main(int argc, char* argv[])
 {
 	QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
 
-	// °²×°Êä³öÖØ¶¨Ïò
+	// ï¿½ï¿½×°ï¿½ï¿½ï¿½ï¿½Ø¶ï¿½ï¿½ï¿½
 	qInstallMessageHandler(debugOutputHandler);
 
 #ifdef _WIN32
