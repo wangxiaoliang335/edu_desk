@@ -33,6 +33,12 @@
 #include <QProgressBar>
 #include <QMap>
 #include <QPair>
+#include <QAudioInput>
+#include <QAudioFormat>
+#include <QAudioDeviceInfo>
+#include <QIODevice>
+#include <QMediaPlayer>
+#include <QMediaContent>
 #include "TaQTWebSocket.h"
 #include "CommonInfo.h"
 #include "ImSDK/includes/TIMCloud.h"
@@ -106,12 +112,56 @@ public:
         inputLayout->addWidget(btnFile);
         inputLayout->addWidget(btnVoice);
         mainLayout->addLayout(inputLayout);
+        
+        // 录音波形显示区域（初始隐藏）
+        m_voiceWaveformWidget = new QWidget(this);
+        m_voiceWaveformWidget->setFixedHeight(40);
+        m_voiceWaveformWidget->setStyleSheet("background-color: #f0f0f0; border: 1px solid #ddd; border-radius: 4px;");
+        m_voiceWaveformWidget->hide();
+        
+        QHBoxLayout* waveformLayout = new QHBoxLayout(m_voiceWaveformWidget);
+        waveformLayout->setContentsMargins(10, 5, 10, 5);
+        waveformLayout->setSpacing(10);
+        
+        QLabel* waveformLabel = new QLabel("🎤 录音中...", m_voiceWaveformWidget);
+        waveformLabel->setStyleSheet("color: #666; font-size: 12px;");
+        waveformLayout->addWidget(waveformLabel);
+        
+        // 波形显示进度条
+        m_voiceWaveformBar = new QProgressBar(m_voiceWaveformWidget);
+        m_voiceWaveformBar->setFixedHeight(20);
+        m_voiceWaveformBar->setRange(0, 100);
+        m_voiceWaveformBar->setValue(0);
+        m_voiceWaveformBar->setTextVisible(false);
+        m_voiceWaveformBar->setStyleSheet(
+            "QProgressBar {"
+            "    border: 1px solid #ccc;"
+            "    border-radius: 10px;"
+            "    background-color: #e0e0e0;"
+            "}"
+            "QProgressBar::chunk {"
+            "    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
+            "        stop:0 #4CAF50, stop:0.5 #8BC34A, stop:1 #FFC107);"
+            "    border-radius: 10px;"
+            "}"
+        );
+        waveformLayout->addWidget(m_voiceWaveformBar, 1);
+        
+        QLabel* durationLabel = new QLabel("0s", m_voiceWaveformWidget);
+        durationLabel->setStyleSheet("color: #666; font-size: 12px; min-width: 30px;");
+        durationLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        m_voiceDurationLabel = durationLabel;
+        waveformLayout->addWidget(durationLabel);
+        
+        mainLayout->addWidget(m_voiceWaveformWidget);
 
         connect(btnSend, &QPushButton::clicked, this, &ChatDialog::sendMyTextMessage);
         connect(m_lineEdit, &QLineEdit::returnPressed, this, &ChatDialog::sendMyTextMessage);
         connect(btnImage, &QPushButton::clicked, this, &ChatDialog::sendMyImageMessage);
         connect(btnFile, &QPushButton::clicked, this, &ChatDialog::sendMyFileMessage);
-        connect(btnVoice, &QPushButton::clicked, this, &ChatDialog::sendMyVoiceMessage);
+        // 按住按钮开始录音，松开按钮停止录音并发送
+        connect(btnVoice, &QPushButton::pressed, this, &ChatDialog::startVoiceRecording);
+        connect(btnVoice, &QPushButton::released, this, &ChatDialog::stopVoiceRecordingAndSend);
 
         // 测试对话
         addTextMessage(":/res/img/home.png", "班主任", "李老师，今天家里有事，我们调一下课吧", false);
@@ -268,19 +318,308 @@ private slots:
         }
     }
 
-    void sendMyVoiceMessage()
+    // 开始实时录音
+    void startVoiceRecording()
     {
         if (m_unique_group_id.isEmpty()) {
             QMessageBox::warning(this, "错误", "群组ID未设置，无法发送语音！");
             return;
         }
         
+        // 检查是否正在录音
+        if (m_audioInput && m_audioInput->state() == QAudio::ActiveState) {
+            qDebug() << "已经在录音中";
+            return;
+        }
+        
+        // 创建录音文件路径
+        QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+        QDir dir;
+        if (!dir.exists(cacheDir)) {
+            dir.mkpath(cacheDir);
+        }
+        
+        m_currentVoiceFile = QDir(cacheDir).filePath(QString("voice_%1.wav").arg(QDateTime::currentMSecsSinceEpoch()));
+        m_voiceRecordFile = new QFile(m_currentVoiceFile, this);
+        
+        if (!m_voiceRecordFile->open(QIODevice::WriteOnly)) {
+            QMessageBox::warning(this, "错误", "无法创建录音文件！");
+            delete m_voiceRecordFile;
+            m_voiceRecordFile = nullptr;
+            return;
+        }
+        
+        // 设置音频格式
+        QAudioFormat format;
+        format.setSampleRate(16000); // 16kHz采样率
+        format.setChannelCount(1);   // 单声道
+        format.setSampleSize(16);    // 16位
+        format.setCodec("audio/pcm");
+        format.setByteOrder(QAudioFormat::LittleEndian);
+        format.setSampleType(QAudioFormat::SignedInt); // 使用有符号整数，便于计算振幅
+        
+        // 检查格式是否支持
+        QAudioDeviceInfo info = QAudioDeviceInfo::defaultInputDevice();
+        if (!info.isFormatSupported(format)) {
+            qDebug() << "默认格式不支持，使用最接近的格式";
+            format = info.nearestFormat(format);
+        }
+        
+        // 保存音频格式，用于写入WAV头
+        m_audioFormat = format;
+        
+        // 写入WAV文件头（文件大小位置先留空，录音结束后更新）
+        writeWavHeader(m_voiceRecordFile, format, 0);
+        
+        // 记录PCM数据开始位置
+        m_pcmDataStartPos = m_voiceRecordFile->pos();
+        
+        // 创建音频输入
+        if (m_audioInput) {
+            delete m_audioInput;
+        }
+        m_audioInput = new QAudioInput(format, this);
+        
+        // 创建用于读取音频数据的设备（用于计算音量）
+        m_audioInputDevice = m_audioInput->start();
+        if (!m_audioInputDevice) {
+            QMessageBox::warning(this, "错误", "无法启动音频输入设备！");
+            delete m_audioInput;
+            m_audioInput = nullptr;
+            if (m_voiceRecordFile) {
+                m_voiceRecordFile->close();
+                delete m_voiceRecordFile;
+                m_voiceRecordFile = nullptr;
+            }
+            return;
+        }
+        
+        // 同时将数据写入文件
+        connect(m_audioInputDevice, &QIODevice::readyRead, this, [this]() {
+            if (m_voiceRecordFile && m_audioInputDevice) {
+                QByteArray data = m_audioInputDevice->readAll();
+                if (m_voiceRecordFile->isOpen()) {
+                    m_voiceRecordFile->write(data);
+                    
+                    // 计算音频音量（振幅）
+                    updateVoiceWaveform(data);
+                }
+            }
+        });
+        
+        // 记录开始时间
+        m_voiceRecordStartTime = QDateTime::currentMSecsSinceEpoch();
+        
+        // 显示波形显示区域
+        if (m_voiceWaveformWidget) {
+            m_voiceWaveformWidget->show();
+        }
+        if (m_voiceWaveformBar) {
+            m_voiceWaveformBar->setValue(0);
+        }
+        if (m_voiceDurationLabel) {
+            m_voiceDurationLabel->setText("0s");
+        }
+        
+        // 启动定时器更新录音时长
+        if (!m_voiceWaveformTimer) {
+            m_voiceWaveformTimer = new QTimer(this);
+            connect(m_voiceWaveformTimer, &QTimer::timeout, this, &ChatDialog::updateVoiceRecordingDuration);
+        }
+        m_voiceWaveformTimer->start(100); // 每100ms更新一次
+        
+        qDebug() << "开始录音，保存到:" << m_currentVoiceFile;
+        qDebug() << "音频格式:" << format.sampleRate() << "Hz," << format.channelCount() << "声道," << format.sampleSize() << "bit";
+    }
+    
+    // 更新音频波形显示
+    void updateVoiceWaveform(const QByteArray& audioData)
+    {
+        if (!m_voiceWaveformBar || audioData.isEmpty()) {
+            return;
+        }
+        
+        // 计算音频数据的平均振幅
+        // 对于16位PCM，每个样本是2字节
+        int sampleCount = audioData.size() / 2;
+        if (sampleCount == 0) return;
+        
+        qint64 sum = 0;
+        const qint16* samples = reinterpret_cast<const qint16*>(audioData.constData());
+        
+        for (int i = 0; i < sampleCount; i++) {
+            qint16 sample = qAbs(samples[i]);
+            sum += sample;
+        }
+        
+        // 计算平均振幅并转换为0-100的百分比
+        qint64 averageAmplitude = sum / sampleCount;
+        int volume = (int)((averageAmplitude * 100) / 32768); // 16位音频最大值为32768
+        
+        // 限制在0-100范围内
+        volume = qBound(0, volume, 100);
+        
+        // 更新进度条
+        m_voiceWaveformBar->setValue(volume);
+    }
+    
+    // 更新录音时长显示
+    void updateVoiceRecordingDuration()
+    {
+        if (!m_voiceDurationLabel || m_voiceRecordStartTime == 0) {
+            return;
+        }
+        
+        qint64 duration = QDateTime::currentMSecsSinceEpoch() - m_voiceRecordStartTime;
+        int seconds = (int)(duration / 1000);
+        m_voiceDurationLabel->setText(QString("%1s").arg(seconds));
+    }
+    
+    // 写入WAV文件头
+    void writeWavHeader(QFile* file, const QAudioFormat& format, quint32 dataSize)
+    {
+        if (!file || !file->isOpen()) {
+            return;
+        }
+        
+        // WAV文件头结构
+        // RIFF头（12字节）
+        file->write("RIFF", 4); // ChunkID
+        quint32 fileSize = 36 + dataSize; // ChunkSize = 4 + (8 + SubChunk1Size) + (8 + SubChunk2Size)
+        file->write(reinterpret_cast<const char*>(&fileSize), 4);
+        file->write("WAVE", 4); // Format
+        
+        // fmt子块（24字节）
+        file->write("fmt ", 4); // Subchunk1ID
+        quint32 subchunk1Size = 16; // PCM格式为16
+        file->write(reinterpret_cast<const char*>(&subchunk1Size), 4);
+        quint16 audioFormat = 1; // PCM = 1
+        file->write(reinterpret_cast<const char*>(&audioFormat), 2);
+        quint16 numChannels = format.channelCount();
+        file->write(reinterpret_cast<const char*>(&numChannels), 2);
+        quint32 sampleRate = format.sampleRate();
+        file->write(reinterpret_cast<const char*>(&sampleRate), 4);
+        quint32 byteRate = sampleRate * numChannels * (format.sampleSize() / 8);
+        file->write(reinterpret_cast<const char*>(&byteRate), 4);
+        quint16 blockAlign = numChannels * (format.sampleSize() / 8);
+        file->write(reinterpret_cast<const char*>(&blockAlign), 2);
+        quint16 bitsPerSample = format.sampleSize();
+        file->write(reinterpret_cast<const char*>(&bitsPerSample), 2);
+        
+        // data子块（8字节 + 数据）
+        file->write("data", 4); // Subchunk2ID
+        file->write(reinterpret_cast<const char*>(&dataSize), 4); // Subchunk2Size
+    }
+    
+    // 更新WAV文件头（录音结束后更新文件大小）
+    void updateWavHeader(QFile* file, const QAudioFormat& format, quint32 dataSize)
+    {
+        if (!file || !file->isOpen()) {
+            return;
+        }
+        
+        qint64 currentPos = file->pos();
+        
+        // 更新RIFF ChunkSize（位置4，4字节）
+        file->seek(4);
+        quint32 fileSize = 36 + dataSize;
+        file->write(reinterpret_cast<const char*>(&fileSize), 4);
+        
+        // 更新data Subchunk2Size（位置40，4字节）
+        file->seek(40);
+        file->write(reinterpret_cast<const char*>(&dataSize), 4);
+        
+        // 恢复文件位置
+        file->seek(currentPos);
+    }
+    
+    // 停止录音并发送
+    void stopVoiceRecordingAndSend()
+    {
+        if (!m_audioInput || m_audioInput->state() != QAudio::ActiveState) {
+            qDebug() << "当前没有在录音";
+            return;
+        }
+        
+        // 停止定时器
+        if (m_voiceWaveformTimer) {
+            m_voiceWaveformTimer->stop();
+        }
+        
+        // 隐藏波形显示区域
+        if (m_voiceWaveformWidget) {
+            m_voiceWaveformWidget->hide();
+        }
+        if (m_voiceWaveformBar) {
+            m_voiceWaveformBar->setValue(0);
+        }
+        
+        // 断开音频数据读取连接
+        if (m_audioInputDevice) {
+            disconnect(m_audioInputDevice, nullptr, this, nullptr);
+        }
+        
+        // 停止录音
+        if (m_audioInput) {
+            m_audioInput->stop();
+        }
+        
+        // 获取PCM数据大小
+        qint64 pcmDataSize = 0;
+        if (m_voiceRecordFile && m_voiceRecordFile->isOpen()) {
+            pcmDataSize = m_voiceRecordFile->pos() - m_pcmDataStartPos;
+        }
+        
+        // 更新WAV文件头（写入正确的文件大小和数据大小）
+        if (m_voiceRecordFile && m_voiceRecordFile->isOpen() && pcmDataSize > 0) {
+            updateWavHeader(m_voiceRecordFile, m_audioFormat, pcmDataSize);
+        }
+        
+        // 关闭文件
+        if (m_voiceRecordFile) {
+            m_voiceRecordFile->close();
+            delete m_voiceRecordFile;
+            m_voiceRecordFile = nullptr;
+        }
+        
+        // 清理音频输入设备
+        m_audioInputDevice = nullptr;
+        
+        // 计算录音时长
+        qint64 duration = QDateTime::currentMSecsSinceEpoch() - m_voiceRecordStartTime;
+        int durationSeconds = (int)(duration / 1000);
+        
+        qDebug() << "录音结束，时长:" << durationSeconds << "秒，文件:" << m_currentVoiceFile;
+        qDebug() << "PCM数据大小:" << pcmDataSize << "字节";
+        
+        // 检查录音时长（至少0.5秒）
+        if (durationSeconds < 1) {
+            QMessageBox::information(this, "提示", "录音时间太短，请至少录音1秒");
+            // 删除录音文件
+            QFile::remove(m_currentVoiceFile);
+            m_currentVoiceFile.clear();
+            return;
+        }
+        
+        // 检查文件大小
+        QFileInfo fileInfo(m_currentVoiceFile);
+        if (!fileInfo.exists() || fileInfo.size() <= 0) {
+            QMessageBox::warning(this, "错误", "录音文件无效！");
+            QFile::remove(m_currentVoiceFile);
+            m_currentVoiceFile.clear();
+            return;
+        }
+        
         UserInfo userinfo = CommonInfo::GetData();
-        // TODO: 实现语音录制功能
-        // 目前先模拟 8秒语音
-        addVoiceMessage(":/res/img/home.png", userinfo.strName, 8, true);
-        // TODO: 使用腾讯SDK发送语音
-        // sendVoiceMessageViaTIMSDK(voicePath, userinfo, 8);
+        
+        // 先显示语音消息UI（带进度条）
+        QPair<QProgressBar*, QLabel*> progressWidgets = addVoiceMessageWithProgress(":/res/img/home.png", userinfo.strName, durationSeconds, m_currentVoiceFile, true);
+        
+        // 使用腾讯SDK发送语音（传入进度条和状态标签）
+        sendVoiceMessageViaTIMSDK(m_currentVoiceFile, durationSeconds, userinfo, progressWidgets.first, progressWidgets.second);
+        
+        // 清空录音文件路径（发送后不清除，等待发送完成后再处理）
+        // m_currentVoiceFile 会在发送成功的回调中清理
     }
 
 private:
@@ -288,6 +627,20 @@ private:
     QLineEdit* m_lineEdit;
     ChatMessage m_lastMessage;
     bool m_hasLastMessage = false;
+    
+    // 实时录音相关
+    QAudioInput* m_audioInput = nullptr;
+    QFile* m_voiceRecordFile = nullptr;
+    QIODevice* m_audioInputDevice = nullptr; // 用于读取音频数据计算音量
+    QString m_currentVoiceFile;
+    qint64 m_voiceRecordStartTime = 0;
+    QWidget* m_voiceWaveformWidget = nullptr; // 波形显示区域
+    QMediaPlayer* m_voicePlayer = nullptr; // 语音播放器（后台播放）
+    QProgressBar* m_voiceWaveformBar = nullptr; // 波形进度条
+    QLabel* m_voiceDurationLabel = nullptr; // 录音时长标签
+    QTimer* m_voiceWaveformTimer = nullptr; // 波形更新定时器
+    QAudioFormat m_audioFormat; // 保存音频格式，用于写入WAV头
+    qint64 m_pcmDataStartPos = 0; // PCM数据开始位置（WAV头之后）
 
     void addTimeLabel(const QDateTime& time)
     {
@@ -510,30 +863,174 @@ private:
         m_listWidget->scrollToBottom();
     }
 
-    void addVoiceMessage(const QString& avatarPath, const QString& senderName, int seconds, bool isMine)
+    void addVoiceMessage(const QString& avatarPath, const QString& senderName, int seconds, bool isMine, 
+                        const QString& voicePath = QString())
     {
         QDateTime now = QDateTime::currentDateTime();
         if (!m_hasLastMessage || m_lastMessage.time.secsTo(now) > 180) addTimeLabel(now);
         bool hideAvatar = shouldHideAvatar(senderName, isMine, now);
 
-        ClickableLabelEx* lblVoice = new ClickableLabelEx();
+        // 创建语音消息容器
+        QWidget* voiceWidget = new QWidget();
+        QVBoxLayout* voiceLayout = new QVBoxLayout(voiceWidget);
+        voiceLayout->setContentsMargins(5, 5, 5, 5);
+        voiceLayout->setSpacing(5);
+        
+        // 语音标签
+        ClickableLabelEx* lblVoice = new ClickableLabelEx(voiceWidget);
         lblVoice->setText(QString("🎵 语音 %1 s").arg(seconds));
-        lblVoice->setMinimumSize(80 + seconds * 5, 36); // 秒数越多，宽度越长
+        lblVoice->setMinimumSize(80 + seconds * 5, 36);
+        lblVoice->setStyleSheet("background-color: #E3F2FD; border: 1px solid #2196F3; border-radius: 4px; padding: 5px;");
+        
+        // 保存语音文件路径到label的property中，以便播放
+        if (!voicePath.isEmpty()) {
+            lblVoice->setProperty("voicePath", voicePath);
+        }
+        
         connect(lblVoice, &ClickableLabelEx::clicked, this, [=]() {
-            // 这里可以接入真正的语音播放功能
-            qDebug("播放语音 %d 秒", seconds);
-            });
+            QString path = lblVoice->property("voicePath").toString();
+            if (!path.isEmpty()) {
+                playVoiceMessage(path);
+            } else {
+                qDebug() << "语音文件路径为空，无法播放";
+                QMessageBox::information(this, "提示", "语音文件尚未下载完成，请稍后重试");
+            }
+        });
+        voiceLayout->addWidget(lblVoice);
+        
+        // 创建播放进度条（初始隐藏，播放时显示）
+        QProgressBar* playProgressBar = new QProgressBar(voiceWidget);
+        playProgressBar->setRange(0, 100);
+        playProgressBar->setValue(0);
+        playProgressBar->setTextVisible(false); // 不显示文字，只用颜色条
+        playProgressBar->setFixedHeight(4); // 更细的进度条
+        playProgressBar->setStyleSheet("QProgressBar { border: none; border-radius: 2px; background-color: #E3F2FD; } QProgressBar::chunk { background-color: #2196F3; border-radius: 2px; }");
+        playProgressBar->hide(); // 初始隐藏
+        voiceLayout->addWidget(playProgressBar);
+        
+        // 创建播放状态标签（初始隐藏）
+        QLabel* playStatusLabel = new QLabel(voiceWidget);
+        playStatusLabel->setText("播放中...");
+        playStatusLabel->setStyleSheet("color: #2196F3; font-size: 10px;");
+        playStatusLabel->hide(); // 初始隐藏
+        voiceLayout->addWidget(playStatusLabel);
+        
+        // 保存播放进度映射和时长
+        if (!voicePath.isEmpty()) {
+            QString normalizedPath = QDir::toNativeSeparators(voicePath);
+            m_voicePlayProgressMap[normalizedPath] = qMakePair(playProgressBar, playStatusLabel);
+            m_voiceDurationMap[normalizedPath] = seconds; // 保存语音时长
+        }
 
-        QWidget* msgWidget = buildMessageWidget(avatarPath, senderName, lblVoice, isMine, hideAvatar);
+        QWidget* msgWidget = buildMessageWidget(avatarPath, senderName, voiceWidget, isMine, hideAvatar);
 
         QListWidgetItem* item = new QListWidgetItem(m_listWidget);
         item->setSizeHint(msgWidget->sizeHint());
         m_listWidget->addItem(item);
         m_listWidget->setItemWidget(item, msgWidget);
+        
+        // 保存语音路径到item的data中
+        if (!voicePath.isEmpty()) {
+            item->setData(Qt::UserRole + 3, voicePath);
+        }
 
         m_lastMessage = { avatarPath, senderName, QString("[语音] %1秒").arg(seconds), isMine, now };
         m_hasLastMessage = true;
         m_listWidget->scrollToBottom();
+    }
+    
+    // 添加带进度条的语音消息（用于发送和接收）
+    QPair<QProgressBar*, QLabel*> addVoiceMessageWithProgress(const QString& avatarPath, const QString& senderName, 
+                                                              int seconds, const QString& voicePath, bool isMine)
+    {
+        QDateTime now = QDateTime::currentDateTime();
+        if (!m_hasLastMessage || m_lastMessage.time.secsTo(now) > 180) addTimeLabel(now);
+        bool hideAvatar = shouldHideAvatar(senderName, isMine, now);
+
+        // 创建语音消息容器
+        QWidget* voiceWidget = new QWidget();
+        QVBoxLayout* voiceLayout = new QVBoxLayout(voiceWidget);
+        voiceLayout->setContentsMargins(5, 5, 5, 5);
+        voiceLayout->setSpacing(5);
+        
+        // 语音标签
+        ClickableLabelEx* lblVoice = new ClickableLabelEx(voiceWidget);
+        lblVoice->setText(QString("🎵 语音 %1 s").arg(seconds));
+        lblVoice->setMinimumSize(80 + seconds * 5, 36);
+        lblVoice->setStyleSheet("background-color: #E3F2FD; border: 1px solid #2196F3; border-radius: 4px; padding: 5px;");
+        
+        // 保存语音文件路径到label的property中，以便播放
+        if (!voicePath.isEmpty()) {
+            lblVoice->setProperty("voicePath", voicePath);
+        }
+        
+        connect(lblVoice, &ClickableLabelEx::clicked, this, [=]() {
+            QString path = lblVoice->property("voicePath").toString();
+            if (!path.isEmpty()) {
+                playVoiceMessage(path);
+            } else {
+                qDebug() << "语音文件路径为空，无法播放";
+                QMessageBox::information(this, "提示", "语音文件尚未下载完成，请稍后重试");
+            }
+        });
+        voiceLayout->addWidget(lblVoice);
+        
+        // 创建进度条（设置父对象为voiceWidget，确保生命周期）
+        QProgressBar* progressBar = new QProgressBar(voiceWidget);
+        progressBar->setRange(0, 100);
+        progressBar->setValue(0);
+        progressBar->setTextVisible(true);
+        progressBar->setFormat("%p%");
+        progressBar->setFixedHeight(20);
+        voiceLayout->addWidget(progressBar);
+        
+        // 创建状态标签（设置父对象为voiceWidget，确保生命周期）
+        QLabel* statusLabel = new QLabel(voiceWidget);
+        statusLabel->setText(isMine ? "准备发送..." : "准备下载...");
+        statusLabel->setStyleSheet("color: gray; font-size: 10px;");
+        voiceLayout->addWidget(statusLabel);
+        
+        // 创建播放进度条（初始隐藏，播放时显示）
+        QProgressBar* playProgressBar = new QProgressBar(voiceWidget);
+        playProgressBar->setRange(0, 100);
+        playProgressBar->setValue(0);
+        playProgressBar->setTextVisible(false); // 不显示文字，只用颜色条
+        playProgressBar->setFixedHeight(4); // 更细的进度条
+        playProgressBar->setStyleSheet("QProgressBar { border: none; border-radius: 2px; background-color: #E3F2FD; } QProgressBar::chunk { background-color: #2196F3; border-radius: 2px; }");
+        playProgressBar->hide(); // 初始隐藏
+        voiceLayout->addWidget(playProgressBar);
+        
+        // 创建播放状态标签（初始隐藏）
+        QLabel* playStatusLabel = new QLabel(voiceWidget);
+        playStatusLabel->setText("播放中...");
+        playStatusLabel->setStyleSheet("color: #2196F3; font-size: 10px;");
+        playStatusLabel->hide(); // 初始隐藏
+        voiceLayout->addWidget(playStatusLabel);
+        
+        // 保存播放进度映射和时长
+        if (!voicePath.isEmpty()) {
+            QString normalizedPath = QDir::toNativeSeparators(voicePath);
+            m_voicePlayProgressMap[normalizedPath] = qMakePair(playProgressBar, playStatusLabel);
+            m_voiceDurationMap[normalizedPath] = seconds; // 保存语音时长
+        }
+
+        QWidget* msgWidget = buildMessageWidget(avatarPath, senderName, voiceWidget, isMine, hideAvatar);
+
+        QListWidgetItem* item = new QListWidgetItem(m_listWidget);
+        item->setSizeHint(msgWidget->sizeHint());
+        m_listWidget->addItem(item);
+        m_listWidget->setItemWidget(item, msgWidget);
+        
+        // 保存语音路径到item的data中
+        if (!voicePath.isEmpty()) {
+            item->setData(Qt::UserRole + 3, voicePath);
+        }
+
+        m_lastMessage = { avatarPath, senderName, QString("[语音] %1秒").arg(seconds), isMine, now };
+        m_hasLastMessage = true;
+        m_listWidget->scrollToBottom();
+        
+        return qMakePair(progressBar, statusLabel);
     }
 
     // 使用腾讯SDK发送文本消息
@@ -589,6 +1086,209 @@ private:
         if (ret != TIM_SUCC) {
             qDebug() << "调用TIMMsgSendNewMsg失败，错误码:" << ret;
             QMessageBox::critical(this, "错误", QString("调用发送接口失败，错误码: %1").arg(ret));
+            delete callbackData;
+        }
+    }
+    
+    // 使用腾讯SDK发送语音消息
+    void sendVoiceMessageViaTIMSDK(const QString& voicePath, int durationSeconds, const UserInfo& userinfo,
+                                   QProgressBar* progressBar = nullptr, QLabel* statusLabel = nullptr)
+    {
+        if (m_unique_group_id.isEmpty() || voicePath.isEmpty()) return;
+        
+        // 检查文件是否存在
+        QFileInfo fileInfo(voicePath);
+        if (!fileInfo.exists()) {
+            QMessageBox::warning(this, "错误", QString("语音文件不存在：%1").arg(voicePath));
+            return;
+        }
+        
+        qint64 fileSize = fileInfo.size();
+        if (fileSize <= 0) {
+            QMessageBox::warning(this, "错误", "语音文件大小为0，无法发送！");
+            return;
+        }
+        
+        // 将路径转换为本地路径格式
+        QString normalizedPath = QDir::toNativeSeparators(voicePath);
+        
+        // 保存进度条和状态标签到映射中（用于上传进度回调）
+        if (progressBar && statusLabel) {
+            m_voiceUploadProgressMap[normalizedPath] = qMakePair(progressBar, statusLabel);
+            qDebug() << "保存语音上传进度映射，路径:" << normalizedPath;
+        }
+        
+        // 注册上传进度回调（如果还没有注册）
+        static bool voiceUploadProgressCallbackRegistered = false;
+        if (!voiceUploadProgressCallbackRegistered) {
+            TIMSetMsgElemUploadProgressCallback([](const char* json_msg, uint32_t index, uint32_t cur_size, uint32_t total_size, const void* user_data) {
+                // 解析消息JSON，找到对应的语音文件路径
+                QJsonParseError parseError;
+                QJsonDocument doc = QJsonDocument::fromJson(QByteArray(json_msg), &parseError);
+                if (parseError.error != QJsonParseError::NoError) {
+                    return;
+                }
+                
+                QJsonObject msgObj = doc.object();
+                if (!msgObj.contains(kTIMMsgElemArray) || !msgObj[kTIMMsgElemArray].isArray()) {
+                    return;
+                }
+                
+                QJsonArray elemArray = msgObj[kTIMMsgElemArray].toArray();
+                if (index >= (uint32_t)elemArray.size()) {
+                    return;
+                }
+                
+                QJsonValue elemValue = elemArray[index];
+                if (!elemValue.isObject()) {
+                    return;
+                }
+                
+                QJsonObject elemObj = elemValue.toObject();
+                int elemType = elemObj[kTIMElemType].toInt();
+                
+                // 只处理语音元素
+                if (elemType == kTIMElem_Sound) {
+                    QString filePath = elemObj[kTIMSoundElemFilePath].toString();
+                    QString normalizedPath = QDir::toNativeSeparators(filePath);
+                    
+                    // 查找所有ChatDialog实例，更新进度
+                    QList<ChatDialog*> instances = getInstanceList();
+                    for (ChatDialog* dlg : instances) {
+                        if (dlg && dlg->m_voiceUploadProgressMap.contains(normalizedPath)) {
+                            QProgressBar* progressBar = dlg->m_voiceUploadProgressMap[normalizedPath].first;
+                            QLabel* statusLabel = dlg->m_voiceUploadProgressMap[normalizedPath].second;
+                            
+                            if (progressBar && progressBar->parent()) {
+                                int progress = total_size > 0 ? (int)((double)cur_size / total_size * 100) : 0;
+                                progressBar->setValue(progress);
+                                
+                                if (statusLabel && statusLabel->parent()) {
+                                    QString curStr = cur_size < 1024 ? QString("%1 字节").arg(cur_size) :
+                                                   cur_size < 1024 * 1024 ? QString("%1 KB").arg(cur_size / 1024.0, 0, 'f', 1) :
+                                                   QString("%1 MB").arg(cur_size / (1024.0 * 1024.0), 0, 'f', 1);
+                                    QString totalStr = total_size < 1024 ? QString("%1 字节").arg(total_size) :
+                                                      total_size < 1024 * 1024 ? QString("%1 KB").arg(total_size / 1024.0, 0, 'f', 1) :
+                                                      QString("%1 MB").arg(total_size / (1024.0 * 1024.0), 0, 'f', 1);
+                                    statusLabel->setText(QString("上传中: %1 / %2 (%3%)").arg(curStr).arg(totalStr).arg(progress));
+                                    statusLabel->setStyleSheet("color: blue; font-size: 10px;");
+                                }
+                            }
+                        }
+                    }
+                }
+            }, nullptr);
+            voiceUploadProgressCallbackRegistered = true;
+        }
+        
+        // 构造语音元素
+        QJsonObject soundElem;
+        soundElem[kTIMElemType] = (int)kTIMElem_Sound;
+        soundElem[kTIMSoundElemFilePath] = normalizedPath; // 语音文件路径（必填）
+        soundElem[kTIMSoundElemFileSize] = (int)fileSize; // 文件大小
+        soundElem[kTIMSoundElemFileTime] = durationSeconds; // 语音时长（秒，必填）
+        
+        // 构造消息
+        QJsonObject msgObj;
+        QJsonArray elemArray;
+        elemArray.append(soundElem);
+        msgObj[kTIMMsgElemArray] = elemArray;
+        msgObj[kTIMMsgSender] = userinfo.strUserId;
+        qint64 currentTime = QDateTime::currentDateTime().toSecsSinceEpoch();
+        msgObj[kTIMMsgClientTime] = currentTime;
+        msgObj[kTIMMsgServerTime] = currentTime;
+        
+        // 转换为JSON字符串
+        QJsonDocument doc(msgObj);
+        QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+        
+        qDebug() << "发送语音消息，路径:" << normalizedPath;
+        qDebug() << "文件大小:" << fileSize << "字节，时长:" << durationSeconds << "秒";
+        qDebug() << "消息JSON:" << QString::fromUtf8(jsonData);
+        
+        // 创建回调数据结构
+        struct SendVoiceMsgCallbackData {
+            ChatDialog* dlg;
+            QString voicePath;
+            QString senderName;
+            bool isTempFile; // 标记是否为临时录音文件
+        };
+        SendVoiceMsgCallbackData* callbackData = new SendVoiceMsgCallbackData;
+        callbackData->dlg = this;
+        callbackData->voicePath = voicePath;
+        callbackData->senderName = userinfo.strName;
+        // 如果是当前录音文件，标记为临时文件，发送成功后可以选择删除
+        callbackData->isTempFile = (voicePath == m_currentVoiceFile);
+        
+        // 发送消息
+        QByteArray groupIdBytes = m_unique_group_id.toUtf8();
+        int ret = TIMMsgSendNewMsg(groupIdBytes.constData(), kTIMConv_Group, jsonData.constData(),
+            [](int32_t code, const char* desc, const char* json_params, const void* user_data) {
+                SendVoiceMsgCallbackData* data = (SendVoiceMsgCallbackData*)user_data;
+                
+                // 从map中获取进度条和状态标签
+                QString normalizedKey = QDir::toNativeSeparators(data->voicePath);
+                QProgressBar* progressBar = nullptr;
+                QLabel* statusLabel = nullptr;
+                
+                if (data->dlg->m_voiceUploadProgressMap.contains(normalizedKey)) {
+                    progressBar = data->dlg->m_voiceUploadProgressMap[normalizedKey].first;
+                    statusLabel = data->dlg->m_voiceUploadProgressMap[normalizedKey].second;
+                }
+                
+                if (code != TIM_SUCC) {
+                    QString errorDesc = QString::fromUtf8(desc ? desc : "未知错误");
+                    qDebug() << "发送语音消息失败，错误码:" << code << "，描述:" << errorDesc;
+                    
+                    // 更新状态为失败
+                    if (statusLabel && statusLabel->parent()) {
+                        statusLabel->setText("发送失败");
+                        statusLabel->setStyleSheet("color: red; font-size: 10px;");
+                    }
+                    if (progressBar && progressBar->parent()) {
+                        progressBar->setValue(0);
+                    }
+                    
+                    QMessageBox::critical(data->dlg, "发送失败", QString("语音消息发送失败\n错误码: %1\n错误描述: %2").arg(code).arg(errorDesc));
+                    
+                    // 从进度映射中移除
+                    data->dlg->m_voiceUploadProgressMap.remove(normalizedKey);
+                } else {
+                    qDebug() << "语音消息发送成功";
+                    
+                    // 更新状态为成功
+                    if (statusLabel && statusLabel->parent()) {
+                        statusLabel->setText("发送成功");
+                        statusLabel->setStyleSheet("color: green; font-size: 10px;");
+                    }
+                    if (progressBar && progressBar->parent()) {
+                        progressBar->setValue(100);
+                        // 3秒后隐藏进度条
+                        QTimer::singleShot(3000, progressBar, [progressBar, statusLabel]() {
+                            if (progressBar && progressBar->parent()) {
+                                progressBar->hide();
+                            }
+                            if (statusLabel && statusLabel->parent()) {
+                                statusLabel->hide();
+                            }
+                        });
+                    }
+                    
+                    // 从进度映射中移除
+                    data->dlg->m_voiceUploadProgressMap.remove(normalizedKey);
+                }
+                
+                // 清空当前录音文件路径
+                if (data->isTempFile && data->dlg->m_currentVoiceFile == data->voicePath) {
+                    data->dlg->m_currentVoiceFile.clear();
+                }
+                delete data;
+            }, callbackData);
+        
+        if (ret != TIM_SUCC) {
+            qDebug() << "调用TIMMsgSendNewMsg失败，错误码:" << ret;
+            QString errorDesc = QString("错误码: %1").arg(ret);
+            QMessageBox::critical(this, "发送失败", QString("语音消息发送失败\n%1").arg(errorDesc));
             delete callbackData;
         }
     }
@@ -1015,8 +1715,8 @@ private:
                     // 处理文件消息
                     handleFileMessage(elemObj, senderName, false);
                 } else if (elemType == kTIMElem_Sound) {
-                    // TODO: 处理语音消息
-                    addTextMessage(":/res/img/home.png", senderName, "[语音]", false);
+                    // 处理语音消息
+                    handleVoiceMessage(elemObj, senderName, false);
                 }
             }
         }
@@ -1117,7 +1817,8 @@ private:
                                     // 处理历史消息中的文件
                                     dlg->handleFileMessage(elemObj, senderName, isMine);
                                 } else if (elemType == kTIMElem_Sound) {
-                                    dlg->addTextMessage(":/res/img/home.png", senderName, "[语音]", isMine);
+                                    // 处理历史消息中的语音
+                                    dlg->handleVoiceMessage(elemObj, senderName, isMine);
                                 }
                             }
                         }
@@ -1218,6 +1919,591 @@ private:
         } else {
             qDebug() << "图片消息URL和ID都为空，无法下载";
             addTextMessage(":/res/img/home.png", senderName, "[图片]（无法获取）", isMine);
+        }
+    }
+    
+    // 处理接收到的语音消息
+    void handleVoiceMessage(const QJsonObject& soundElem, const QString& senderName, bool isMine)
+    {
+        // 获取语音信息
+        int duration = soundElem[kTIMSoundElemFileTime].toInt(); // 语音时长（秒）
+        QString voiceUrl = soundElem[kTIMSoundElemUrl].toString(); // 语音下载URL
+        QString voiceId = soundElem[kTIMSoundElemFileId].toString(); // 语音ID
+        int voiceFileSize = soundElem[kTIMSoundElemFileSize].toInt(); // 文件大小
+        
+        if (duration <= 0 && voiceUrl.isEmpty() && voiceId.isEmpty()) {
+            qDebug() << "语音消息缺少必要信息，无法处理";
+            addTextMessage(":/res/img/home.png", senderName, "[语音]（信息不完整）", isMine);
+            return;
+        }
+        
+        // 创建临时目录保存下载的语音
+        QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+        QDir dir;
+        if (!dir.exists(cacheDir)) {
+            dir.mkpath(cacheDir);
+        }
+        
+        // 生成本地保存路径
+        QString localFileName = voiceId.isEmpty() ? 
+            QString("voice_%1.amr").arg(QDateTime::currentMSecsSinceEpoch()) :
+            QString("voice_%1.amr").arg(voiceId);
+        QString localPath = QDir(cacheDir).filePath(localFileName);
+        
+        // 先显示语音消息UI（带进度条）
+        QPair<QProgressBar*, QLabel*> progressWidgets = addVoiceMessageWithProgress(":/res/img/home.png", senderName, duration > 0 ? duration : 1, localPath, isMine);
+        
+        // 如果语音URL不为空，下载语音
+        if (!voiceUrl.isEmpty()) {
+            downloadVoiceFromUrl(voiceUrl, localPath, senderName, duration, isMine, progressWidgets.first, progressWidgets.second, voiceFileSize);
+        } else if (!voiceId.isEmpty()) {
+            // 如果只有voiceId没有URL，尝试使用腾讯SDK下载
+            downloadVoiceFromSDK(soundElem, localPath, senderName, duration, isMine, progressWidgets.first, progressWidgets.second);
+        } else {
+            // 如果既没有URL也没有ID，显示语音信息（可能语音还在上传中）
+            qDebug() << "语音消息URL和ID都为空，无法下载";
+            if (progressWidgets.second) {
+                progressWidgets.second->setText("无法获取语音文件");
+                progressWidgets.second->setStyleSheet("color: red; font-size: 10px;");
+            }
+        }
+    }
+    
+    // 从URL下载语音
+    void downloadVoiceFromUrl(const QString& voiceUrl, const QString& savePath, const QString& senderName,
+                             int duration, bool isMine, QProgressBar* progressBar = nullptr, QLabel* statusLabel = nullptr, int voiceFileSize = 0)
+    {
+        QUrl url(voiceUrl);
+        if (!url.isValid()) {
+            qDebug() << "语音URL无效:" << voiceUrl;
+            return;
+        }
+        
+        // 检查SSL支持
+        if (url.scheme().toLower() == "https") {
+            if (!QSslSocket::supportsSsl()) {
+                qDebug() << "系统不支持SSL，尝试将HTTPS改为HTTP或使用其他下载方式";
+                QString httpUrl = voiceUrl;
+                httpUrl.replace("https://", "http://");
+                if (httpUrl != voiceUrl) {
+                    qDebug() << "尝试使用HTTP替代HTTPS:" << httpUrl;
+                    url = QUrl(httpUrl);
+                }
+            }
+        }
+        
+        // 检查文件是否已部分下载（断点续传）
+        qint64 existingFileSize = 0;
+        bool isResume = false;
+        QFileInfo fileInfo(savePath);
+        if (fileInfo.exists()) {
+            existingFileSize = fileInfo.size();
+            if (existingFileSize > 0 && voiceFileSize > 0 && existingFileSize < voiceFileSize) {
+                isResume = true;
+                qDebug() << "检测到已部分下载的语音文件，大小:" << existingFileSize << "字节，将断点续传";
+            } else if (voiceFileSize > 0 && existingFileSize >= voiceFileSize) {
+                // 文件已完整下载
+                qDebug() << "语音文件已完整下载，大小:" << existingFileSize << "字节";
+                if (statusLabel && statusLabel->parent()) {
+                    statusLabel->setText("文件已存在");
+                    statusLabel->setStyleSheet("color: green; font-size: 10px;");
+                }
+                if (progressBar && progressBar->parent()) {
+                    progressBar->setValue(100);
+                }
+                // 更新语音消息的路径，以便播放
+                updateVoiceMessagePath(senderName, duration, savePath);
+                return;
+            }
+        }
+        
+        // 保存this指针，以便在lambda中使用
+        ChatDialog* dlg = this;
+        
+        QNetworkAccessManager* manager = new QNetworkAccessManager(this);
+        QNetworkRequest networkRequest;
+        networkRequest.setUrl(url);
+        
+        // 如果是断点续传，设置 Range 请求头
+        if (isResume) {
+            QString rangeHeader = QString("bytes=%1-").arg(existingFileSize);
+            networkRequest.setRawHeader("Range", rangeHeader.toUtf8());
+            qDebug() << "设置 Range 请求头:" << rangeHeader;
+        }
+        
+        // 如果是HTTPS，设置SSL配置
+        if (url.scheme().toLower() == "https") {
+            QSslConfiguration sslConfig = QSslConfiguration::defaultConfiguration();
+            sslConfig.setPeerVerifyMode(QSslSocket::VerifyNone);
+            sslConfig.setProtocol(QSsl::TlsV1_2OrLater);
+            networkRequest.setSslConfiguration(sslConfig);
+        }
+        
+        // 保存下载进度映射
+        QString normalizedKey = QDir::toNativeSeparators(savePath);
+        if (progressBar && statusLabel) {
+            m_voiceDownloadProgressMap[normalizedKey] = qMakePair(progressBar, statusLabel);
+        }
+        
+        // 更新状态为"正在下载"或"正在续传"
+        if (statusLabel) {
+            statusLabel->setText(isResume ? "正在续传..." : "正在下载...");
+            statusLabel->setStyleSheet("color: blue; font-size: 10px;");
+        }
+        if (progressBar) {
+            if (isResume && voiceFileSize > 0) {
+                // 设置初始进度（已下载部分）
+                int initialProgress = (int)((double)existingFileSize / voiceFileSize * 100);
+                progressBar->setValue(initialProgress);
+            } else {
+                progressBar->setValue(0);
+            }
+        }
+        
+        qDebug() << "保存语音下载进度映射，路径:" << normalizedKey << "，断点续传:" << isResume;
+        
+        QNetworkReply* reply = manager->get(networkRequest);
+        
+        // 忽略SSL错误
+        connect(reply, &QNetworkReply::sslErrors, this, [=](const QList<QSslError>& errors) {
+            qDebug() << "SSL错误，忽略证书验证，URL:" << voiceUrl;
+            reply->ignoreSslErrors();
+        });
+        
+        // 保存断点续传信息到lambda中
+        qint64 resumeOffset = existingFileSize;
+        bool isResumeDownload = isResume;
+        
+        // 连接下载进度信号（考虑断点续传）
+        connect(reply, &QNetworkReply::downloadProgress, this, [progressBar, statusLabel, voiceFileSize, resumeOffset, isResumeDownload](qint64 bytesReceived, qint64 bytesTotal) {
+            if (progressBar && progressBar->parent()) {
+                // 计算总进度（已下载部分 + 本次下载部分）
+                qint64 totalReceived = isResumeDownload ? resumeOffset + bytesReceived : bytesReceived;
+                qint64 totalSize = voiceFileSize > 0 ? voiceFileSize : (isResumeDownload ? resumeOffset + bytesTotal : bytesTotal);
+                
+                if (totalSize > 0) {
+                    int progress = (int)((double)totalReceived / totalSize * 100);
+                    progressBar->setValue(progress);
+                    
+                    if (statusLabel && statusLabel->parent()) {
+                        QString receivedStr = totalReceived < 1024 ? QString("%1 字节").arg(totalReceived) :
+                                             totalReceived < 1024 * 1024 ? QString("%1 KB").arg(totalReceived / 1024.0, 0, 'f', 1) :
+                                             QString("%1 MB").arg(totalReceived / (1024.0 * 1024.0), 0, 'f', 1);
+                        QString totalStr = totalSize < 1024 ? QString("%1 字节").arg(totalSize) :
+                                          totalSize < 1024 * 1024 ? QString("%1 KB").arg(totalSize / 1024.0, 0, 'f', 1) :
+                                          QString("%1 MB").arg(totalSize / (1024.0 * 1024.0), 0, 'f', 1);
+                        QString statusText = isResumeDownload ? 
+                            QString("续传中: %1 / %2 (%3%)").arg(receivedStr).arg(totalStr).arg(progress) :
+                            QString("下载中: %1 / %2 (%3%)").arg(receivedStr).arg(totalStr).arg(progress);
+                        statusLabel->setText(statusText);
+                        statusLabel->setStyleSheet("color: blue; font-size: 10px;");
+                    }
+                }
+            }
+        });
+        
+        connect(reply, &QNetworkReply::finished, this, [this, reply, manager, voiceUrl, dlg, savePath, senderName, duration, resumeOffset, isResumeDownload]() {
+            int error = reply->error();
+            QString normalizedKey = QDir::toNativeSeparators(savePath);
+            QProgressBar* progressBar = nullptr;
+            QLabel* statusLabel = nullptr;
+
+            if (m_voiceDownloadProgressMap.contains(normalizedKey)) {
+                progressBar = m_voiceDownloadProgressMap[normalizedKey].first;
+                statusLabel = m_voiceDownloadProgressMap[normalizedKey].second;
+            }
+
+            // 检查HTTP状态码（206表示部分内容，支持断点续传）
+            int httpStatusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            bool isPartialContent = (httpStatusCode == 206); // HTTP 206 Partial Content
+            
+            if (reply->error() == QNetworkReply::NoError || isPartialContent) {
+                QByteArray voiceData = reply->readAll();
+                if (voiceData.isEmpty() && !isResumeDownload) {
+                    qDebug() << "语音数据为空";
+                    if (statusLabel && statusLabel->parent()) {
+                        statusLabel->setText("语音数据为空");
+                        statusLabel->setStyleSheet("color: red; font-size: 10px;");
+                    }
+                }
+                else {
+                    // 断点续传时使用追加模式，否则使用覆盖模式
+                    QFile file(savePath);
+                    QIODevice::OpenMode openMode = isResumeDownload ? QIODevice::Append : QIODevice::WriteOnly;
+                    
+                    if (file.open(openMode)) {
+                        file.write(voiceData);
+                        file.close();
+                        
+                        // 获取最终文件大小
+                        QFileInfo finalFileInfo(savePath);
+                        qint64 finalSize = finalFileInfo.exists() ? finalFileInfo.size() : 0;
+                        qDebug() << "语音下载成功:" << savePath;
+                        qDebug() << "本次下载:" << voiceData.size() << "字节";
+                        if (isResumeDownload) {
+                            qDebug() << "断点续传: 原有" << resumeOffset << "字节 + 本次" << voiceData.size() << "字节 = 总计" << finalSize << "字节";
+                        }
+
+                        // 更新状态为成功
+                        if (statusLabel && statusLabel->parent()) {
+                            statusLabel->setText("下载成功");
+                            statusLabel->setStyleSheet("color: green; font-size: 10px;");
+                        }
+                        if (progressBar && progressBar->parent()) {
+                            progressBar->setValue(100);
+                            // 3秒后隐藏进度条
+                            QTimer::singleShot(3000, progressBar, [progressBar, statusLabel]() {
+                                if (progressBar && progressBar->parent()) {
+                                    progressBar->hide();
+                                }
+                                if (statusLabel && statusLabel->parent()) {
+                                    statusLabel->hide();
+                                }
+                            });
+                        }
+                        
+                        // 更新语音消息的路径，以便播放
+                        updateVoiceMessagePath(senderName, duration, savePath);
+                    } else {
+                        qDebug() << "保存语音失败:" << savePath;
+                        if (statusLabel && statusLabel->parent()) {
+                            statusLabel->setText("保存失败");
+                            statusLabel->setStyleSheet("color: red; font-size: 10px;");
+                        }
+                    }
+                }
+            } else {
+                qDebug() << "语音下载失败，URL:" << voiceUrl << "，错误:" << reply->errorString();
+                if (statusLabel && statusLabel->parent()) {
+                    statusLabel->setText(QString("下载失败: %1").arg(reply->errorString()));
+                    statusLabel->setStyleSheet("color: red; font-size: 10px;");
+                }
+                if (progressBar && progressBar->parent()) {
+                    progressBar->setValue(0);
+                }
+            }
+            
+            // 从进度映射中移除
+            m_voiceDownloadProgressMap.remove(normalizedKey);
+            
+            reply->deleteLater();
+            manager->deleteLater();
+        });
+    }
+    
+    // 使用腾讯SDK下载语音（如果只有voiceId没有URL）
+    void downloadVoiceFromSDK(const QJsonObject& soundElem, const QString& savePath, const QString& senderName,
+                             int duration, bool isMine, QProgressBar* progressBar = nullptr, QLabel* statusLabel = nullptr)
+    {
+        qDebug() << "使用腾讯SDK下载语音，voiceId:" << soundElem[kTIMSoundElemFileId].toString();
+        
+        // 构造语音元素JSON（用于下载）
+        QJsonDocument elemDoc(soundElem);
+        QByteArray elemJsonData = elemDoc.toJson(QJsonDocument::Compact);
+        QByteArray pathBytes = savePath.toUtf8();
+        
+        // 保存下载进度映射
+        QString normalizedKey = QDir::toNativeSeparators(savePath);
+        if (progressBar && statusLabel) {
+            m_voiceDownloadProgressMap[normalizedKey] = qMakePair(progressBar, statusLabel);
+        }
+        
+        // 更新状态为正在下载
+        if (statusLabel) {
+            statusLabel->setText("正在下载...");
+            statusLabel->setStyleSheet("color: blue; font-size: 10px;");
+        }
+        if (progressBar) {
+            progressBar->setValue(0);
+        }
+        
+        // 创建回调数据结构
+        struct DownloadVoiceCallbackData {
+            ChatDialog* dlg;
+            QString savePath;
+            QString senderName;
+            int duration;
+        };
+        DownloadVoiceCallbackData* callbackData = new DownloadVoiceCallbackData;
+        callbackData->dlg = this;
+        callbackData->savePath = savePath;
+        callbackData->senderName = senderName;
+        callbackData->duration = duration;
+        
+        // 调用腾讯SDK下载接口
+        int ret = TIMMsgDownloadElemToPath(elemJsonData.constData(), pathBytes.constData(),
+            [](int32_t code, const char* desc, const char* json_params, const void* user_data) {
+                DownloadVoiceCallbackData* data = (DownloadVoiceCallbackData*)user_data;
+                ChatDialog* dlg = data->dlg;
+                
+                // 从map中获取进度条和状态标签
+                QString normalizedKey = QDir::toNativeSeparators(data->savePath);
+                QProgressBar* progressBar = nullptr;
+                QLabel* statusLabel = nullptr;
+                
+                if (dlg->m_voiceDownloadProgressMap.contains(normalizedKey)) {
+                    progressBar = dlg->m_voiceDownloadProgressMap[normalizedKey].first;
+                    statusLabel = dlg->m_voiceDownloadProgressMap[normalizedKey].second;
+                }
+                
+                if (code == TIM_SUCC) {
+                    // 下载成功，检查文件是否存在
+                    QFile file(data->savePath);
+                    if (file.exists()) {
+                        qDebug() << "SDK语音下载成功:" << data->savePath;
+                        
+                        // 更新状态为成功
+                        if (statusLabel && statusLabel->parent()) {
+                            statusLabel->setText("下载成功");
+                            statusLabel->setStyleSheet("color: green; font-size: 10px;");
+                        }
+                        if (progressBar && progressBar->parent()) {
+                            progressBar->setValue(100);
+                            // 3秒后隐藏进度条
+                            QTimer::singleShot(3000, progressBar, [progressBar, statusLabel]() {
+                                if (progressBar && progressBar->parent()) {
+                                    progressBar->hide();
+                                }
+                                if (statusLabel && statusLabel->parent()) {
+                                    statusLabel->hide();
+                                }
+                            });
+                        }
+                        
+                        // 更新语音消息的路径，以便播放
+                        dlg->updateVoiceMessagePath(data->senderName, data->duration, data->savePath);
+                    } else {
+                        qDebug() << "SDK下载成功但文件不存在:" << data->savePath;
+                        if (statusLabel && statusLabel->parent()) {
+                            statusLabel->setText("文件不存在");
+                            statusLabel->setStyleSheet("color: red; font-size: 10px;");
+                        }
+                    }
+                } else {
+                    QString errorDesc = QString::fromUtf8(desc ? desc : "未知错误");
+                    qDebug() << "SDK语音下载失败，错误码:" << code << "，描述:" << errorDesc;
+                    
+                    // 更新状态为失败
+                    if (statusLabel && statusLabel->parent()) {
+                        statusLabel->setText(QString("下载失败: %1").arg(errorDesc));
+                        statusLabel->setStyleSheet("color: red; font-size: 10px;");
+                    }
+                    if (progressBar && progressBar->parent()) {
+                        progressBar->setValue(0);
+                    }
+                }
+                
+                // 从进度映射中移除
+                dlg->m_voiceDownloadProgressMap.remove(normalizedKey);
+                
+                delete data;
+            }, callbackData);
+        
+        if (ret != TIM_SUCC) {
+            qDebug() << "调用TIMMsgDownloadElemToPath失败，错误码:" << ret;
+            delete callbackData;
+        }
+    }
+    
+    // 更新语音消息的路径（下载完成后调用）
+    void updateVoiceMessagePath(const QString& senderName, int duration, const QString& voicePath)
+    {
+        // 遍历列表项，找到对应的语音消息并更新路径
+        for (int i = m_listWidget->count() - 1; i >= 0; i--) {
+            QListWidgetItem* item = m_listWidget->item(i);
+            if (!item) continue;
+            
+            QWidget* widget = m_listWidget->itemWidget(item);
+            if (!widget) continue;
+            
+            // 查找包含语音标签的widget
+            ClickableLabelEx* voiceLabel = widget->findChild<ClickableLabelEx*>();
+            if (voiceLabel && voiceLabel->text().contains("语音")) {
+                // 检查是否是匹配的语音消息（通过senderName和duration）
+                // 这里简化处理，更新第一个找到的未设置路径的语音消息
+                QString existingPath = voiceLabel->property("voicePath").toString();
+                if (existingPath.isEmpty()) {
+                    voiceLabel->setProperty("voicePath", voicePath);
+                    qDebug() << "更新语音消息路径:" << voicePath;
+                    break;
+                }
+            }
+        }
+    }
+    
+    // 播放语音消息（使用QMediaPlayer，后台播放，显示播放进度）
+    void playVoiceMessage(const QString& voicePath)
+    {
+        if (voicePath.isEmpty()) {
+            QMessageBox::information(this, "提示", "语音文件路径为空");
+            return;
+        }
+        
+        QFileInfo fileInfo(voicePath);
+        if (!fileInfo.exists()) {
+            QMessageBox::information(this, "提示", QString("语音文件不存在：%1").arg(voicePath));
+            return;
+        }
+        
+        qDebug() << "播放语音:" << voicePath;
+        
+        // 如果已有播放器正在播放，立即停止并删除
+        if (m_voicePlayer) {
+            // 断开所有信号连接，避免回调干扰
+            m_voicePlayer->disconnect();
+            // 立即停止播放
+            m_voicePlayer->stop();
+            // 立即删除，不使用deleteLater，确保立即释放资源
+            delete m_voicePlayer;
+            m_voicePlayer = nullptr;
+            qDebug() << "已停止并删除前一个播放器";
+        }
+        
+        // 创建新的媒体播放器
+        m_voicePlayer = new QMediaPlayer(this);
+        
+        // 设置音量（0-100，默认100）
+        m_voicePlayer->setVolume(100);
+        
+        // 设置媒体内容
+        QUrl fileUrl = QUrl::fromLocalFile(voicePath);
+        m_voicePlayer->setMedia(QMediaContent(fileUrl));
+        qDebug() << "设置媒体内容，URL:" << fileUrl.toString();
+        
+        // 连接媒体状态变化信号（用于自动播放和状态监控）
+        connect(m_voicePlayer, &QMediaPlayer::mediaStatusChanged, this, [this, voicePath](QMediaPlayer::MediaStatus status) {
+            qDebug() << "媒体状态变化:" << status;
+            // 确保是当前播放器（防止切换时旧播放器的回调）
+            if (m_voicePlayer && m_voicePlayer->media().canonicalUrl().toLocalFile() == voicePath) {
+                switch (status) {
+                    case QMediaPlayer::LoadedMedia:
+                        qDebug() << "媒体已加载，准备播放";
+                        // 媒体已加载，立即开始播放
+                        if (m_voicePlayer->state() != QMediaPlayer::PlayingState) {
+                            m_voicePlayer->play();
+                            qDebug() << "媒体已加载，开始播放";
+                        }
+                        break;
+                    case QMediaPlayer::BufferedMedia:
+                        qDebug() << "媒体已缓冲";
+                        // 如果还没开始播放，现在开始
+                        if (m_voicePlayer->state() != QMediaPlayer::PlayingState) {
+                            m_voicePlayer->play();
+                            qDebug() << "媒体已缓冲，开始播放";
+                        }
+                        break;
+                    case QMediaPlayer::InvalidMedia:
+                        qDebug() << "无效的媒体文件";
+                        QMessageBox::warning(this, "播放错误", "无法加载语音文件，可能是文件格式不支持");
+                        break;
+                    default:
+                        break;
+                }
+            }
+        });
+        
+        // 连接播放状态变化信号
+        connect(m_voicePlayer, &QMediaPlayer::stateChanged, this, [this, voicePath](QMediaPlayer::State state) {
+            qDebug() << "播放状态变化:" << state;
+            QString normalizedPath = QDir::toNativeSeparators(voicePath);
+            QProgressBar* playProgressBar = nullptr;
+            QLabel* playStatusLabel = nullptr;
+            
+            if (m_voicePlayProgressMap.contains(normalizedPath)) {
+                playProgressBar = m_voicePlayProgressMap[normalizedPath].first;
+                playStatusLabel = m_voicePlayProgressMap[normalizedPath].second;
+            }
+            
+            switch (state) {
+                case QMediaPlayer::PlayingState:
+                    qDebug() << "正在播放";
+                    if (playProgressBar && playProgressBar->parent()) {
+                        playProgressBar->show();
+                    }
+                    if (playStatusLabel && playStatusLabel->parent()) {
+                        playStatusLabel->setText("播放中...");
+                        playStatusLabel->setStyleSheet("color: #2196F3; font-size: 10px;");
+                        playStatusLabel->show();
+                    }
+                    break;
+                case QMediaPlayer::StoppedState:
+                    qDebug() << "播放已停止";
+                    if (playProgressBar && playProgressBar->parent()) {
+                        playProgressBar->setValue(0);
+                        playProgressBar->hide();
+                    }
+                    if (playStatusLabel && playStatusLabel->parent()) {
+                        playStatusLabel->hide();
+                    }
+                    break;
+                case QMediaPlayer::PausedState:
+                    qDebug() << "播放已暂停";
+                    if (playStatusLabel && playStatusLabel->parent()) {
+                        playStatusLabel->setText("已暂停");
+                        playStatusLabel->setStyleSheet("color: #FF9800; font-size: 10px;");
+                    }
+                    break;
+            }
+        });
+        
+        // 连接播放进度信号
+        connect(m_voicePlayer, &QMediaPlayer::positionChanged, this, [this, voicePath](qint64 position) {
+            QString normalizedPath = QDir::toNativeSeparators(voicePath);
+            if (m_voicePlayProgressMap.contains(normalizedPath)) {
+                QProgressBar* playProgressBar = m_voicePlayProgressMap[normalizedPath].first;
+                if (playProgressBar && playProgressBar->parent() && m_voicePlayer) {
+                    qint64 duration = m_voicePlayer->duration();
+                    if (duration > 0) {
+                        int progress = (int)((double)position / duration * 100);
+                        playProgressBar->setValue(progress);
+                        
+                        // 更新状态标签显示时间
+                        QLabel* playStatusLabel = m_voicePlayProgressMap[normalizedPath].second;
+                        if (playStatusLabel && playStatusLabel->parent()) {
+                            int currentSec = position / 1000;
+                            int totalSec = duration / 1000;
+                            playStatusLabel->setText(QString("播放中: %1/%2 秒").arg(currentSec).arg(totalSec));
+                        }
+                    }
+                }
+            }
+        });
+        
+        // 连接错误信号
+        connect(m_voicePlayer, QOverload<QMediaPlayer::Error>::of(&QMediaPlayer::error), 
+                this, [this](QMediaPlayer::Error error) {
+            QString errorMsg;
+            switch (error) {
+                case QMediaPlayer::ResourceError:
+                    errorMsg = "资源错误，无法播放语音文件";
+                    break;
+                case QMediaPlayer::FormatError:
+                    errorMsg = "格式错误，不支持该音频格式";
+                    break;
+                case QMediaPlayer::NetworkError:
+                    errorMsg = "网络错误";
+                    break;
+                case QMediaPlayer::AccessDeniedError:
+                    errorMsg = "访问被拒绝";
+                    break;
+                default:
+                    errorMsg = "未知错误";
+                    break;
+            }
+            qDebug() << "语音播放错误:" << errorMsg << "，错误码:" << error;
+            QMessageBox::warning(this, "播放错误", errorMsg);
+        });
+        
+        // 尝试立即播放（不等待状态变化，让状态变化回调处理）
+        // 如果媒体已经加载，立即播放
+        QMediaPlayer::MediaStatus currentStatus = m_voicePlayer->mediaStatus();
+        if (currentStatus == QMediaPlayer::LoadedMedia || currentStatus == QMediaPlayer::BufferedMedia) {
+            m_voicePlayer->play();
+            qDebug() << "媒体已就绪，立即播放";
+        } else {
+            // 即使媒体还没加载，也尝试播放（QMediaPlayer会自动等待加载完成）
+            m_voicePlayer->play();
+            qDebug() << "尝试立即播放，等待媒体加载，当前状态:" << currentStatus;
         }
     }
     
@@ -2107,6 +3393,14 @@ private:
     QMap<QString, QPair<QProgressBar*, QLabel*>> m_fileUploadProgressMap;
     // 文件下载进度映射：文件路径 -> (进度条, 状态标签)
     QMap<QString, QPair<QProgressBar*, QLabel*>> m_fileDownloadProgressMap;
+    // 语音上传进度映射：语音文件路径 -> (进度条, 状态标签)
+    QMap<QString, QPair<QProgressBar*, QLabel*>> m_voiceUploadProgressMap;
+    // 语音下载进度映射：语音文件路径 -> (进度条, 状态标签)
+    QMap<QString, QPair<QProgressBar*, QLabel*>> m_voiceDownloadProgressMap;
+    // 语音播放进度映射：语音文件路径 -> (播放进度条, 播放状态标签)
+    QMap<QString, QPair<QProgressBar*, QLabel*>> m_voicePlayProgressMap;
+    // 语音时长映射：语音文件路径 -> 时长（秒）
+    QMap<QString, int> m_voiceDurationMap;
     
     // 文件下载信息结构（用于重试）
     struct FileDownloadInfo {

@@ -13,6 +13,8 @@ TACAddGroupWidget::TACAddGroupWidget(QWidget *parent, TaQTWebSocket* pWs)
 	: TAFloatingWidget(parent)
 {
 	m_searchDlg = new SearchDialog(this);
+	// 连接SearchDialog的加入群组成功信号，转发给FriendGroupDialog
+	connect(m_searchDlg, &SearchDialog::groupJoined, this, &TACAddGroupWidget::groupJoined);
 	m_classTeacherDlg = new ClassTeacherDialog(this, pWs);
 	this->setObjectName("TACDesktopManagerWidget");
 

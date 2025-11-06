@@ -274,6 +274,56 @@ public:
 		customListDlg = new CustomListDialog(this);
 		QVBoxLayout* mainLayout = new QVBoxLayout(this);
 		m_groupInfo = new QGroupInfo(this);
+		
+		// 连接成员退出群聊信号，当有成员退出时刷新成员列表
+		connect(m_groupInfo, &QGroupInfo::memberLeftGroup, this, [this](const QString& groupId, const QString& leftUserId) {
+			// 如果退出的是当前群组
+			if (groupId == m_unique_group_id) {
+				// 获取当前用户信息，判断是否是当前用户退出
+				UserInfo userInfo = CommonInfo::GetData();
+				QString currentUserId = userInfo.teacher_unique_id;
+				
+				// 先从本地成员列表中移除退出的用户（同步更新ScheduleDialog的成员列表）
+				QVector<GroupMemberInfo> updatedMemberList;
+				for (const auto& member : m_groupMemberInfo) {
+					if (member.member_id != leftUserId) {
+						updatedMemberList.append(member);
+					}
+				}
+				m_groupMemberInfo = updatedMemberList; // 更新ScheduleDialog的成员列表
+				
+				// 判断是否是当前用户退出
+				bool isCurrentUserLeft = (leftUserId == currentUserId);
+				
+				if (isCurrentUserLeft) {
+					// 当前用户退出，关闭窗口并刷新父窗口
+					qDebug() << "当前用户退出群聊，关闭群聊窗口，群组ID:" << groupId;
+					
+					// 发出信号通知父窗口刷新群列表
+					emit this->groupLeft(groupId);
+					
+					// 关闭当前窗口
+					this->close();
+				} else {
+					// 其他成员退出，只刷新成员列表UI（本地列表已更新，只需更新UI）
+					qDebug() << "检测到成员退出群聊，更新成员列表UI，群组ID:" << groupId << "，退出用户ID:" << leftUserId;
+					
+					// 更新QGroupInfo的UI（使用更新后的成员列表）
+					if (m_groupInfo) {
+						m_groupInfo->InitGroupMember(m_groupMemberInfo);
+					}
+					
+					// 可选：重新从服务器获取成员列表以确保数据同步
+					if (m_httpHandler && !m_unique_group_id.isEmpty()) {
+						QUrl url("http://47.100.126.194:5000/groups/members");
+						QUrlQuery query;
+						query.addQueryItem("group_id", m_unique_group_id);
+						url.setQuery(query);
+						m_httpHandler->get(url.toString());
+					}
+				}
+			}
+		});
 
 		// 顶部：头像 + 班级信息 + 功能按钮 + 更多
 		QHBoxLayout* topLayout = new QHBoxLayout;
@@ -778,6 +828,10 @@ public:
 		}
 	}
 
+signals:
+	void groupLeft(const QString& groupId); // 群聊退出信号，通知父窗口刷新群列表
+
+public:
 	void InitData(QString groupName, QString unique_group_id, bool iGroupOwner)
 	{
 		m_groupName = groupName;

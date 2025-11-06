@@ -432,6 +432,11 @@ public:
         btnAdd->setStyleSheet("background-color: blue; color: white; font-size: 20px; border-radius: 20px;");
 
         addGroupWidget = new TACAddGroupWidget(this, pWs);
+        // 连接加入群组成功信号，刷新群组列表
+        connect(addGroupWidget, &TACAddGroupWidget::groupJoined, this, [this](const QString& groupId) {
+            qDebug() << "收到加入群组成功信号，刷新群列表，群组ID:" << groupId;
+            this->InitData();
+        });
         friendNotifyDlg = new FriendNotifyDialog(this);
         grpNotifyDlg = new GroupNotifyDialog(this);
         topLayout->addLayout(notifyLayout, 13);
@@ -561,6 +566,18 @@ public:
                         }
                     }
                     m_scheduleDlg[unique_group_id]->setNoticeMsg(curNotification);
+                    
+                    // 连接群聊退出信号，当用户退出群聊时刷新群列表
+                    connect(m_scheduleDlg[unique_group_id], &ScheduleDialog::groupLeft, this, [this](const QString& groupId) {
+                        qDebug() << "收到群聊退出信号，刷新群列表，群组ID:" << groupId;
+                        // 从map中移除已关闭的群聊窗口
+                        if (m_scheduleDlg.contains(groupId)) {
+                            m_scheduleDlg[groupId]->deleteLater();
+                            m_scheduleDlg.remove(groupId);
+                        }
+                        // 刷新群列表
+                        this->InitData();
+                    });
                 }
 
                 if (m_scheduleDlg[unique_group_id] && m_scheduleDlg[unique_group_id]->isHidden())
@@ -585,6 +602,41 @@ public:
         {
             addGroupWidget->InitData();
         }
+
+        // 清空群组布局（gAdminLayout 和 gJoinLayout）
+        // 使用安全的清空方法，避免崩溃
+        auto clearLayoutSafely = [](QLayout* layout) {
+            if (!layout) return;
+            
+            QLayoutItem* item;
+            while ((item = layout->takeAt(0)) != nullptr) {
+                if (item->widget()) {
+                    // 先移除widget，再删除
+                    item->widget()->setParent(nullptr);
+                    item->widget()->deleteLater();
+                } else if (item->layout()) {
+                    // 如果是布局项，递归清空其中的内容（但不删除布局本身）
+                    QLayout* childLayout = item->layout();
+                    QLayoutItem* childItem;
+                    while ((childItem = childLayout->takeAt(0)) != nullptr) {
+                        if (childItem->widget()) {
+                            childItem->widget()->setParent(nullptr);
+                            childItem->widget()->deleteLater();
+                        } else if (childItem->spacerItem()) {
+                            delete childItem->spacerItem();
+                        }
+                        delete childItem;
+                    }
+                    // 注意：不要删除childLayout，因为它可能还在使用
+                } else if (item->spacerItem()) {
+                    delete item->spacerItem();
+                }
+                delete item;
+            }
+        };
+        
+        clearLayoutSafely(gAdminLayout);
+        clearLayoutSafely(gJoinLayout);
 
         GetGroupJoinedList();
         if (m_httpHandler)

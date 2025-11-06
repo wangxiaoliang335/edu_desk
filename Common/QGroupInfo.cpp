@@ -145,11 +145,18 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId)
 
     // 解散群聊 / 退出群聊
     QHBoxLayout* bottomBtns = new QHBoxLayout;
-    QPushButton* btnDismiss = new QPushButton("解散群聊");
-    QPushButton* btnExit = new QPushButton("退出群聊");
-    bottomBtns->addWidget(btnDismiss);
-    bottomBtns->addWidget(btnExit);
+    m_btnDismiss = new QPushButton("解散群聊");
+    m_btnExit = new QPushButton("退出群聊");
+    bottomBtns->addWidget(m_btnDismiss);
+    bottomBtns->addWidget(m_btnExit);
     mainLayout->addLayout(bottomBtns);
+    
+    // 初始状态：默认都禁用，等InitGroupMember调用后再更新
+    m_btnDismiss->setEnabled(false);
+    m_btnExit->setEnabled(false);
+    
+    // 连接退出群聊按钮的点击事件
+    connect(m_btnExit, &QPushButton::clicked, this, &QGroupInfo::onExitGroupClicked);
 }
 
 void QGroupInfo::InitGroupMember(QVector<GroupMemberInfo> groupMemberInfo)
@@ -258,6 +265,189 @@ void QGroupInfo::InitGroupMember(QVector<GroupMemberInfo> groupMemberInfo)
         circlesLayout->insertWidget(insertIndex, circleBtn);
         insertIndex++; // 更新插入位置
     }
+    
+    // 更新按钮状态（根据当前用户是否是群主）
+    updateButtonStates();
+}
+
+void QGroupInfo::updateButtonStates()
+{
+    // 获取当前用户信息
+    UserInfo userInfo = CommonInfo::GetData();
+    QString currentUserId = userInfo.teacher_unique_id;
+    
+    // 查找当前用户在成员列表中的角色
+    bool isOwner = false;
+    for (const auto& member : m_groupMemberInfo) {
+        if (member.member_id == currentUserId) {
+            if (member.member_role == "群主") {
+                isOwner = true;
+            }
+            break;
+        }
+    }
+    
+    // 根据当前用户是否是群主来设置按钮状态
+    if (m_btnDismiss && m_btnExit) {
+        if (isOwner) {
+            // 当前用户是群主：解散群聊按钮可用，退出群聊按钮禁用
+            m_btnDismiss->setEnabled(true);
+            m_btnExit->setEnabled(false);
+            qDebug() << "当前用户是群主，解散群聊按钮可用，退出群聊按钮禁用";
+        } else {
+            // 当前用户不是群主：解散群聊按钮禁用，退出群聊按钮可用
+            m_btnDismiss->setEnabled(false);
+            m_btnExit->setEnabled(true);
+            qDebug() << "当前用户不是群主，解散群聊按钮禁用，退出群聊按钮可用";
+        }
+    }
+}
+
+void QGroupInfo::onExitGroupClicked()
+{
+    if (m_groupNumberId.isEmpty()) {
+        QMessageBox::warning(this, "错误", "群组ID为空，无法退出群聊");
+        return;
+    }
+    
+    // 确认对话框
+    int ret = QMessageBox::question(this, "确认退出", 
+        QString("确定要退出群聊 \"%1\" 吗？").arg(m_groupName),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::No);
+    
+    if (ret != QMessageBox::Yes) {
+        return;
+    }
+    
+    // 获取当前用户信息
+    UserInfo userInfo = CommonInfo::GetData();
+    QString userId = userInfo.teacher_unique_id;
+    QString userName = userInfo.strName;
+    
+    qDebug() << "开始退出群聊，群组ID:" << m_groupNumberId << "，用户ID:" << userId;
+    
+    // 构造回调数据结构
+    struct ExitGroupCallbackData {
+        QGroupInfo* dlg;
+        QString groupId;
+        QString userId;
+        QString userName;
+    };
+    
+    ExitGroupCallbackData* callbackData = new ExitGroupCallbackData;
+    callbackData->dlg = this;
+    callbackData->groupId = m_groupNumberId;
+    callbackData->userId = userId;
+    callbackData->userName = userName;
+    
+    // 调用腾讯SDK的退出群聊接口
+    QByteArray groupIdBytes = m_groupNumberId.toUtf8();
+    int retCode = TIMGroupQuit(groupIdBytes.constData(),
+        [](int32_t code, const char* desc, const char* json_params, const void* user_data) {
+            ExitGroupCallbackData* data = (ExitGroupCallbackData*)user_data;
+            QGroupInfo* dlg = data->dlg;
+            
+            if (code == TIM_SUCC) {
+                qDebug() << "腾讯SDK退出群聊成功:" << data->groupId;
+                
+                // 立即从本地成员列表中移除当前用户
+                QVector<GroupMemberInfo> updatedMemberList;
+                QString leftUserId = data->userId; // 记录退出的用户ID
+                for (const auto& member : dlg->m_groupMemberInfo) {
+                    if (member.member_id != data->userId) {
+                        updatedMemberList.append(member);
+                    }
+                }
+                dlg->m_groupMemberInfo = updatedMemberList;
+                
+                // 立即更新UI（移除退出的成员）
+                dlg->InitGroupMember(dlg->m_groupMemberInfo);
+                
+                // 腾讯SDK成功，现在调用自己的服务器接口（传递退出的用户ID，用于后续处理）
+                dlg->sendExitGroupRequestToServer(data->groupId, data->userId, leftUserId);
+            } else {
+                QString errorDesc = QString::fromUtf8(desc ? desc : "未知错误");
+                QString errorMsg = QString("退出群聊失败\n错误码: %1\n错误描述: %2").arg(code).arg(errorDesc);
+                qDebug() << errorMsg;
+                QMessageBox::critical(dlg, "退出失败", errorMsg);
+            }
+            
+            // 释放回调数据
+            delete data;
+        }, callbackData);
+    
+    if (retCode != TIM_SUCC) {
+        QString errorMsg = QString("调用TIMGroupQuit接口失败，错误码: %1").arg(retCode);
+        qDebug() << errorMsg;
+        QMessageBox::critical(this, "错误", errorMsg);
+        delete callbackData;
+    }
+}
+
+void QGroupInfo::sendExitGroupRequestToServer(const QString& groupId, const QString& userId, const QString& leftUserId)
+{
+    // 构造发送到服务器的JSON数据
+    QJsonObject requestData;
+    requestData["group_id"] = groupId;
+    requestData["user_id"] = userId;
+    
+    // 转换为JSON字符串
+    QJsonDocument doc(requestData);
+    QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+    
+    // 发送POST请求到服务器
+    QString url = "http://47.100.126.194:5000/groups/leave";
+    
+    // 使用QNetworkAccessManager发送POST请求
+    QNetworkAccessManager* manager = new QNetworkAccessManager(this);
+    QNetworkRequest networkRequest;
+    networkRequest.setUrl(QUrl(url));
+    networkRequest.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    
+    QNetworkReply* reply = manager->post(networkRequest, jsonData);
+    
+    connect(reply, &QNetworkReply::finished, this, [=]() {
+        if (reply->error() == QNetworkReply::NoError) {
+            QByteArray response = reply->readAll();
+            qDebug() << "服务器响应:" << QString::fromUtf8(response);
+            
+            // 解析响应
+            QJsonParseError parseError;
+            QJsonDocument jsonDoc = QJsonDocument::fromJson(response, &parseError);
+            if (parseError.error == QJsonParseError::NoError && jsonDoc.isObject()) {
+                QJsonObject obj = jsonDoc.object();
+                if (obj["code"].toInt() == 200) {
+                    qDebug() << "退出群聊请求已发送到服务器";
+                    
+                    // 服务器响应成功，发出成员退出群聊信号，通知父窗口刷新成员列表（传递退出的用户ID）
+                    emit this->memberLeftGroup(groupId, leftUserId);
+                    
+                    // 显示成功消息
+                    QMessageBox::information(this, "退出成功", 
+                        QString("已成功退出群聊 \"%1\"！").arg(m_groupName));
+                    
+                    // 关闭对话框
+                    this->accept();
+                } else {
+                    QString message = obj["message"].toString();
+                    qDebug() << "服务器返回错误:" << message;
+                    QMessageBox::warning(this, "退出失败", 
+                        QString("服务器返回错误: %1").arg(message));
+                }
+            } else {
+                qDebug() << "解析服务器响应失败";
+                QMessageBox::warning(this, "退出失败", "解析服务器响应失败");
+            }
+        } else {
+            qDebug() << "发送退出群聊请求到服务器失败:" << reply->errorString();
+            QMessageBox::warning(this, "退出失败", 
+                QString("网络错误: %1").arg(reply->errorString()));
+        }
+        
+        reply->deleteLater();
+        manager->deleteLater();
+    });
 }
 
 QGroupInfo::~QGroupInfo()

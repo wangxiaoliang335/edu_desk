@@ -109,6 +109,9 @@ public:
         mainLayout->addWidget(m_scrollArea);
     }
 
+signals:
+    void groupJoined(const QString& groupId); // 加入群组成功信号
+
 private slots:
     void onSearchClicked()
     {
@@ -404,6 +407,9 @@ private slots:
                     QJsonObject obj = jsonDoc.object();
                     if (obj["code"].toInt() == 200) {
                         qDebug() << "加入群组请求已发送到服务器";
+                        
+                        // 服务器响应成功，发出加入群组成功信号，通知父窗口刷新群组列表
+                        emit this->groupJoined(groupId);
                     } else {
                         QString message = obj["message"].toString();
                         qDebug() << "服务器返回错误:" << message;

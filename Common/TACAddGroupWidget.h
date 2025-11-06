@@ -14,6 +14,8 @@ public:
 	void InitData();
 	void InitWebSocket();
 	QVector<QString> getNoticeMsg();
+signals:
+	void groupJoined(const QString& groupId); // 加入群组成功信号，转发SearchDialog的信号
 protected:
 	void showEvent(QShowEvent* event) override;
 	void resizeEvent(QResizeEvent* event) override;

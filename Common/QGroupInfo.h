@@ -16,8 +16,17 @@
 #include <QAction>
 #include <QCheckBox>
 #include <QMouseEvent>
+#include <QMessageBox>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QJsonObject>
+#include <QJsonDocument>
 #include "CommonInfo.h"
 #include "CourseDialog.h"
+#include "ImSDK/includes/TIMCloud.h"
+#include "ImSDK/includes/TIMCloudDef.h"
+#include "ImSDK/includes/TIMCloudCallback.h"
 
 class ClassTeacherDialog;
 class ClassTeacherDelDialog;
@@ -52,6 +61,7 @@ private slots:
 };
 
 class QGroupInfo : public QDialog {
+    Q_OBJECT
 public:
     QGroupInfo(QWidget* parent = nullptr);
     ~QGroupInfo();
@@ -59,7 +69,15 @@ public:
 public:
     void initData(QString groupName, QString groupNumberId);
     void InitGroupMember(QVector<GroupMemberInfo> groupMemberInfo);
+    QVector<GroupMemberInfo> getGroupMemberInfo() const { return m_groupMemberInfo; } // 获取当前成员列表
+    
+signals:
+    void memberLeftGroup(const QString& groupId, const QString& leftUserId); // 成员退出群聊信号，传递退出的用户ID
+
 private:
+    void updateButtonStates(); // 根据当前用户角色更新按钮状态
+    void onExitGroupClicked(); // 退出群聊按钮点击处理
+    void sendExitGroupRequestToServer(const QString& groupId, const QString& userId, const QString& leftUserId); // 发送退出群聊请求到服务器
     QString m_groupName;
     QString m_groupNumberId;
     QVector<GroupMemberInfo> m_groupMemberInfo;
@@ -67,6 +85,8 @@ private:
     ClassTeacherDialog* m_classTeacherDlg = NULL;
     ClassTeacherDelDialog* m_classTeacherDelDlg = NULL;
     CourseDialog* m_courseDlg;
+    QPushButton* m_btnDismiss = nullptr; // 解散群聊按钮
+    QPushButton* m_btnExit = nullptr; // 退出群聊按钮
 };
 
 
