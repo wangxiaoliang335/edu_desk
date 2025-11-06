@@ -5,6 +5,7 @@
 #include <windows.h>
 #include <tchar.h>
 #include "TACMainDialog.h"
+#include "ChatDialog.h"
 #include "CommonInfo.h"
 #include "common/Base.h"
 
@@ -477,6 +478,11 @@ bool TACMainDialog::InitSDK() { //初始化ImSDK
     if (TIM_SUCC == TIMInit(sdk_app_id, jsonInitBytes.constData()))
     {
         qDebug() << "TIMInit succeeded!";
+        
+        // 在登录前注册消息接收回调，确保能接收到离线消息
+        // 注意：需要在 InitSDK 之后、Login 之前注册，这样登录后拉取的离线消息才能通过回调接收
+        ChatDialog::ensureCallbackRegistered();
+        
         return true;
     }
     else

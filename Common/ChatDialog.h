@@ -4,6 +4,7 @@
 #include <QHBoxLayout>
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QList>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
@@ -19,8 +20,12 @@
 #include <QJsonParseError>
 #include <qjsonarray.h>
 #include <qjsonobject.h>
+#include <QMessageBox>
 #include "TaQTWebSocket.h"
 #include "CommonInfo.h"
+#include "ImSDK/includes/TIMCloud.h"
+#include "ImSDK/includes/TIMCloudDef.h"
+#include "ImSDK/includes/TIMCloudCallback.h"
 
 struct ChatMessage {
     QString avatarPath;
@@ -100,6 +105,18 @@ public:
     {
         m_unique_group_id = unique_group_id;
         m_iGroupOwner = iGroupOwner;
+        
+        // 注册到静态实例列表
+        registerInstance();
+        
+        // 加载历史消息
+        loadHistoryMessages();
+    }
+    
+    ~ChatDialog()
+    {
+        // 从静态实例列表中移除
+        unregisterInstance();
     }
 
     void InitWebSocket()
@@ -127,41 +144,32 @@ public:
             }
         }
     }
+    
+    // 静态方法：提前注册消息回调（应在登录前调用，确保能接收到离线消息）
+    static void ensureCallbackRegistered()
+    {
+        static bool s_callbackRegistered = false;
+        if (!s_callbackRegistered) {
+            TIMAddRecvNewMsgCallback(staticRecvNewMsgCallback, nullptr);
+            s_callbackRegistered = true;
+            qDebug() << "ChatDialog: 消息接收回调已注册（登录前）";
+        }
+    }
 
 private slots:
     void sendMyTextMessage()
     {
         QString text = m_lineEdit->text().trimmed();
-        if (text.isEmpty()) return;
+        if (text.isEmpty() || m_unique_group_id.isEmpty()) return;
 
         UserInfo userinfo = CommonInfo::GetData();
+        
+        // 先显示在界面上（乐观更新）
         addTextMessage(":/res/img/home.png", userinfo.strName, text, true);
         m_lineEdit->clear();
 
-
-        QJsonObject createGroupMsg;
-        createGroupMsg["type"] = "5";
-        createGroupMsg["content"] = text;
-        createGroupMsg["unique_group_id"] = m_unique_group_id;
-        createGroupMsg["sender_id"] = userinfo.teacher_unique_id;
-        createGroupMsg["sender_name"] = userinfo.strName;
-        createGroupMsg["groupowner"] = m_iGroupOwner;
-
-        // 用 QJsonDocument 序列化
-        QJsonDocument doc(createGroupMsg);
-        // 输出美化格式（有缩进）
-        QString prettyString = QString::fromUtf8(doc.toJson(QJsonDocument::Indented));
-        qDebug() << "美化格式:" << prettyString;
-
-        if (!prettyString.isEmpty()) {
-            //socket->sendTextMessage(QString("to:%1:%2").arg(teacher_unique_id, prettyString));
-            TaQTWebSocket::sendPrivateMessage(QString("to:%1:%2").arg(m_unique_group_id, prettyString));
-        }
-
-        // 模拟回复
-        //QTimer::singleShot(1200, this, [=]() {
-        //    addVoiceMessage(":/avatar_teacher2.png", "语文老师", 5, false);
-        //    });
+        // 使用腾讯SDK发送消息
+        sendTextMessageViaTIMSDK(text, userinfo);
     }
 
     //// ChatDialog.cpp
@@ -210,25 +218,51 @@ private slots:
 
     void sendMyImageMessage()
     {
+        if (m_unique_group_id.isEmpty()) {
+            QMessageBox::warning(this, "错误", "群组ID未设置，无法发送图片！");
+            return;
+        }
+        
         UserInfo userinfo = CommonInfo::GetData();
         QString imgPath = QFileDialog::getOpenFileName(this, "选择图片", "", "Images (*.png *.jpg *.jpeg *.bmp)");
-        if (!imgPath.isEmpty())
+        if (!imgPath.isEmpty()) {
+            // 先显示在界面上
             addImageMessage(":/res/img/home.png", userinfo.strName, imgPath, true);
+            // 使用腾讯SDK发送图片
+            sendImageMessageViaTIMSDK(imgPath, userinfo);
+        }
     }
 
     void sendMyFileMessage()
     {
+        if (m_unique_group_id.isEmpty()) {
+            QMessageBox::warning(this, "错误", "群组ID未设置，无法发送文件！");
+            return;
+        }
+        
         UserInfo userinfo = CommonInfo::GetData();
         QString filePath = QFileDialog::getOpenFileName(this, "选择文件");
-        if (!filePath.isEmpty())
+        if (!filePath.isEmpty()) {
+            // 先显示在界面上
             addFileMessage(":/res/img/home.png", userinfo.strName, filePath, true);
+            // 使用腾讯SDK发送文件
+            sendFileMessageViaTIMSDK(filePath, userinfo);
+        }
     }
 
     void sendMyVoiceMessage()
     {
+        if (m_unique_group_id.isEmpty()) {
+            QMessageBox::warning(this, "错误", "群组ID未设置，无法发送语音！");
+            return;
+        }
+        
         UserInfo userinfo = CommonInfo::GetData();
-        // 模拟 8秒语音
+        // TODO: 实现语音录制功能
+        // 目前先模拟 8秒语音
         addVoiceMessage(":/res/img/home.png", userinfo.strName, 8, true);
+        // TODO: 使用腾讯SDK发送语音
+        // sendVoiceMessageViaTIMSDK(voicePath, userinfo, 8);
     }
 
 private:
@@ -416,6 +450,307 @@ private:
         m_lastMessage = { avatarPath, senderName, QString("[语音] %1秒").arg(seconds), isMine, now };
         m_hasLastMessage = true;
         m_listWidget->scrollToBottom();
+    }
+
+    // 使用腾讯SDK发送文本消息
+    void sendTextMessageViaTIMSDK(const QString& text, const UserInfo& userinfo)
+    {
+        if (m_unique_group_id.isEmpty()) return;
+        
+        // 构造消息元素
+        QJsonObject textElem;
+        textElem[kTIMElemType] = (int)kTIMElem_Text;
+        textElem[kTIMTextElemContent] = text;
+        
+        // 构造消息
+        QJsonObject msgObj;
+        QJsonArray elemArray;
+        elemArray.append(textElem);
+        msgObj[kTIMMsgElemArray] = elemArray;
+        msgObj[kTIMMsgSender] = userinfo.strUserId;
+        qint64 currentTime = QDateTime::currentDateTime().toSecsSinceEpoch();
+        msgObj[kTIMMsgClientTime] = currentTime;
+        msgObj[kTIMMsgServerTime] = currentTime;
+        
+        // 转换为JSON字符串
+        QJsonDocument doc(msgObj);
+        QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+        
+        // 创建回调数据结构
+        struct SendMsgCallbackData {
+            ChatDialog* dlg;
+            QString text;
+            QString senderName;
+        };
+        SendMsgCallbackData* callbackData = new SendMsgCallbackData;
+        callbackData->dlg = this;
+        callbackData->text = text;
+        callbackData->senderName = userinfo.strName;
+        
+        // 发送消息
+        QByteArray groupIdBytes = m_unique_group_id.toUtf8();
+        int ret = TIMMsgSendNewMsg(groupIdBytes.constData(), kTIMConv_Group, jsonData.constData(),
+            [](int32_t code, const char* desc, const char* json_params, const void* user_data) {
+                SendMsgCallbackData* data = (SendMsgCallbackData*)user_data;
+                if (code != TIM_SUCC) {
+                    QString errorDesc = QString::fromUtf8(desc ? desc : "未知错误");
+                    qDebug() << "发送消息失败，错误码:" << code << "，描述:" << errorDesc;
+                    QMessageBox::critical(data->dlg, "发送失败", QString("消息发送失败\n错误码: %1\n错误描述: %2").arg(code).arg(errorDesc));
+                } else {
+                    qDebug() << "消息发送成功";
+                }
+                delete data;
+            }, callbackData);
+        
+        if (ret != TIM_SUCC) {
+            qDebug() << "调用TIMMsgSendNewMsg失败，错误码:" << ret;
+            QMessageBox::critical(this, "错误", QString("调用发送接口失败，错误码: %1").arg(ret));
+            delete callbackData;
+        }
+    }
+    
+    // 使用腾讯SDK发送图片消息
+    void sendImageMessageViaTIMSDK(const QString& imgPath, const UserInfo& userinfo)
+    {
+        // TODO: 实现图片上传和发送
+        // 图片消息需要先上传图片，然后发送图片元素
+        qDebug() << "发送图片消息（待实现）:" << imgPath;
+    }
+    
+    // 使用腾讯SDK发送文件消息
+    void sendFileMessageViaTIMSDK(const QString& filePath, const UserInfo& userinfo)
+    {
+        // TODO: 实现文件上传和发送
+        qDebug() << "发送文件消息（待实现）:" << filePath;
+    }
+    
+    // 接收新消息的回调处理
+    void onRecvNewMsg(const char* json_msg_array)
+    {
+        // 解析JSON消息数组
+        QJsonParseError parseError;
+        QJsonDocument doc = QJsonDocument::fromJson(QByteArray(json_msg_array), &parseError);
+        if (parseError.error != QJsonParseError::NoError) {
+            qDebug() << "解析消息JSON失败:" << parseError.errorString();
+            return;
+        }
+        
+        if (!doc.isArray()) {
+            qDebug() << "消息JSON不是数组格式";
+            return;
+        }
+        
+        QJsonArray msgArray = doc.array();
+        UserInfo userInfo = CommonInfo::GetData();
+        
+        for (const QJsonValue& value : msgArray) {
+            if (!value.isObject()) continue;
+            
+            QJsonObject msgObj = value.toObject();
+            
+            // 检查是否是当前群组的消息
+            QString convId = msgObj[kTIMMsgConvId].toString();
+            int convType = msgObj[kTIMMsgConvType].toInt();
+            
+            if (convType != kTIMConv_Group || convId != m_unique_group_id) {
+                continue; // 不是当前群组的消息，跳过
+            }
+            
+            // 检查是否是自己的消息（自己发送的消息已经在发送时显示，避免重复）
+            bool isFromSelf = msgObj[kTIMMsgIsFormSelf].toBool();
+            QString senderId = msgObj[kTIMMsgSender].toString();
+            
+            // 解析消息元素
+            if (!msgObj.contains(kTIMMsgElemArray) || !msgObj[kTIMMsgElemArray].isArray()) {
+                continue;
+            }
+            
+            QJsonArray elemArray = msgObj[kTIMMsgElemArray].toArray();
+            for (const QJsonValue& elemValue : elemArray) {
+                if (!elemValue.isObject()) continue;
+                
+                QJsonObject elemObj = elemValue.toObject();
+                int elemType = elemObj[kTIMElemType].toInt();
+                
+                QString senderName = senderId;
+                // 尝试从发送者信息中获取名称
+                if (msgObj.contains(kTIMMsgSenderProfile)) {
+                    QJsonObject senderProfile = msgObj[kTIMMsgSenderProfile].toObject();
+                    if (senderProfile.contains("user_profile_nick_name")) {
+                        senderName = senderProfile["user_profile_nick_name"].toString();
+                    }
+                }
+                
+                // 如果是自己的消息，已经显示过了，跳过
+                if (isFromSelf || senderId == userInfo.teacher_unique_id) {
+                    continue;
+                }
+                
+                // 根据元素类型处理
+                if (elemType == kTIMElem_Text) {
+                    QString text = elemObj[kTIMTextElemContent].toString();
+                    addTextMessage(":/res/img/home.png", senderName, text, false);
+                } else if (elemType == kTIMElem_Image) {
+                    // TODO: 处理图片消息
+                    addTextMessage(":/res/img/home.png", senderName, "[图片]", false);
+                } else if (elemType == kTIMElem_File) {
+                    // TODO: 处理文件消息
+                    addTextMessage(":/res/img/home.png", senderName, "[文件]", false);
+                } else if (elemType == kTIMElem_Sound) {
+                    // TODO: 处理语音消息
+                    addTextMessage(":/res/img/home.png", senderName, "[语音]", false);
+                }
+            }
+        }
+    }
+    
+    // 加载历史消息（包括离线消息）
+    void loadHistoryMessages()
+    {
+        if (m_unique_group_id.isEmpty()) return;
+        
+        // 构造获取消息参数
+        QJsonObject getMsgParam;
+        // 不指定 LastMsg，表示获取最新的消息
+        getMsgParam[kTIMMsgGetMsgListParamCount] = 100; // 获取最近100条消息
+        getMsgParam[kTIMMsgGetMsgListParamIsRamble] = true; // 开启漫游消息，会从云端拉取离线消息
+        getMsgParam[kTIMMsgGetMsgListParamIsForward] = false; // false表示获取比最新消息更旧的消息（历史消息）
+        
+        QJsonDocument doc(getMsgParam);
+        QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+        
+        // 创建回调数据结构
+        struct LoadHistoryCallbackData {
+            ChatDialog* dlg;
+            QString groupId;
+        };
+        LoadHistoryCallbackData* callbackData = new LoadHistoryCallbackData;
+        callbackData->dlg = this;
+        callbackData->groupId = m_unique_group_id;
+        
+        // 调用获取消息列表接口
+        QByteArray groupIdBytes = m_unique_group_id.toUtf8();
+        int ret = TIMMsgGetMsgList(groupIdBytes.constData(), kTIMConv_Group, jsonData.constData(),
+            [](int32_t code, const char* desc, const char* json_params, const void* user_data) {
+                LoadHistoryCallbackData* data = (LoadHistoryCallbackData*)user_data;
+                ChatDialog* dlg = data->dlg;
+                
+                if (code != TIM_SUCC) {
+                    QString errorDesc = QString::fromUtf8(desc ? desc : "未知错误");
+                    qDebug() << "加载历史消息失败，群组ID:" << data->groupId << "，错误码:" << code << "，描述:" << errorDesc;
+                    delete data;
+                    return;
+                }
+                
+                // 解析返回的消息列表
+                if (json_params) {
+                    QJsonParseError parseError;
+                    QJsonDocument doc = QJsonDocument::fromJson(QByteArray(json_params), &parseError);
+                    if (parseError.error == QJsonParseError::NoError && doc.isArray()) {
+                        QJsonArray msgArray = doc.array();
+                        qDebug() << "加载历史消息成功，群组ID:" << data->groupId << "，消息数量:" << msgArray.size();
+                        
+                        // 将历史消息添加到界面（按时间倒序，因为获取的是从新到旧）
+                        // 需要反转顺序，从旧到新显示
+                        QVector<QJsonObject> msgList;
+                        for (const QJsonValue& value : msgArray) {
+                            if (value.isObject()) {
+                                msgList.prepend(value.toObject()); // 使用prepend保持从旧到新的顺序
+                            }
+                        }
+                        
+                        // 批量显示历史消息
+                        UserInfo userInfo = CommonInfo::GetData();
+                        for (const QJsonObject& msgObj : msgList) {
+                            QString convId = msgObj[kTIMMsgConvId].toString();
+                            if (convId != data->groupId) continue; // 只处理当前群组的消息
+                            
+                            bool isFromSelf = msgObj[kTIMMsgIsFormSelf].toBool();
+                            QString senderId = msgObj[kTIMMsgSender].toString();
+                            
+                            if (!msgObj.contains(kTIMMsgElemArray) || !msgObj[kTIMMsgElemArray].isArray()) {
+                                continue;
+                            }
+                            
+                            QJsonArray elemArray = msgObj[kTIMMsgElemArray].toArray();
+                            for (const QJsonValue& elemValue : elemArray) {
+                                if (!elemValue.isObject()) continue;
+                                
+                                QJsonObject elemObj = elemValue.toObject();
+                                int elemType = elemObj[kTIMElemType].toInt();
+                                
+                                QString senderName = senderId;
+                                if (msgObj.contains(kTIMMsgSenderProfile)) {
+                                    QJsonObject senderProfile = msgObj[kTIMMsgSenderProfile].toObject();
+                                    if (senderProfile.contains("user_profile_nick_name")) {
+                                        senderName = senderProfile["user_profile_nick_name"].toString();
+                                    }
+                                }
+                                
+                                bool isMine = (isFromSelf || senderId == userInfo.teacher_unique_id);
+                                
+                                if (elemType == kTIMElem_Text) {
+                                    QString text = elemObj[kTIMTextElemContent].toString();
+                                    dlg->addTextMessage(":/res/img/home.png", senderName, text, isMine);
+                                } else if (elemType == kTIMElem_Image) {
+                                    dlg->addTextMessage(":/res/img/home.png", senderName, "[图片]", isMine);
+                                } else if (elemType == kTIMElem_File) {
+                                    dlg->addTextMessage(":/res/img/home.png", senderName, "[文件]", isMine);
+                                } else if (elemType == kTIMElem_Sound) {
+                                    dlg->addTextMessage(":/res/img/home.png", senderName, "[语音]", isMine);
+                                }
+                            }
+                        }
+                    } else {
+                        qDebug() << "解析历史消息JSON失败:" << parseError.errorString();
+                    }
+                }
+                
+                delete data;
+            }, callbackData);
+        
+        if (ret != TIM_SUCC) {
+            qDebug() << "调用TIMMsgGetMsgList失败，错误码:" << ret;
+            delete callbackData;
+        }
+    }
+
+    // 静态实例列表和回调注册标志（用于消息分发）
+    static QList<ChatDialog*>& getInstanceList()
+    {
+        static QList<ChatDialog*> s_instances;
+        return s_instances;
+    }
+    
+    // 静态函数：接收新消息回调（用于分发消息到所有实例）
+    static void staticRecvNewMsgCallback(const char* json_msg_array, const void* user_data)
+    {
+        // 分发消息到所有实例
+        QList<ChatDialog*>& instances = getInstanceList();
+        for (ChatDialog* dlg : instances) {
+            if (dlg) {
+                dlg->onRecvNewMsg(json_msg_array);
+            }
+        }
+    }
+    
+    // 注册/注销实例到静态列表（用于消息分发）
+    void registerInstance()
+    {
+        // 确保回调已注册（如果还没注册的话）
+        ensureCallbackRegistered();
+        
+        QList<ChatDialog*>& instances = getInstanceList();
+        
+        if (!instances.contains(this)) {
+            instances.append(this);
+        }
+    }
+    
+    void unregisterInstance()
+    {
+        QList<ChatDialog*>& instances = getInstanceList();
+        instances.removeAll(this);
     }
 
     TaQTWebSocket* m_pWs = NULL;
