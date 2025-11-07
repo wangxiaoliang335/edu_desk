@@ -27,7 +27,7 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId)
 
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     m_classTeacherDlg = new ClassTeacherDialog(this);
-    m_classTeacherDelDlg = new ClassTeacherDelDialog(this);
+    //m_classTeacherDelDlg = new ClassTeacherDelDialog(this);
     m_courseDlg = new CourseDialog();
     m_courseDlg->setWindowTitle("课程表");
     m_courseDlg->resize(800, 600);
@@ -226,14 +226,14 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
         if (!circleMinus) {
             circleMinus = new FriendButton("-", this);
             connect(circleMinus, &FriendButton::clicked, this, [this]() {
-                if (m_classTeacherDelDlg && m_classTeacherDelDlg->isHidden())
+                /*if (m_classTeacherDelDlg && m_classTeacherDelDlg->isHidden())
                 {
                     m_classTeacherDelDlg->show();
                 }
                 else
                 {
                     m_classTeacherDelDlg->hide();
-                }
+                }*/
             });
             circlesLayout->addWidget(circleMinus);
         }
@@ -277,6 +277,126 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
         insertIndex++; // 更新插入位置
     }
     
+    // 更新按钮状态（根据当前用户是否是群主）
+    updateButtonStates();
+}
+
+
+void QGroupInfo::InitGroupMember()
+{
+    if (m_groupMemberInfo.size() == 0)
+    {
+        return;
+    }
+
+    //m_groupNumberId = group_id;
+    //m_groupMemberInfo = groupMemberInfo;
+
+    // 清空之前的成员圆圈（保留 + 和 - 按钮）
+    if (circlesLayout) {
+        // 先找到 + 和 - 按钮，保存它们
+        FriendButton* circlePlus = nullptr;
+        FriendButton* circleMinus = nullptr;
+
+        // 遍历布局，找到 + 和 - 按钮，删除其他成员圆圈
+        QList<QLayoutItem*> itemsToRemove;
+        for (int i = 0; i < circlesLayout->count(); i++) {
+            QLayoutItem* item = circlesLayout->itemAt(i);
+            if (item && item->widget()) {
+                FriendButton* btn = qobject_cast<FriendButton*>(item->widget());
+                if (btn) {
+                    if (btn->text() == "+") {
+                        circlePlus = btn;
+                    }
+                    else if (btn->text() == "-") {
+                        circleMinus = btn;
+                    }
+                    else {
+                        // 成员圆圈，标记为删除
+                        itemsToRemove.append(item);
+                    }
+                }
+            }
+        }
+
+        // 删除成员圆圈
+        for (auto item : itemsToRemove) {
+            circlesLayout->removeItem(item);
+            if (item->widget()) {
+                item->widget()->deleteLater();
+            }
+            delete item;
+        }
+
+        // 如果 + 和 - 按钮不存在，创建它们
+        if (!circlePlus) {
+            circlePlus = new FriendButton("+", this);
+            connect(circlePlus, &FriendButton::clicked, this, [this]() {
+                if (m_classTeacherDlg && m_classTeacherDlg->isHidden())
+                {
+                    m_classTeacherDlg->show();
+                }
+                else
+                {
+                    m_classTeacherDlg->hide();
+                }
+                });
+            circlesLayout->addWidget(circlePlus);
+        }
+        if (!circleMinus) {
+            circleMinus = new FriendButton("-", this);
+            connect(circleMinus, &FriendButton::clicked, this, [this]() {
+                /*if (m_classTeacherDelDlg && m_classTeacherDelDlg->isHidden())
+                {
+                    m_classTeacherDelDlg->show();
+                }
+                else
+                {
+                    m_classTeacherDelDlg->hide();
+                }*/
+                });
+            circlesLayout->addWidget(circleMinus);
+        }
+    }
+
+    QString redStyle = "background-color:red; border-radius:25px; color:white; font-weight:bold;";
+    QString blueStyle = "background-color:blue; border-radius:25px; color:white; font-weight:bold;";
+
+    // 添加成员圆圈（在 + 和 - 按钮之前插入）
+    // 找到 + 按钮的位置，在它之前插入成员
+    int insertIndex = circlesLayout->count() - 2; // 在倒数第二个位置（+ 按钮之前）插入
+    if (insertIndex < 0) insertIndex = 0;
+
+    for (auto iter : m_groupMemberInfo)
+    {
+        FriendButton* circleBtn = nullptr;
+        if (iter.member_role == "群主")
+        {
+            circleBtn = new FriendButton("", this);
+            circleBtn->setStyleSheet(redStyle); // 群主用红色圆圈
+        }
+        else
+        {
+            circleBtn = new FriendButton("", this);
+            circleBtn->setStyleSheet(blueStyle); // 其他成员用蓝色圆圈
+        }
+
+        // 接收右键菜单信号
+        connect(circleBtn, &FriendButton::setLeaderRequested, this, []() {
+            qDebug() << "设为班主任";
+            });
+        connect(circleBtn, &FriendButton::cancelLeaderRequested, this, []() {
+            qDebug() << "取消班主任";
+            });
+
+        circleBtn->setText(iter.member_name);
+        circleBtn->setProperty("member_id", iter.member_id);
+
+        // 在 + 按钮之前插入成员圆圈
+        circlesLayout->insertWidget(insertIndex, circleBtn);
+        insertIndex++; // 更新插入位置
+    }
+
     // 更新按钮状态（根据当前用户是否是群主）
     updateButtonStates();
 }

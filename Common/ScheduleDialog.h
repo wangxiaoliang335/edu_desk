@@ -397,6 +397,7 @@ public:
 		connect(btnMore, &QPushButton::clicked, this, [=]() {
 			if (m_groupInfo && m_groupInfo->isHidden())
 			{
+				m_groupInfo->InitGroupMember();
 				m_groupInfo->show();
 			}
 			else if (m_groupInfo && !m_groupInfo->isHidden())

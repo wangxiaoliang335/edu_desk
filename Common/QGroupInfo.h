@@ -69,6 +69,7 @@ public:
 public:
     void initData(QString groupName, QString groupNumberId);
     void InitGroupMember(QString group_id, QVector<GroupMemberInfo> groupMemberInfo);
+    void InitGroupMember();
     QVector<GroupMemberInfo> getGroupMemberInfo() const { return m_groupMemberInfo; } // 获取当前成员列表
     
 signals:
@@ -86,7 +87,7 @@ private:
     QVector<GroupMemberInfo> m_groupMemberInfo;
     QHBoxLayout* circlesLayout = NULL;
     ClassTeacherDialog* m_classTeacherDlg = NULL;
-    ClassTeacherDelDialog* m_classTeacherDelDlg = NULL;
+    //ClassTeacherDelDialog* m_classTeacherDelDlg = NULL;
     CourseDialog* m_courseDlg;
     QPushButton* m_btnDismiss = nullptr; // 解散群聊按钮
     QPushButton* m_btnExit = nullptr; // 退出群聊按钮

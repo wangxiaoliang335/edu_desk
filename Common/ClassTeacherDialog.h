@@ -11,7 +11,6 @@
 #include <QTimer>
 #include <qbuttongroup.h>
 #include <qmessagebox.h>
-#include "ScheduleDialog.h"
 #include "TAHttpHandler.h"
 #include "CommonInfo.h"
 #include "TaQTWebSocket.h"
@@ -161,11 +160,7 @@ public:
                 });
         }
 
-        m_scheduleDlg = new ScheduleDialog(this, pWs);
-        m_scheduleDlg->InitWebSocket();
-
-        // 在创建对话框后立即建立连接，而不是等到按钮点击
-        //connectGroupLeftSignal(m_scheduleDlg, unique_group_id);
+        // m_scheduleDlg 已移至 FriendGroupDialog 中管理
 
         QVBoxLayout* mainLayout = new QVBoxLayout(this);
 
@@ -220,8 +215,6 @@ public:
         connect(btnCancel, &QPushButton::clicked, this, &QDialog::reject);
         //connect(btnOk, &QPushButton::clicked, this, &QDialog::accept);
         connect(btnOk, &QPushButton::clicked, this, [=]() {
-            if (m_scheduleDlg && m_scheduleDlg->isHidden())
-            {
             QAbstractButton* checked = classGroup->checkedButton();
             if (!checked) {
                 qWarning() << "没有选中的教师";
@@ -230,9 +223,13 @@ public:
 
             QString grade = checked->property("grade").toString();
             QString class_taught = checked->property("class_taught").toString();
-            m_scheduleDlg->InitData(grade + class_taught + "的班级群", "", true);
-            m_scheduleDlg->show();
-            }
+            QString groupName = grade + class_taught + "的班级群";
+            
+            // 发送信号通知 FriendGroupDialog 创建/初始化 ScheduleDialog
+            // 注意：这里暂时不传 groupId，因为此时群组还未创建
+            // 实际创建会在 groupCreated 信号中处理
+            emit scheduleDialogNeeded("", groupName);
+            
             accept();
         });
     }
@@ -305,6 +302,8 @@ public:
 
 signals:
     void groupCreated(const QString& groupId); // 群组创建并上传成功信号，通知父窗口刷新群列表
+    void scheduleDialogNeeded(const QString& groupId, const QString& groupName); // 需要创建/初始化ScheduleDialog的信号
+    void scheduleDialogRefreshNeeded(const QString& groupId); // 需要刷新ScheduleDialog成员列表的信号
 
 private:
     void clearLayout(QVBoxLayout* layout)
@@ -415,23 +414,7 @@ private:
             // 这里可以解析 JSON 或直接追加到聊天窗口
             //addTextMessage(":/avatar_teacher.png", "对方", msg, false);
             m_NoticeMsg.push_back(msg);
-            if (m_scheduleDlg)
-            {
-                QJsonParseError parseError;
-                QJsonDocument doc = QJsonDocument::fromJson(msg.toUtf8(), &parseError);
-                if (parseError.error != QJsonParseError::NoError) {
-                    qDebug() << "JSON parse error:" << parseError.errorString();
-                }
-                else {
-                    if (doc.isObject()) {
-                        QJsonObject obj = doc.object();
-                        if (obj["type"].toString() == 3)
-                        {
-                            obj["group_id"].toString();
-                        }
-                    }
-                }
-            }
+            // m_scheduleDlg 已移至 FriendGroupDialog 中管理，通知处理移至 FriendGroupDialog
         }
 
         void onConnected() {
@@ -789,17 +772,6 @@ private:
                                                                data->classUniqueId, data->userInfo);
                         }
                         
-                        // 如果ScheduleDialog已经打开，刷新成员列表
-                        // 延迟刷新成员列表，等待服务器上传完成
-                        if (data->dlg && data->dlg->m_scheduleDlg) {
-                            QTimer::singleShot(1000, data->dlg->m_scheduleDlg, [scheduleDlg = data->dlg->m_scheduleDlg, groupId]() {
-                                // 刷新成员列表：调用ScheduleDialog的public方法
-                                if (scheduleDlg) {
-                                    scheduleDlg->refreshMemberList(groupId);
-                                }
-                            });
-                        }
-                        
                         QMessageBox::information(data->dlg, "创建群组成功", 
                             QString("群组创建成功！\n群组ID: %1").arg(groupId));
                     }
@@ -874,7 +846,7 @@ private:
         memberInfo["readed_seq"] = 0; // 刚创建群组，已读消息序列号为0
         memberInfo["msg_flag"] = 0; // 消息接收选项，默认为0
         memberInfo["join_time"] = QDateTime::currentDateTime().toSecsSinceEpoch(); // 加入时间（创建时间）
-        memberInfo["self_role"] = (int)kTIMMemberRole_Owner; // 群主角色，确保是整数类型
+        memberInfo["self_role"] = (int)400; //kTIMMemberRole_Owner; // 群主角色，确保是整数类型 400是群主
         memberInfo["self_msg_flag"] = 0; // 自己的消息接收选项
         memberInfo["unread_num"] = 0; // 未读消息数，刚创建时为0
         memberInfo["user_name"] = userinfo.strName;
@@ -916,6 +888,16 @@ private:
                 // 发出群组创建成功信号，通知父窗口刷新群列表
                 if (self) {
                     emit self->groupCreated(groupId);
+                    
+                    // 发送信号通知 FriendGroupDialog 创建/初始化 ScheduleDialog
+                    emit self->scheduleDialogNeeded(groupId, groupName);
+                    
+                    // 发送信号通知 FriendGroupDialog 刷新 ScheduleDialog 成员列表
+                    QTimer::singleShot(1000, self, [self, groupId]() {
+                        if (self) {
+                            emit self->scheduleDialogRefreshNeeded(groupId);
+                        }
+                    });
                 }
             }
         }, Qt::UniqueConnection);
@@ -963,7 +945,6 @@ private:
     }
 
 private:
-    ScheduleDialog* m_scheduleDlg = NULL;
     TAHttpHandler* m_httpHandler = NULL;
     QVBoxLayout* teacherListLayout = NULL;
     QVBoxLayout* classListLayout = NULL;
