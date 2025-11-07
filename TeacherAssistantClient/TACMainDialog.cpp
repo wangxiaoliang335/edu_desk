@@ -8,6 +8,8 @@
 #include "ChatDialog.h"
 #include "CommonInfo.h"
 #include "common/Base.h"
+#include "GroupNotifyDialog.h"
+#include "FriendNotifyDialog.h"
 
 TaQTWebSocket* TACMainDialog::m_ws = NULL;
 
@@ -473,15 +475,18 @@ bool TACMainDialog::InitSDK() { //初始化ImSDK
     json_value_init[kTIMSdkConfigLogFilePath] = QString::fromStdString(Wide2UTF8(szTPath));
     json_value_init[kTIMSdkConfigConfigFilePath] = QString::fromStdString(Wide2UTF8(szTPath));
 
+    // 在TIMInit之前注册消息接收回调（确保能接收到离线消息）
+    ChatDialog::ensureCallbackRegistered();
+    
     QJsonDocument jsonInitDoc(json_value_init);
     QByteArray jsonInitBytes = jsonInitDoc.toJson(QJsonDocument::Compact);
     if (TIM_SUCC == TIMInit(sdk_app_id, jsonInitBytes.constData()))
     {
         qDebug() << "TIMInit succeeded!";
         
-        // 在登录前注册消息接收回调，确保能接收到离线消息
-        // 注意：需要在 InitSDK 之后、Login 之前注册，这样登录后拉取的离线消息才能通过回调接收
-        ChatDialog::ensureCallbackRegistered();
+        // 在TIMInit之后、登录之前注册群组和好友回调
+        GroupNotifyDialog::ensureCallbackRegistered();
+        FriendNotifyDialog::ensureCallbackRegistered();
         
         return true;
     }

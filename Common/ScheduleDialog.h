@@ -148,6 +148,7 @@ public:
 					else if (obj["data"].isObject())
 					{
 						QJsonObject dataObj = obj["data"].toObject();
+						QString group_id = dataObj["group_id"].toString();
 						
 						// 处理 /groups/members 接口返回的成员列表
 						if (dataObj["members"].isArray())
@@ -191,7 +192,7 @@ public:
 							// 设置到 m_groupInfo 对话框的好友列表
 							if (m_groupInfo)
 							{
-								m_groupInfo->InitGroupMember(m_groupMemberInfo);
+								m_groupInfo->InitGroupMember(group_id, m_groupMemberInfo);
 							}
 						}
 						else if (dataObj["joingroups"].isArray())
@@ -310,7 +311,7 @@ public:
 					
 					// 更新QGroupInfo的UI（使用更新后的成员列表）
 					if (m_groupInfo) {
-						m_groupInfo->InitGroupMember(m_groupMemberInfo);
+						m_groupInfo->InitGroupMember(groupId, m_groupMemberInfo);
 					}
 					
 					// 可选：重新从服务器获取成员列表以确保数据同步
@@ -874,6 +875,22 @@ public:
 			query.addQueryItem("group_id", unique_group_id);
 			url.setQuery(query);
 			m_httpHandler->get(url.toString());
+		}
+	}
+
+	// 刷新成员列表（从服务器获取最新成员列表）
+	void refreshMemberList(QString groupId)
+	{
+		m_unique_group_id = groupId;
+		if (m_httpHandler && !m_unique_group_id.isEmpty())
+		{
+			// 使用QUrl和QUrlQuery来正确编码URL参数（特别是#等特殊字符）
+			QUrl url("http://47.100.126.194:5000/groups/members");
+			QUrlQuery query;
+			query.addQueryItem("group_id", m_unique_group_id);
+			url.setQuery(query);
+			m_httpHandler->get(url.toString());
+			qDebug() << "刷新成员列表，群组ID:" << m_unique_group_id;
 		}
 	}
 

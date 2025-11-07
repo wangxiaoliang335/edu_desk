@@ -169,8 +169,9 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId)
     connect(m_btnDismiss, &QPushButton::clicked, this, &QGroupInfo::onDismissGroupClicked);
 }
 
-void QGroupInfo::InitGroupMember(QVector<GroupMemberInfo> groupMemberInfo)
+void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> groupMemberInfo)
 {
+    m_groupNumberId = group_id;
     m_groupMemberInfo = groupMemberInfo;
 
     // 清空之前的成员圆圈（保留 + 和 - 按钮）
@@ -372,7 +373,7 @@ void QGroupInfo::onExitGroupClicked()
                 dlg->m_groupMemberInfo = updatedMemberList;
                 
                 // 立即更新UI（移除退出的成员）
-                dlg->InitGroupMember(dlg->m_groupMemberInfo);
+                dlg->InitGroupMember(dlg->m_groupNumberId, dlg->m_groupMemberInfo);
                 
                 // 腾讯SDK成功，现在调用自己的服务器接口（传递退出的用户ID，用于后续处理）
                 dlg->sendExitGroupRequestToServer(data->groupId, data->userId, leftUserId);
