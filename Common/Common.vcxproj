@@ -161,6 +161,7 @@
     <QtMoc Include="MidtermGradeDialog.h" />
     <QtMoc Include="StudentPhysiqueDialog.h" />
     <QtMoc Include="ArrangeSeatDialog.h" />
+    <QtMoc Include="SeatingArrangementDialog.h" />
     <QtMoc Include="AvatarLabel.h" />
     <QtMoc Include="NameLabel.h" />
     <QtMoc Include="ChatDialog.h" />

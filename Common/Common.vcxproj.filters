@@ -333,6 +333,9 @@
     <QtMoc Include="ArrangeSeatDialog.h">
       <Filter>Header Files</Filter>
     </QtMoc>
+    <QtMoc Include="SeatingArrangementDialog.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
     <QtMoc Include="AvatarLabel.h">
       <Filter>Header Files</Filter>
     </QtMoc>

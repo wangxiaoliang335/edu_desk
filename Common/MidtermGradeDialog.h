@@ -30,6 +30,9 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <algorithm>
+#include <QTimer>
+#include "ArrangeSeatDialog.h"
+#include "SeatingArrangementDialog.h"
 
 class MidtermGradeDialog : public QDialog
 {
@@ -642,6 +645,9 @@ private slots:
                         
                         QMessageBox::information(this, "上传成功", 
                             QString("上传成功！\n\n%1\n共插入 %2 条记录").arg(message).arg(insertedCount));
+                        
+                        // 上传成功后自动打开排座窗口
+                        openSeatingArrangementDialog();
                     } else {
                         QString errorMsg = responseObj["message"].toString();
                         QMessageBox::warning(this, "上传失败", 
@@ -755,6 +761,78 @@ private:
                 table->setItem(row, col, rowsData[row][col]);
             }
         }
+    }
+
+    void openSeatingArrangementDialog()
+    {
+        // 从表格中读取学生数据
+        QList<StudentInfo> students;
+        
+        // 获取列索引
+        int colId = -1, colName = -1, colTotal = -1;
+        for (int col = 0; col < table->columnCount(); ++col) {
+            QTableWidgetItem* headerItem = table->horizontalHeaderItem(col);
+            if (!headerItem) continue;
+            QString headerText = headerItem->text();
+            if (headerText == "学号") colId = col;
+            else if (headerText == "姓名") colName = col;
+            else if (headerText == "总分") colTotal = col;
+        }
+        
+        if (colName < 0) {
+            QMessageBox::warning(this, "错误", "表格中缺少姓名列！");
+            return;
+        }
+        
+        // 读取每一行数据
+        for (int row = 0; row < table->rowCount(); ++row) {
+            QTableWidgetItem* nameItem = table->item(row, colName);
+            if (!nameItem || nameItem->text().trimmed().isEmpty()) {
+                continue; // 跳过空行
+            }
+            
+            StudentInfo student;
+            student.name = nameItem->text().trimmed();
+            if (colId >= 0) {
+                QTableWidgetItem* idItem = table->item(row, colId);
+                if (idItem) {
+                    student.id = idItem->text().trimmed();
+                }
+            }
+            
+            // 获取总分作为排序依据
+            if (colTotal >= 0) {
+                QTableWidgetItem* totalItem = table->item(row, colTotal);
+                if (totalItem && !totalItem->text().trimmed().isEmpty()) {
+                    bool ok;
+                    student.score = totalItem->text().toDouble(&ok);
+                    if (!ok) student.score = 0;
+                } else {
+                    student.score = 0;
+                }
+            } else {
+                student.score = 0;
+            }
+            
+            student.originalIndex = students.size();
+            students.append(student);
+        }
+        
+        if (students.isEmpty()) {
+            QMessageBox::warning(this, "错误", "没有有效的学生数据！");
+            return;
+        }
+        
+        // 直接打开排座窗口并自动执行排座（使用默认配置：不分组，随机排座）
+        SeatingArrangementDialog* seatDlg = new SeatingArrangementDialog(students, this);
+        seatDlg->setAttribute(Qt::WA_DeleteOnClose);
+        // 自动执行排座（使用默认配置：不分组，随机排座）
+        QTimer::singleShot(100, seatDlg, [seatDlg]() {
+            if (seatDlg) {
+                seatDlg->arrangeSeats();
+            }
+        });
+        seatDlg->show();
     }
 
     void showCellComment(int row, int column)
