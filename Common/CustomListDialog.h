@@ -20,13 +20,15 @@ class CustomListDialog : public QDialog
 {
     Q_OBJECT
 public:
-    CustomListDialog(QWidget *parent = nullptr) : QDialog(parent)
+    CustomListDialog(QString classid, QWidget *parent = nullptr) : QDialog(parent)
     {
         setWindowTitle("列表管理");
         resize(300, 200);
         setStyleSheet("background-color: #f5f5f5;");
 
-        m_midtermGradeDlg = new MidtermGradeDialog(this);
+        m_classid = classid;
+
+        m_midtermGradeDlg = new MidtermGradeDialog(classid, this);
         m_studentPhysiqueDlg = new StudentPhysiqueDialog(this);
 
         QVBoxLayout *mainLayout = new QVBoxLayout(this);
@@ -44,7 +46,7 @@ public:
             } else if (m_midtermGradeDlg && !m_midtermGradeDlg->isHidden()) {
                 m_midtermGradeDlg->hide();
             } else {
-                m_midtermGradeDlg = new MidtermGradeDialog(this);
+                m_midtermGradeDlg = new MidtermGradeDialog(classid, this);
                 m_midtermGradeDlg->show();
             }
         });
@@ -139,7 +141,7 @@ private slots:
         // 根据表格类型导入数据
         if (isMidtermGrade) {
             if (!m_midtermGradeDlg) {
-                m_midtermGradeDlg = new MidtermGradeDialog(this);
+                m_midtermGradeDlg = new MidtermGradeDialog(m_classid, this);
             }
             m_midtermGradeDlg->importData(headers, dataRows);
             
@@ -402,4 +404,5 @@ private:
 private:
     MidtermGradeDialog* m_midtermGradeDlg = nullptr;
     StudentPhysiqueDialog* m_studentPhysiqueDlg = nullptr;
+    QString m_classid;
 };

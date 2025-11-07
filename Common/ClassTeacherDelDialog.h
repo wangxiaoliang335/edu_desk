@@ -225,7 +225,7 @@ public:
 
             QString grade = checked->property("grade").toString();
             QString class_taught = checked->property("class_taught").toString();
-            m_scheduleDlg->InitData(grade + class_taught + "的班级群", "", true);
+            m_scheduleDlg->InitData(grade + class_taught + "的班级群", "", "", true);
             m_scheduleDlg->show();
             }
             accept();

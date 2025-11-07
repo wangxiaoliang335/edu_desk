@@ -44,6 +44,7 @@ struct StudentInfo {
     QString name;    // 姓名
     double score;    // 成绩（用于排序）
     int originalIndex; // 原始索引
+    QMap<QString, double> attributes; // 多个属性值（如"背诵"、"语文"等）
 };
 #endif
 
@@ -52,7 +53,7 @@ class MidtermGradeDialog : public QDialog
     Q_OBJECT
 
 public:
-    MidtermGradeDialog(QWidget* parent = nullptr);
+    MidtermGradeDialog(QString classid, QWidget* parent = nullptr);
     
     // 导入Excel数据
     void importData(const QStringList& headers, const QList<QStringList>& dataRows);
@@ -92,4 +93,5 @@ private:
     
     QSet<int> fixedColumns; // 固定列索引集合（不能删除的列）
     int nameColumnIndex; // 姓名列索引
+    QString m_classid;
 };
