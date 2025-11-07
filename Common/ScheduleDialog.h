@@ -7,6 +7,7 @@
 #include <QPushButton>
 #include <QTableWidget>
 #include <QHeaderView>
+#include <QVariant>
 #include <QFrame>
 #include <qfiledialog.h>
 #include <qdebug.h>
@@ -33,6 +34,19 @@
 #include "QGroupInfo.h"
 #include "TAHttpHandler.h"
 #include "ArrangeSeatDialog.h"
+#include <random>
+#include <algorithm>
+
+// 学生信息结构（用于排座）
+#ifndef STUDENT_INFO_DEFINED
+#define STUDENT_INFO_DEFINED
+struct StudentInfo {
+    QString id;      // 学号
+    QString name;    // 姓名
+    double score;    // 成绩（用于排序）
+    int originalIndex; // 原始索引
+};
+#endif
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -848,6 +862,10 @@ signals:
 	void groupLeft(const QString& groupId); // 群聊退出信号，通知父窗口刷新群列表
 
 public:
+	// 排座功能：根据学生数据自动排座
+	// method: "随机排座", "正序", "倒序", "2人组排座", "4人组排座", "6人组排座"
+	void arrangeSeats(const QList<StudentInfo>& students, const QString& method = "随机排座");
+	
 	void InitData(QString groupName, QString unique_group_id, bool iGroupOwner)
 	{
 		m_groupName = groupName;
@@ -1230,4 +1248,187 @@ private:
 	QVector<GroupMemberInfo>  m_groupMemberInfo;
 	QTableWidget* seatTable = nullptr; // 座位表格
 	ArrangeSeatDialog* arrangeSeatDlg = nullptr; // 排座对话框
+	QList<StudentInfo> m_students; // 学生数据
 };
+
+// 实现排座方法
+inline void ScheduleDialog::arrangeSeats(const QList<StudentInfo>& students, const QString& method)
+{
+	qDebug() << "arrangeSeats 被调用，学生数量:" << students.size() << "，排座方式:" << method;
+	
+	if (!seatTable) {
+		qDebug() << "错误：seatTable 为空！";
+		return;
+	}
+	
+	qDebug() << "seatTable 存在，开始排座...";
+	
+	m_students = students;
+	
+	// 获取所有座位按钮（标记为 isSeat 的按钮），按行列顺序排列
+	QList<QPushButton*> seatButtons;
+	for (int row = 0; row < 4; ++row) {
+		for (int col = 0; col < 11; ++col) {
+			QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
+			if (btn && btn->property("isSeat").toBool()) {
+				seatButtons.append(btn);
+			}
+		}
+	}
+	
+	qDebug() << "找到座位按钮数量:" << seatButtons.size();
+	
+	// 如果学生数量为0，清空所有座位
+	if (students.isEmpty()) {
+		for (QPushButton* btn : seatButtons) {
+			btn->setText("");
+			btn->setProperty("studentId", QVariant(""));
+			btn->setProperty("studentName", QVariant(""));
+		}
+		return;
+	}
+	
+	QList<StudentInfo> arrangedStudents;
+	
+	// 根据排座方式处理学生数据
+	if (method == "正序") {
+		// 按成绩从高到低排序
+		arrangedStudents = students;
+		std::sort(arrangedStudents.begin(), arrangedStudents.end(), 
+			[](const StudentInfo& a, const StudentInfo& b) {
+				return a.score > b.score; // 降序
+			});
+	} else if (method == "倒序") {
+		// 按成绩从低到高排序
+		arrangedStudents = students;
+		std::sort(arrangedStudents.begin(), arrangedStudents.end(), 
+			[](const StudentInfo& a, const StudentInfo& b) {
+				return a.score < b.score; // 升序
+			});
+	} else if (method == "随机排座") {
+		// 随机打乱学生顺序
+		arrangedStudents = students;
+		std::random_device rd;
+		std::mt19937 g(rd());
+		std::shuffle(arrangedStudents.begin(), arrangedStudents.end(), g);
+	} else if (method == "2人组排座") {
+		// 2人组：同桌帮扶
+		// 按成绩降序排列，然后相邻两人一组
+		arrangedStudents = students;
+		std::sort(arrangedStudents.begin(), arrangedStudents.end(), 
+			[](const StudentInfo& a, const StudentInfo& b) {
+				return a.score > b.score;
+			});
+		// 将相邻两人配对，然后打乱配对顺序
+		QList<QList<StudentInfo>> pairs;
+		for (int i = 0; i < arrangedStudents.size() - 1; i += 2) {
+			QList<StudentInfo> pair;
+			pair.append(arrangedStudents[i]);
+			pair.append(arrangedStudents[i + 1]);
+			pairs.append(pair);
+		}
+		// 如果学生数量为奇数，最后一个单独一组
+		if (arrangedStudents.size() % 2 == 1) {
+			QList<StudentInfo> pair;
+			pair.append(arrangedStudents.last());
+			pairs.append(pair);
+		}
+		// 打乱配对顺序
+		std::random_device rd;
+		std::mt19937 g(rd());
+		std::shuffle(pairs.begin(), pairs.end(), g);
+		// 展开配对
+		arrangedStudents.clear();
+		for (const QList<StudentInfo>& pair : pairs) {
+			arrangedStudents.append(pair);
+		}
+	} else if (method == "4人组排座" || method == "6人组排座") {
+		// 4人组或6人组：按成绩降序排列，然后分组
+		int groupSize = (method == "4人组排座") ? 4 : 6;
+		arrangedStudents = students;
+		std::sort(arrangedStudents.begin(), arrangedStudents.end(), 
+			[](const StudentInfo& a, const StudentInfo& b) {
+				return a.score > b.score;
+			});
+		
+		// 计算完整组数和剩余人数
+		int totalStudents = arrangedStudents.size();
+		int fullGroups = totalStudents / groupSize;
+		int remaining = totalStudents % groupSize;
+		
+		// 将学生分成 groupSize 等份
+		QList<QList<StudentInfo>> levels;
+		levels.reserve(groupSize);
+		for (int i = 0; i < groupSize; ++i) {
+			levels.append(QList<StudentInfo>());
+		}
+		
+		// 将前 fullGroups * groupSize 个学生分配到等份中
+		for (int i = 0; i < fullGroups * groupSize; ++i) {
+			int levelIndex = i % groupSize;
+			levels[levelIndex].append(arrangedStudents[i]);
+		}
+		
+		// 从每个等份中随机选取一个学生组成一组
+		QList<QList<StudentInfo>> groups;
+		std::random_device rd;
+		std::mt19937 g(rd());
+		
+		for (int groupIdx = 0; groupIdx < fullGroups; ++groupIdx) {
+			QList<StudentInfo> group;
+			for (int levelIdx = 0; levelIdx < groupSize; ++levelIdx) {
+				if (!levels[levelIdx].isEmpty()) {
+					// 随机选择一个学生
+					std::uniform_int_distribution<> dis(0, levels[levelIdx].size() - 1);
+					int randomIdx = dis(g);
+					group.append(levels[levelIdx][randomIdx]);
+					levels[levelIdx].removeAt(randomIdx);
+				}
+			}
+			groups.append(group);
+		}
+		
+		// 剩余学生组成最后一组
+		if (remaining > 0) {
+			QList<StudentInfo> lastGroup;
+			for (int i = fullGroups * groupSize; i < totalStudents; ++i) {
+				lastGroup.append(arrangedStudents[i]);
+			}
+			groups.append(lastGroup);
+		}
+		
+		// 打乱组顺序
+		std::shuffle(groups.begin(), groups.end(), g);
+		
+		// 展开组
+		arrangedStudents.clear();
+		for (const QList<StudentInfo>& group : groups) {
+			arrangedStudents.append(group);
+		}
+	} else {
+		// 默认随机排座
+		arrangedStudents = students;
+		std::random_device rd;
+		std::mt19937 g(rd());
+		std::shuffle(arrangedStudents.begin(), arrangedStudents.end(), g);
+	}
+	
+	// 将学生分配到座位上（从左到右，从上到下）
+	int studentIndex = 0;
+	for (QPushButton* btn : seatButtons) {
+		if (studentIndex < arrangedStudents.size()) {
+			const StudentInfo& student = arrangedStudents[studentIndex];
+			btn->setText(student.name); // 显示学生姓名
+			btn->setProperty("studentId", QVariant(student.id)); // 设置学号属性
+			btn->setProperty("studentName", QVariant(student.name));
+			qDebug() << "分配座位:" << student.name << "到按钮";
+			studentIndex++;
+		} else {
+			btn->setText("");
+			btn->setProperty("studentId", QVariant(""));
+			btn->setProperty("studentName", QVariant(""));
+		}
+	}
+	
+	qDebug() << "排座完成，共分配" << studentIndex << "个学生";
+}

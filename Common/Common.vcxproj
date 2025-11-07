@@ -189,6 +189,7 @@
     <ClCompile Include="common\TaskQueue.cpp" />
     <ClCompile Include="FriendGroupDialog.cpp" />
     <ClCompile Include="GenerateTestUserSig.cpp" />
+    <ClCompile Include="MidtermGradeDialog.cpp" />
     <ClCompile Include="ModalDialog.cpp" />
     <ClCompile Include="NameLabel.cpp" />
     <ClCompile Include="PwdLoginModalDialog.cpp" />
