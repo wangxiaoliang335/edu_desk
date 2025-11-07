@@ -446,59 +446,19 @@ public:
             qDebug() << "收到加入群组成功信号，刷新群列表，群组ID:" << groupId;
             this->InitData();
         });
-        // 连接群组创建成功信号，刷新群组列表
+        // 连接群组创建成功信号，刷新群组列表并关闭所有群聊窗口
         connect(addGroupWidget, &TACAddGroupWidget::groupCreated, this, [this](const QString& groupId) {
             qDebug() << "收到群组创建成功信号，刷新群列表，群组ID:" << groupId;
+            // 关闭所有已打开的群聊窗口
+            for (auto it = m_scheduleDlg.begin(); it != m_scheduleDlg.end(); ++it) {
+                if (it.value() && !it.value()->isHidden()) {
+                    it.value()->hide();
+                }
+            }
+            // 刷新群组列表
             this->InitData();
         });
-        // 连接ScheduleDialog创建/初始化信号
-        connect(addGroupWidget, &TACAddGroupWidget::scheduleDialogNeeded, this, [this](const QString& groupId, const QString& groupName) {
-            qDebug() << "收到ScheduleDialog创建/初始化信号，群组ID:" << groupId << "，群组名称:" << groupName;
-            // 如果groupId为空，说明是点击确定按钮时的初始化，此时群组还未创建
-            if (groupId.isEmpty()) {
-                // 创建一个临时的ScheduleDialog，使用空字符串作为键
-                // 在群组创建成功后，会将其移动到正确的groupId下
-                if (!m_scheduleDlg.contains("")) {
-                    m_scheduleDlg[""] = new ScheduleDialog(this, m_pWs);
-                    m_scheduleDlg[""]->InitWebSocket();
-                    m_scheduleDlg[""]->InitData(groupName, "", true);
-                    m_scheduleDlg[""]->show();
-                } else {
-                    // 如果已存在，更新它
-                    m_scheduleDlg[""]->InitData(groupName, "", true);
-                    m_scheduleDlg[""]->show();
-                }
-            } else {
-                // 群组已创建，检查是否有临时的ScheduleDialog需要移动
-                if (m_scheduleDlg.contains("") && m_scheduleDlg[""]) {
-                    // 将临时的ScheduleDialog移动到正确的groupId下
-                    ScheduleDialog* tempDlg = m_scheduleDlg[""];
-                    m_scheduleDlg.remove("");
-                    m_scheduleDlg[groupId] = tempDlg;
-                    tempDlg->InitData(groupName, groupId, true);
-                    connectGroupLeftSignal(tempDlg, groupId);
-                    tempDlg->show();
-                } else if (m_scheduleDlg.contains(groupId)) {
-                    // 群组已创建，ScheduleDialog已存在，更新它
-                    m_scheduleDlg[groupId]->InitData(groupName, groupId, true);
-                    m_scheduleDlg[groupId]->show();
-                } else {
-                    // 群组已创建，但ScheduleDialog还未创建，创建它
-                    m_scheduleDlg[groupId] = new ScheduleDialog(this, m_pWs);
-                    m_scheduleDlg[groupId]->InitWebSocket();
-                    m_scheduleDlg[groupId]->InitData(groupName, groupId, true);
-                    connectGroupLeftSignal(m_scheduleDlg[groupId], groupId);
-                    m_scheduleDlg[groupId]->show();
-                }
-            }
-        });
-        // 连接ScheduleDialog刷新成员列表信号
-        connect(addGroupWidget, &TACAddGroupWidget::scheduleDialogRefreshNeeded, this, [this](const QString& groupId) {
-            qDebug() << "收到ScheduleDialog刷新成员列表信号，群组ID:" << groupId;
-            if (m_scheduleDlg.contains(groupId) && m_scheduleDlg[groupId]) {
-                //m_scheduleDlg[groupId]->refreshMemberList(groupId);
-            }
-        });
+        // ScheduleDialog 不再自动创建，只在点击按钮时创建（在 makePairBtn 中处理）
         friendNotifyDlg = new FriendNotifyDialog(this);
         grpNotifyDlg = new GroupNotifyDialog(this);
         topLayout->addLayout(notifyLayout, 13);

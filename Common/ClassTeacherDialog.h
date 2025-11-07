@@ -221,15 +221,7 @@ public:
                 return;
             }
 
-            QString grade = checked->property("grade").toString();
-            QString class_taught = checked->property("class_taught").toString();
-            QString groupName = grade + class_taught + "的班级群";
-            
-            // 发送信号通知 FriendGroupDialog 创建/初始化 ScheduleDialog
-            // 注意：这里暂时不传 groupId，因为此时群组还未创建
-            // 实际创建会在 groupCreated 信号中处理
-            emit scheduleDialogNeeded("", groupName);
-            
+            // 不再发送 scheduleDialogNeeded 信号，ScheduleDialog 只在点击按钮时创建
             accept();
         });
     }
@@ -888,16 +880,6 @@ private:
                 // 发出群组创建成功信号，通知父窗口刷新群列表
                 if (self) {
                     emit self->groupCreated(groupId);
-                    
-                    // 发送信号通知 FriendGroupDialog 创建/初始化 ScheduleDialog
-                    emit self->scheduleDialogNeeded(groupId, groupName);
-                    
-                    // 发送信号通知 FriendGroupDialog 刷新 ScheduleDialog 成员列表
-                    QTimer::singleShot(1000, self, [self, groupId]() {
-                        if (self) {
-                            emit self->scheduleDialogRefreshNeeded(groupId);
-                        }
-                    });
                 }
             }
         }, Qt::UniqueConnection);
