@@ -437,6 +437,11 @@ public:
             qDebug() << "收到加入群组成功信号，刷新群列表，群组ID:" << groupId;
             this->InitData();
         });
+        // 连接群组创建成功信号，刷新群组列表
+        connect(addGroupWidget, &TACAddGroupWidget::groupCreated, this, [this](const QString& groupId) {
+            qDebug() << "收到群组创建成功信号，刷新群列表，群组ID:" << groupId;
+            this->InitData();
+        });
         friendNotifyDlg = new FriendNotifyDialog(this);
         grpNotifyDlg = new GroupNotifyDialog(this);
         topLayout->addLayout(notifyLayout, 13);

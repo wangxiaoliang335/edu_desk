@@ -22,6 +22,8 @@
 #include <QJsonParseError>
 #include <QMessageBox>
 #include <QDateTime>
+#include <QPointer>
+#include <QMetaObject>
 
 class ClassTeacherDialog : public QDialog
 {
@@ -276,6 +278,9 @@ public:
         //connect(heartbeatTimer, &QTimer::timeout, this, &ClassTeacherDialog::sendHeartbeat);
         //heartbeatTimer->start(5000); // 每 5 秒一次
     }
+
+signals:
+    void groupCreated(const QString& groupId); // 群组创建并上传成功信号，通知父窗口刷新群列表
 
 private:
     void clearLayout(QVBoxLayout* layout)
@@ -856,6 +861,30 @@ private:
         
         // 上传当前用户（群主）的群组信息到服务器
         QString url = "http://47.100.126.194:5000/groups/sync";
+        
+        // 创建一个临时连接来处理群组上传的响应
+        // 使用 QPointer 来安全地管理连接，避免悬空指针
+        QPointer<ClassTeacherDialog> self = this;
+        QMetaObject::Connection* conn = new QMetaObject::Connection;
+        *conn = connect(m_httpHandler, &TAHttpHandler::success, this, [=](const QString& responseString) {
+            // 检查响应是否包含群组信息（通过检查是否包含 "groups" 或 "group_id" 来判断）
+            // 这里简单判断：如果响应包含我们上传的 groupId，就认为是群组上传的响应
+            if (responseString.contains(groupId) || responseString.contains("\"code\":200") || responseString.contains("\"code\": 200")) {
+                qDebug() << "群组信息上传成功，响应:" << responseString;
+                
+                // 断开临时连接
+                if (conn && *conn) {
+                    disconnect(*conn);
+                    delete conn;
+                }
+                
+                // 发出群组创建成功信号，通知父窗口刷新群列表
+                if (self) {
+                    emit self->groupCreated(groupId);
+                }
+            }
+        }, Qt::UniqueConnection);
+        
         m_httpHandler->post(url, jsonData);
         qDebug() << "上传群主群组信息到服务器，群组ID:" << groupId;
         qDebug() << "上传JSON:" << QString::fromUtf8(jsonData);

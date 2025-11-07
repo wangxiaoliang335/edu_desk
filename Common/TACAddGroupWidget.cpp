@@ -16,6 +16,8 @@ TACAddGroupWidget::TACAddGroupWidget(QWidget *parent, TaQTWebSocket* pWs)
 	// 连接SearchDialog的加入群组成功信号，转发给FriendGroupDialog
 	connect(m_searchDlg, &SearchDialog::groupJoined, this, &TACAddGroupWidget::groupJoined);
 	m_classTeacherDlg = new ClassTeacherDialog(this, pWs);
+	// 连接ClassTeacherDialog的群组创建成功信号，转发给FriendGroupDialog
+	connect(m_classTeacherDlg, &ClassTeacherDialog::groupCreated, this, &TACAddGroupWidget::groupCreated);
 	this->setObjectName("TACDesktopManagerWidget");
 
 	this->setBackgroundColor(WIDGET_BACKGROUND_COLOR_C);
