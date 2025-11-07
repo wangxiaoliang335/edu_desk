@@ -548,6 +548,24 @@ public:
         return row;
     }
 
+    // 辅助函数：为 ScheduleDialog 建立群聊退出信号连接
+    void connectGroupLeftSignal(ScheduleDialog* scheduleDlg, const QString& groupId)
+    {
+        if (!scheduleDlg) return;
+        
+        // 连接群聊退出信号，当用户退出群聊时刷新群列表
+        connect(scheduleDlg, &ScheduleDialog::groupLeft, this, [this](const QString& leftGroupId) {
+            qDebug() << "收到群聊退出信号，刷新群列表，群组ID:" << leftGroupId;
+            // 从map中移除已关闭的群聊窗口
+            if (m_scheduleDlg.contains(leftGroupId)) {
+                m_scheduleDlg[leftGroupId]->deleteLater();
+                m_scheduleDlg.remove(leftGroupId);
+            }
+            // 刷新群列表
+            this->InitData();
+        }, Qt::UniqueConnection); // 使用 UniqueConnection 避免重复连接
+    }
+
     // 帮助函数：生成一行两个不同用途的按钮（如头像+昵称）
     QHBoxLayout* makePairBtn(const QString& leftText, const QString& rightText, const QString& bgColor, const QString& fgColor, QString unique_group_id, bool iGroupOwner)
     {
@@ -581,17 +599,8 @@ public:
                     }
                     m_scheduleDlg[unique_group_id]->setNoticeMsg(curNotification);
                     
-                    // 连接群聊退出信号，当用户退出群聊时刷新群列表
-                    connect(m_scheduleDlg[unique_group_id], &ScheduleDialog::groupLeft, this, [this](const QString& groupId) {
-                        qDebug() << "收到群聊退出信号，刷新群列表，群组ID:" << groupId;
-                        // 从map中移除已关闭的群聊窗口
-                        if (m_scheduleDlg.contains(groupId)) {
-                            m_scheduleDlg[groupId]->deleteLater();
-                            m_scheduleDlg.remove(groupId);
-                        }
-                        // 刷新群列表
-                        this->InitData();
-                    });
+                    // 在创建对话框后立即建立连接，而不是等到按钮点击
+                    connectGroupLeftSignal(m_scheduleDlg[unique_group_id], unique_group_id);
                 }
 
                 if (m_scheduleDlg[unique_group_id] && m_scheduleDlg[unique_group_id]->isHidden())
@@ -652,6 +661,13 @@ public:
         clearLayoutSafely(gAdminLayout);
         clearLayoutSafely(gJoinLayout);
         clearLayoutSafely(fLayout); // 也清空好友布局
+
+        // 确保所有已存在的 ScheduleDialog 都建立了群聊退出信号连接
+        for (auto it = m_scheduleDlg.begin(); it != m_scheduleDlg.end(); ++it) {
+            if (it.value()) {
+                connectGroupLeftSignal(it.value(), it.key());
+            }
+        }
 
         GetGroupJoinedList();
         if (m_httpHandler)

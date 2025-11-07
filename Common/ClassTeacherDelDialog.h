@@ -158,6 +158,10 @@ public:
 
         m_scheduleDlg = new ScheduleDialog(this, pWs);
         m_scheduleDlg->InitWebSocket();
+
+        // 在创建对话框后立即建立连接，而不是等到按钮点击
+        //connectGroupLeftSignal(m_scheduleDlg, unique_group_id);
+
         QVBoxLayout* mainLayout = new QVBoxLayout(this);
 
         //// 顶部黄色圆形数字标签
@@ -232,6 +236,24 @@ public:
     {
         return m_NoticeMsg;
     }
+
+    // 辅助函数：为 ScheduleDialog 建立群聊退出信号连接
+    //void connectGroupLeftSignal(ScheduleDialog* scheduleDlg, const QString& groupId)
+    //{
+    //    if (!scheduleDlg) return;
+
+    //    // 连接群聊退出信号，当用户退出群聊时刷新群列表
+    //    connect(scheduleDlg, &ScheduleDialog::groupLeft, this, [this](const QString& leftGroupId) {
+    //        qDebug() << "收到群聊退出信号，刷新群列表，群组ID:" << leftGroupId;
+    //        // 从map中移除已关闭的群聊窗口
+    //        if (m_scheduleDlg.contains(leftGroupId)) {
+    //            m_scheduleDlg[leftGroupId]->deleteLater();
+    //            m_scheduleDlg.remove(leftGroupId);
+    //        }
+    //        // 刷新群列表
+    //        this->InitData();
+    //        }, Qt::UniqueConnection); // 使用 UniqueConnection 避免重复连接
+    //}
 
     void InitWebSocket()
     {
