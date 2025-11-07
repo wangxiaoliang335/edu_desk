@@ -3147,7 +3147,7 @@ private:
             reply->ignoreSslErrors();
         });
         
-        connect(reply, &QNetworkReply::finished, this, [=, this]() {
+        connect(reply, &QNetworkReply::finished, this, [=]() {
             int error = reply->error();
             if (reply->error() == QNetworkReply::NoError) {
                 QByteArray imageData = reply->readAll();

@@ -23,6 +23,8 @@
 #include <QMessageBox>
 #include <QDateTime>
 #include <QPointer>
+#include <QUrl>
+#include <QUrlQuery>
 #include <QMetaObject>
 
 class ClassTeacherDialog : public QDialog
@@ -763,6 +765,17 @@ private:
                         if (data->dlg && data->dlg->m_httpHandler) {
                             data->dlg->uploadGroupInfoToServer(groupId, data->groupName, data->teacher_name, data->teacherUniqueId,
                                                                data->classUniqueId, data->userInfo);
+                        }
+                        
+                        // 如果ScheduleDialog已经打开，刷新成员列表
+                        // 延迟刷新成员列表，等待服务器上传完成
+                        if (data->dlg && data->dlg->m_scheduleDlg) {
+                            QTimer::singleShot(1000, data->dlg->m_scheduleDlg, [scheduleDlg = data->dlg->m_scheduleDlg, groupId]() {
+                                // 刷新成员列表：调用ScheduleDialog的public方法
+                                if (scheduleDlg) {
+                                    scheduleDlg->refreshMemberList(groupId);
+                                }
+                            });
                         }
                         
                         QMessageBox::information(data->dlg, "创建群组成功", 

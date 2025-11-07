@@ -175,7 +175,10 @@ public:
                     if (obj["friends"].isArray())
                     {
                         QJsonArray friendsArray = obj.value("friends").toArray();
-                        fLayout->addLayout(makeRowBtn("教师", QString::number(friendsArray.size()), "blue", "white"));
+                        // 只在布局为空时添加标题行，避免重复添加
+                        if (fLayout && fLayout->count() == 0) {
+                            fLayout->addLayout(makeRowBtn("教师", QString::number(friendsArray.size()), "blue", "white"));
+                        }
                         for (int i = 0; i < friendsArray.size(); i++)
                         {
                             QJsonObject friendObj = friendsArray.at(i).toObject();
@@ -245,7 +248,10 @@ public:
                         QJsonObject dataObj = obj["data"].toObject();
                         if (dataObj["groups"].isArray())
                         {
-                            gAdminLayout->addLayout(makeRowBtn("管理", "1", "orange", "black"));
+                            // 只在布局为空时添加标题行，避免重复添加
+                            if (gAdminLayout && gAdminLayout->count() == 0) {
+                                gAdminLayout->addLayout(makeRowBtn("管理", "1", "orange", "black"));
+                            }
                             QJsonArray groupArray = dataObj["groups"].toArray();
                             for (int i = 0; i < groupArray.size(); i++)
                             {
@@ -291,7 +297,10 @@ public:
                         }
                         else if (dataObj["joingroups"].isArray())
                         {
-                            gJoinLayout->addLayout(makeRowBtn("加入", "3", "orange", "black"));
+                            // 只在布局为空时添加标题行，避免重复添加
+                            if (gJoinLayout && gJoinLayout->count() == 0) {
+                                gJoinLayout->addLayout(makeRowBtn("加入", "3", "orange", "black"));
+                            }
                             QJsonArray groupArray = dataObj["joingroups"].toArray();
                             for (int i = 0; i < groupArray.size(); i++)
                             {
@@ -486,8 +495,8 @@ public:
         // 群聊界面
         QWidget* groupPage = new QWidget;
         gLayout = new QVBoxLayout(groupPage);
-        gAdminLayout = new QVBoxLayout(groupPage);
-        gJoinLayout = new QVBoxLayout(groupPage);
+        gAdminLayout = new QVBoxLayout; // 创建独立布局，不指定父对象
+        gJoinLayout = new QVBoxLayout; // 创建独立布局，不指定父对象
         gLayout->setSpacing(10);
         //gLayout->addLayout(makePairBtn("群头像", "群昵称", "white", "red"));
         //gLayout->addLayout(makePairBtn("群头像", "群昵称", "white", "red"));
@@ -642,6 +651,7 @@ public:
         
         clearLayoutSafely(gAdminLayout);
         clearLayoutSafely(gJoinLayout);
+        clearLayoutSafely(fLayout); // 也清空好友布局
 
         GetGroupJoinedList();
         if (m_httpHandler)

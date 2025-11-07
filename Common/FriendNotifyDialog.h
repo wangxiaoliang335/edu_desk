@@ -1,4 +1,6 @@
-﻿#include <QApplication>
+﻿#pragma once
+
+#include <QApplication>
 #include <QDialog>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -9,11 +11,28 @@
 #include <QJsonParseError>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QDateTime>
+#include <QDebug>
+#include <QMetaObject>
+#include "ImSDK/includes/TIMCloud.h"
+#include "ImSDK/includes/TIMCloudDef.h"
+#include "ImSDK/includes/TIMCloudCallback.h"
 
 class FriendNotifyDialog : public QDialog
 {
     Q_OBJECT
 public:
+    // 静态方法：提前注册好友添加请求回调（应在TIMInit之前调用）
+    static void ensureCallbackRegistered()
+    {
+        static bool s_callbackRegistered = false;
+        if (!s_callbackRegistered) {
+            TIMSetFriendAddRequestCallback(staticFriendAddRequestCallback, nullptr);
+            s_callbackRegistered = true;
+            qDebug() << "FriendNotifyDialog: 好友添加请求回调已注册（TIMInit之前）";
+        }
+    }
+
     FriendNotifyDialog(QWidget* parent = nullptr) : QDialog(parent)
     {
         setWindowTitle("好友通知");
@@ -37,8 +56,85 @@ public:
         titleLayout->addWidget(btnFilter);
         titleLayout->addWidget(btnDelete);
         mainLayout->addLayout(titleLayout);
+        
+        // 设置静态实例指针（用于全局回调发出信号）
+        s_instance() = this;
+        
+        // 连接全局信号，接收好友添加请求
+        connect(this, &FriendNotifyDialog::friendAddRequestReceived, this, &FriendNotifyDialog::onFriendAddRequestReceived);
     }
 
+signals:
+    // 好友添加请求信号（用于全局回调通知）
+    void friendAddRequestReceived(const QString& name, const QString& remark, 
+                                 const QString& date, const QString& identifier);
+
+private:
+    // 静态回调函数（在TIMInit之前注册）
+    static void staticFriendAddRequestCallback(const char* json_friend_add_request_pendency_array, const void* user_data)
+    {
+        if (!s_instance()) return;
+        
+        // 解析JSON数组
+        QJsonParseError parseError;
+        QJsonDocument doc = QJsonDocument::fromJson(QByteArray(json_friend_add_request_pendency_array), &parseError);
+        if (parseError.error != QJsonParseError::NoError) {
+            qDebug() << "好友添加请求JSON解析失败:" << parseError.errorString();
+            return;
+        }
+        
+        if (!doc.isArray()) {
+            qDebug() << "好友添加请求数据不是数组";
+            return;
+        }
+        
+        QJsonArray pendencyArray = doc.array();
+        for (const QJsonValue& value : pendencyArray) {
+            if (!value.isObject()) continue;
+            
+            QJsonObject pendencyObj = value.toObject();
+            
+            // 获取请求信息
+            QString identifier = pendencyObj[kTIMFriendAddPendencyIdentifier].toString();
+            QString nickName = pendencyObj[kTIMFriendAddPendencyNickName].toString();
+            QString addSource = pendencyObj[kTIMFriendAddPendencyAddSource].toString();
+            QString addWording = pendencyObj[kTIMFriendAddPendencyAddWording].toString();
+            
+            // 如果昵称为空，使用UserID
+            if (nickName.isEmpty()) {
+                nickName = identifier;
+            }
+            
+            // 获取当前时间
+            QDateTime currentTime = QDateTime::currentDateTime();
+            QString timeStr = currentTime.toString("yyyy/MM/dd");
+            
+            // 发出全局信号，通知所有FriendNotifyDialog实例（使用QMetaObject::invokeMethod确保线程安全）
+            if (s_instance()) {
+                QMetaObject::invokeMethod(s_instance(), "onFriendAddRequestReceived", Qt::QueuedConnection,
+                    Q_ARG(QString, nickName),
+                    Q_ARG(QString, addWording),
+                    Q_ARG(QString, timeStr),
+                    Q_ARG(QString, identifier));
+            }
+        }
+    }
+    
+    // 信号槽处理函数
+    void onFriendAddRequestReceived(const QString& name, const QString& remark, 
+                                   const QString& date, const QString& identifier)
+    {
+        addFriendRequestItem(name, remark, date, identifier);
+    }
+    
+    // 静态实例指针（用于发出信号）- 使用函数返回引用避免C++17要求
+    static FriendNotifyDialog*& s_instance()
+    {
+        static FriendNotifyDialog* instance = nullptr;
+        return instance;
+    }
+
+public:
     void InitData(QVector<QString> vecMsg = QVector<QString>())
     {
         if (m_bInit == true)
@@ -111,6 +207,91 @@ public:
         scroll->setWidget(container);
         mainLayout->addWidget(scroll);
         m_bInit = true;
+    }
+
+private slots:
+    // 添加好友请求项（在主线程中调用）
+    void addFriendRequestItem(const QString& name, const QString& remark, 
+                             const QString& date, const QString& identifier)
+    {
+        // 检查是否已经初始化了UI
+        if (!listLayout) {
+            // 如果还没有初始化，先初始化UI
+            scroll = new QScrollArea;
+            scroll->setWidgetResizable(true);
+            container = new QWidget;
+            listLayout = new QVBoxLayout(container);
+            listLayout->setSpacing(10);
+            listLayout->addStretch();
+            scroll->setWidget(container);
+            mainLayout->addWidget(scroll);
+        }
+        
+        // 在stretch之前插入新项
+        int insertIndex = listLayout->count() - 1; // 在stretch之前
+        if (insertIndex < 0) insertIndex = 0;
+        
+        // 创建临时布局来插入
+        QFrame* itemFrame = new QFrame;
+        itemFrame->setStyleSheet("background-color: white; border-radius: 8px;");
+        QVBoxLayout* outerLayout = new QVBoxLayout(itemFrame);
+
+        // 第一行：头像 + 名称 + 请求 + 日期
+        QHBoxLayout* topLayout = new QHBoxLayout;
+        QLabel* avatar = new QLabel("头像");
+        avatar->setFixedSize(50, 50);
+        avatar->setStyleSheet("background-color: lightgray; border-radius: 25px; text-align:center;");
+        QLabel* lblName = new QLabel(QString("<b style='color:#0055cc'>%1</b> 请求加为好友").arg(name));
+        QLabel* lblDate = new QLabel(date);
+        lblDate->setStyleSheet("color: gray;");
+        topLayout->addWidget(avatar);
+        topLayout->addWidget(lblName);
+        topLayout->addStretch();
+        topLayout->addWidget(lblDate);
+        outerLayout->addLayout(topLayout);
+
+        // 备注信息
+        if (!remark.isEmpty()) {
+            QLabel* lblRemark = new QLabel("留言: " + remark);
+            lblRemark->setWordWrap(true);
+            lblRemark->setStyleSheet("color: gray;");
+            outerLayout->addWidget(lblRemark);
+        }
+
+        // 同意按钮
+        QPushButton* agreeBtn = new QPushButton("同意");
+        agreeBtn->setStyleSheet(
+            "QPushButton {"
+            "    color: gray;"
+            "    border: 1px solid gray;"
+            "    border-radius: 6px;"
+            "    padding: 6px 12px;"
+            "    background-color: white;"
+            "}"
+            "QPushButton:hover {"
+            "    color: black;"
+            "    border: 1px solid #409EFF;"
+            "}"
+            "QPushButton:pressed {"
+            "    background-color: #f2f2f2;"
+            "    border: 1px solid #66b1ff;"
+            "}"
+        );
+        outerLayout->addWidget(agreeBtn, 0, Qt::AlignRight);
+        
+        // 连接同意按钮的点击事件
+        QObject::connect(agreeBtn, &QPushButton::clicked, [agreeBtn, outerLayout, identifier, this]() {
+            // TODO: 调用腾讯IM SDK的同意好友请求接口
+            qDebug() << "同意好友请求，UserID:" << identifier;
+            
+            // 替换为"已同意"标签
+            QLabel* label = new QLabel("已同意");
+            label->setStyleSheet("color: green; font-weight: bold;");
+            outerLayout->replaceWidget(agreeBtn, label);
+            agreeBtn->deleteLater();
+        });
+        
+        listLayout->insertWidget(insertIndex, itemFrame);
     }
 
 private:
@@ -207,3 +388,4 @@ private:
     QVBoxLayout* listLayout = NULL;
     bool m_bInit = false;
 };
+
