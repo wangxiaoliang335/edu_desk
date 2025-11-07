@@ -110,6 +110,7 @@ public:
                                 QJsonObject groupObj = ownerGroupsArray[i].toObject();
                                 QString groupId = groupObj["group_id"].toString();
                                 QString groupName = groupObj["group_name"].toString();
+                                QString classid = groupObj["classid"].toString();
                                 
                                 // 处理群组头像（如果有）
                                 QString avatarPath = "";
@@ -129,7 +130,7 @@ public:
                                 
                                 // 添加到管理布局（群主群组）
                                 if (gAdminLayout) {
-                                    gAdminLayout->addLayout(makePairBtn(avatarPath, groupName, "white", "red", groupId, true));
+                                    gAdminLayout->addLayout(makePairBtn(avatarPath, groupName, "white", "red", groupId, classid, true));
                                 }
                             }
                         }
@@ -146,6 +147,7 @@ public:
                                 QJsonObject groupObj = memberGroupsArray[i].toObject();
                                 QString groupId = groupObj["group_id"].toString();
                                 QString groupName = groupObj["group_name"].toString();
+                                QString classid = groupObj["classid"].toString();
                                 
                                 // 处理群组头像（如果有）
                                 QString avatarPath = "";
@@ -165,7 +167,7 @@ public:
                                 
                                 // 添加到加入布局（非群主群组）
                                 if (gJoinLayout) {
-                                    gJoinLayout->addLayout(makePairBtn(avatarPath, groupName, "white", "red", groupId, false));
+                                    gJoinLayout->addLayout(makePairBtn(avatarPath, groupName, "white", "red", groupId, classid, false));
                                 }
                             }
                         }
@@ -231,7 +233,7 @@ public:
 
                             if (fLayout)
                             {
-                                fLayout->addLayout(makePairBtn(filePath, name, "green", "white", "", false));
+                                fLayout->addLayout(makePairBtn(filePath, name, "green", "white", "", "", false));
                             }
                             /********************************************/
                         }
@@ -259,6 +261,7 @@ public:
                                 QString unique_group_id = groupObj.value("unique_group_id").toString();
                                 QString avatar_base64 = groupObj.value("avatar_base64").toString();
                                 QString headImage_path = groupObj.value("headImage_path").toString();
+                                QString classid = groupObj["classid"].toString();
 
                                 //// 假设 avatarBase64 是 QString 类型，从 HTTP 返回的 JSON 中拿到
                                 //QByteArray imageData = QByteArray::fromBase64(avatar_base64.toUtf8());
@@ -292,7 +295,7 @@ public:
                                 //lblAvatar->setPixmap(pixmap.scaled(lblAvatar->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
                                 //lblAvatar->setScaledContents(true);
 
-                                gAdminLayout->addLayout(makePairBtn(filePath, groupObj.value("nickname").toString(), "white", "red", unique_group_id, true));
+                                gAdminLayout->addLayout(makePairBtn(filePath, groupObj.value("nickname").toString(), "white", "red", unique_group_id, classid, true));
                             }
                         }
                         else if (dataObj["joingroups"].isArray())
@@ -308,6 +311,8 @@ public:
                                 QString unique_group_id = groupObj.value("unique_group_id").toString();
                                 QString avatar_base64 = groupObj.value("avatar_base64").toString();
                                 QString headImage_path = groupObj.value("headImage_path").toString();
+                                QString classid = groupObj["classid"].toString();
+
                                 //// 假设 avatarBase64 是 QString 类型，从 HTTP 返回的 JSON 中拿到
                                 //QByteArray imageData = QByteArray::fromBase64(avatar_base64.toUtf8());
                                 //QPixmap pixmap;
@@ -340,7 +345,7 @@ public:
                                 //lblAvatar->setPixmap(pixmap.scaled(lblAvatar->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
                                 //lblAvatar->setScaledContents(true);
 
-                                gJoinLayout->addLayout(makePairBtn(filePath, groupObj.value("nickname").toString(), "white", "red", unique_group_id, false));
+                                gJoinLayout->addLayout(makePairBtn(filePath, groupObj.value("nickname").toString(), "white", "red", unique_group_id, classid, false));
                             }
                         }
                     }
@@ -494,8 +499,8 @@ public:
         fLayout = new QVBoxLayout(friendPage);
         fLayout->setSpacing(10);
         fLayout->addLayout(makeRowBtn("班级", "3", "blue", "white"));
-        fLayout->addLayout(makePairBtn("班级头像", "班级昵称", "orange", "black", "", false));
-        fLayout->addLayout(makePairBtn("班级头像", "班级昵称", "orange", "black", "", false));
+        fLayout->addLayout(makePairBtn("班级头像", "班级昵称", "orange", "black", "", "", false));
+        fLayout->addLayout(makePairBtn("班级头像", "班级昵称", "orange", "black", "", "", false));
         //fLayout->addLayout(makeRowBtn("教师", "3", "blue", "white"));
         //fLayout->addLayout(makePairBtn("老师头像", "老师昵称", "green", "white"));
         //fLayout->addLayout(makePairBtn("老师头像", "老师昵称", "green", "white"));
@@ -575,7 +580,7 @@ public:
     }
 
     // 帮助函数：生成一行两个不同用途的按钮（如头像+昵称）
-    QHBoxLayout* makePairBtn(const QString& leftText, const QString& rightText, const QString& bgColor, const QString& fgColor, QString unique_group_id, bool iGroupOwner)
+    QHBoxLayout* makePairBtn(const QString& leftText, const QString& rightText, const QString& bgColor, const QString& fgColor, QString unique_group_id, QString classid, bool iGroupOwner)
     {
         QHBoxLayout* pair = new QHBoxLayout;
         QPushButton* left = new QPushButton();
@@ -586,13 +591,15 @@ public:
         right->setStyleSheet(style);
         pair->addWidget(left);
         left->setProperty("unique_group_id", unique_group_id);
-        left->setProperty("iGroupOwner", iGroupOwner);
+        left->setProperty("iGroupOwner", iGroupOwner);   
+        left->setProperty("classid", classid);
         right->setProperty("unique_group_id", unique_group_id);
         right->setProperty("iGroupOwner", iGroupOwner);
+        right->setProperty("classid", classid);
         pair->addWidget(right);
         if (!unique_group_id.isEmpty())
         {
-            connect(left, &QPushButton::clicked, this, [this, rightText, unique_group_id, iGroupOwner]() {
+            connect(left, &QPushButton::clicked, this, [this, rightText, unique_group_id, classid, iGroupOwner]() {
                 if (!m_scheduleDlg[unique_group_id])
                 {
                     m_scheduleDlg[unique_group_id] = new ScheduleDialog(this, m_pWs);
@@ -613,7 +620,7 @@ public:
 
                 if (m_scheduleDlg[unique_group_id] && m_scheduleDlg[unique_group_id]->isHidden())
                 {
-                    m_scheduleDlg[unique_group_id]->InitData(rightText, unique_group_id, iGroupOwner);
+                    m_scheduleDlg[unique_group_id]->InitData(rightText, unique_group_id, classid, iGroupOwner);
                     m_scheduleDlg[unique_group_id]->show();
                 }
                 else

@@ -34,6 +34,11 @@
 #include "QGroupInfo.h"
 #include "TAHttpHandler.h"
 #include "ArrangeSeatDialog.h"
+// 前向声明，避免循环依赖
+class HeatmapSegmentDialog;
+class HeatmapViewDialog;
+// SegmentRange 定义在 HeatmapTypes.h 中
+#include "HeatmapTypes.h"
 #include <random>
 #include <algorithm>
 
@@ -45,6 +50,7 @@ struct StudentInfo {
     QString name;    // 姓名
     double score;    // 成绩（用于排序）
     int originalIndex; // 原始索引
+    QMap<QString, double> attributes; // 多个属性值（如"背诵"、"语文"等）
 };
 #endif
 
@@ -286,7 +292,7 @@ public:
 
 		m_pWs = pWs;
 		m_chatDlg = new ChatDialog(this, m_pWs);
-		customListDlg = new CustomListDialog(this);
+		customListDlg = new CustomListDialog(m_classid, this);
 		QVBoxLayout* mainLayout = new QVBoxLayout(this);
 		m_groupInfo = new QGroupInfo(this);
 		
@@ -432,6 +438,9 @@ public:
 		topLayout->addStretch();
 		topLayout->addWidget(btnMore);
 		mainLayout->addLayout(topLayout);
+		
+		// 连接作业按钮（教师端编辑作业）
+		connectHomeworkButton(btnTask);
 
 		// 时间 + 科目行
 		QHBoxLayout* timeLayout = new QHBoxLayout;
@@ -522,11 +531,19 @@ public:
 		btnHeatmap->setStyleSheet(greenStyle);
 		btnArrange->setStyleSheet(greenStyle);
 
+		// 作业展示按钮（班级端快捷按钮）
+		QPushButton* btnHomeworkView = new QPushButton("作业");
+		btnHomeworkView->setStyleSheet(greenStyle);
+		connect(btnHomeworkView, &QPushButton::clicked, this, [this]() {
+			showHomeworkViewDialog();
+		});
+		
 		middleBtnLayout->addStretch();
 		middleBtnLayout->addWidget(btnRandom);
 		middleBtnLayout->addWidget(btnAnalyse);
 		middleBtnLayout->addWidget(btnHeatmap);
 		middleBtnLayout->addWidget(btnArrange);
+		middleBtnLayout->addWidget(btnHomeworkView); // 添加快捷按钮
 		middleBtnLayout->addStretch();
 		middleBtnLayout->addWidget(btnMoreBottom);
 
@@ -545,6 +562,51 @@ public:
 				arrangeSeatDlg = new ArrangeSeatDialog(this);
 				arrangeSeatDlg->show();
 			}
+		});
+		
+		// 连接随机点名按钮点击事件
+		connectRandomCallButton(btnRandom, seatTable);
+		
+		// 连接热力图按钮点击事件
+		connect(btnHeatmap, &QPushButton::clicked, this, [=]() {
+			// 检查是否有学生数据（必须上传期中成绩）
+			if (m_students.isEmpty()) {
+				QMessageBox::information(this, "提示", "请先上传期中成绩表！");
+				return;
+			}
+			
+			// 显示热力图选择对话框
+			QDialog* typeDialog = new QDialog(this);
+			typeDialog->setWindowTitle("选择热力图类型");
+			typeDialog->setModal(true);
+			typeDialog->resize(300, 150);
+			
+			QVBoxLayout* typeLayout = new QVBoxLayout(typeDialog);
+			QLabel* lblTitle = new QLabel("请选择热力图类型：");
+			typeLayout->addWidget(lblTitle);
+			
+			QPushButton* btnSegment = new QPushButton("分段图1（每一段一种颜色）");
+			QPushButton* btnGradient = new QPushButton("热力图2（颜色渐变）");
+			QPushButton* btnCancel = new QPushButton("取消");
+			
+			typeLayout->addWidget(btnSegment);
+			typeLayout->addWidget(btnGradient);
+			typeLayout->addWidget(btnCancel);
+			
+			connect(btnSegment, &QPushButton::clicked, typeDialog, [=]() {
+				typeDialog->accept();
+				this->showSegmentDialog();
+			});
+			
+			connect(btnGradient, &QPushButton::clicked, typeDialog, [=]() {
+				typeDialog->accept();
+				this->showGradientHeatmap();
+			});
+			
+			connect(btnCancel, &QPushButton::clicked, typeDialog, &QDialog::reject);
+			
+			typeDialog->exec();
+			typeDialog->deleteLater();
 		});
 
 		// ===== 讲台区域 =====
@@ -866,10 +928,16 @@ public:
 	// method: "随机排座", "正序", "倒序", "2人组排座", "4人组排座", "6人组排座"
 	void arrangeSeats(const QList<StudentInfo>& students, const QString& method = "随机排座");
 	
-	void InitData(QString groupName, QString unique_group_id, bool iGroupOwner)
+	// 热力图相关方法
+	void showSegmentDialog(); // 显示分段区间设置对话框
+	void showGradientHeatmap(); // 显示渐变热力图
+	void setSegments(const QList<struct SegmentRange>& segments); // 设置分段区间
+	
+	void InitData(QString groupName, QString unique_group_id, QString classid, bool iGroupOwner)
 	{
 		m_groupName = groupName;
 		m_unique_group_id = unique_group_id;
+		m_classid = classid;
 		m_iGroupOwner = iGroupOwner;
 		if (m_lblClass)
 		{
@@ -1227,6 +1295,7 @@ private:
 	ChatDialog* m_chatDlg = NULL;
 	TaQTWebSocket* m_pWs = NULL;
 	bool m_iGroupOwner = false;
+	QString m_classid;
 	QAudioInput* audioInput = nullptr;
 	QIODevice* inputDevice = nullptr;
 	AVCodecContext* codecCtx = nullptr;
@@ -1249,6 +1318,25 @@ private:
 	QTableWidget* seatTable = nullptr; // 座位表格
 	ArrangeSeatDialog* arrangeSeatDlg = nullptr; // 排座对话框
 	QList<StudentInfo> m_students; // 学生数据
+	
+	// 热力图相关
+	class HeatmapSegmentDialog* heatmapSegmentDlg = nullptr; // 分段区间对话框
+	class HeatmapViewDialog* heatmapViewDlg = nullptr; // 热力图显示窗口
+	QList<struct SegmentRange> m_segments; // 分段区间列表
+	int m_heatmapType = 1; // 1=分段，2=渐变
+	
+	// 随机点名相关
+	class RandomCallDialog* randomCallDlg = nullptr; // 随机点名对话框
+	void connectRandomCallButton(QPushButton* btnRandom, QTableWidget* seatTable); // 连接随机点名按钮
+	
+	// 作业相关
+	class HomeworkEditDialog* homeworkEditDlg = nullptr; // 编辑作业对话框
+	class HomeworkViewDialog* homeworkViewDlg = nullptr; // 展示作业对话框
+	void connectHomeworkButton(QPushButton* btnTask); // 连接作业按钮（教师端）
+	void showHomeworkViewDialog(); // 显示作业展示窗口（班级端）
+	
+	// 更新座位颜色（根据分段或渐变）
+	void updateSeatColors();
 };
 
 // 实现排座方法
@@ -1432,3 +1520,5 @@ inline void ScheduleDialog::arrangeSeats(const QList<StudentInfo>& students, con
 	
 	qDebug() << "排座完成，共分配" << studentIndex << "个学生";
 }
+
+// 热力图相关方法的实现在 ScheduleDialog_Heatmap.cpp 中
