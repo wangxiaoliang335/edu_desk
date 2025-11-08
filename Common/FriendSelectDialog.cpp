@@ -386,8 +386,30 @@ void FriendSelectDialog::inviteMembersToServer(const QVector<QString>& memberIds
         return;
     }
     
+    if (memberIds.isEmpty()) {
+        // 如果没有成员需要上传，直接发出信号
+        emit membersInvitedSuccess(m_groupId);
+        return;
+    }
+    
     UserInfo userInfo = CommonInfo::GetData();
     QString url = "http://47.100.126.194:5000/groups/sync";
+    
+    // 使用共享指针来跟踪所有请求的状态
+    struct UploadState {
+        int totalCount;
+        int successCount;
+        int failCount;
+        FriendSelectDialog* dlg;
+        QString groupId;
+    };
+    
+    UploadState* state = new UploadState;
+    state->totalCount = memberIds.size();
+    state->successCount = 0;
+    state->failCount = 0;
+    state->dlg = this;
+    state->groupId = m_groupId;
     
     // 为每个被邀请的成员创建群组信息并上传
     for (int i = 0; i < memberIds.size(); i++) {
@@ -461,9 +483,22 @@ void FriendSelectDialog::inviteMembersToServer(const QVector<QString>& memberIds
         connect(reply, &QNetworkReply::finished, [=]() {
             if (reply->error() == QNetworkReply::NoError) {
                 qDebug() << "上传被邀请成员群组信息到服务器成功，成员ID:" << memberId;
+                state->successCount++;
             } else {
                 qWarning() << "上传被邀请成员群组信息失败，成员ID:" << memberId << "错误:" << reply->errorString();
+                state->failCount++;
             }
+            
+            // 检查是否所有请求都已完成
+            if (state->successCount + state->failCount >= state->totalCount) {
+                // 所有请求都已完成，发出信号通知刷新成员列表
+                if (state->successCount > 0) {
+                    qDebug() << "所有成员上传完成，成功:" << state->successCount << "失败:" << state->failCount;
+                    emit state->dlg->membersInvitedSuccess(state->groupId);
+                }
+                delete state;
+            }
+            
             reply->deleteLater();
             manager->deleteLater();
         });

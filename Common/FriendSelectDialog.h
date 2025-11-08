@@ -19,6 +19,9 @@ class FriendSelectDialog : public QDialog
 {
     Q_OBJECT
 
+signals:
+    void membersInvitedSuccess(const QString& groupId); // 成员邀请成功并上传到服务器成功信号，通知刷新成员列表
+
 public:
     FriendSelectDialog(QWidget* parent = nullptr);
     ~FriendSelectDialog();

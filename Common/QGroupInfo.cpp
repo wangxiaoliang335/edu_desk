@@ -28,6 +28,13 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId)
 
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     m_friendSelectDlg = new FriendSelectDialog(this);
+    // 连接成员邀请成功信号，刷新成员列表
+    if (m_friendSelectDlg) {
+        connect(m_friendSelectDlg, &FriendSelectDialog::membersInvitedSuccess, this, [this](const QString& groupId) {
+            // 刷新成员列表（通知父窗口刷新）
+            refreshMemberList(groupId);
+        });
+    }
     //m_classTeacherDelDlg = new ClassTeacherDelDialog(this);
     m_courseDlg = new CourseDialog();
     m_courseDlg->setWindowTitle("课程表");
@@ -736,6 +743,13 @@ void QGroupInfo::sendDismissGroupRequestToServer(const QString& groupId, const Q
         reply->deleteLater();
         manager->deleteLater();
     });
+}
+
+void QGroupInfo::refreshMemberList(const QString& groupId)
+{
+    // 通知父窗口（ScheduleDialog）刷新成员列表
+    emit membersRefreshed(groupId);
+    qDebug() << "发出成员列表刷新信号，群组ID:" << groupId;
 }
 
 QGroupInfo::~QGroupInfo()

@@ -350,6 +350,14 @@ public:
 		});
 		
 		// 连接群聊解散信号，当群聊被解散时关闭窗口并刷新父窗口
+		connect(m_groupInfo, &QGroupInfo::membersRefreshed, this, [this](const QString& groupId) {
+			// 如果刷新的是当前群组
+			if (groupId == m_unique_group_id) {
+				qDebug() << "收到成员列表刷新信号，刷新成员列表，群组ID:" << groupId;
+				refreshMemberList(groupId);
+			}
+		});
+		
 		connect(m_groupInfo, &QGroupInfo::groupDismissed, this, [this](const QString& groupId) {
 			// 如果解散的是当前群组
 			if (groupId == m_unique_group_id) {
