@@ -1,5 +1,5 @@
 ﻿#pragma once
-#pragma once
+#pragma execution_character_set("utf-8")
 #include <QDialog>
 #include <QPushButton>
 #include <QVBoxLayout>

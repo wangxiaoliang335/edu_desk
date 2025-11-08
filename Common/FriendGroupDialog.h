@@ -445,14 +445,14 @@ public:
         btnAdd->setFixedSize(40, 40);
         btnAdd->setStyleSheet("background-color: blue; color: white; font-size: 20px; border-radius: 20px;");
 
-        addGroupWidget = new TACAddGroupWidget(this, pWs);
+        addGroupWidget = new TACAddGroupWidget1(this, pWs);
         // 连接加入群组成功信号，刷新群组列表
-        connect(addGroupWidget, &TACAddGroupWidget::groupJoined, this, [this](const QString& groupId) {
+        connect(addGroupWidget, &TACAddGroupWidget1::groupJoined, this, [this](const QString& groupId) {
             qDebug() << "收到加入群组成功信号，刷新群列表，群组ID:" << groupId;
             this->InitData();
         });
         // 连接群组创建成功信号，刷新群组列表并关闭所有群聊窗口
-        connect(addGroupWidget, &TACAddGroupWidget::groupCreated, this, [this](const QString& groupId) {
+        connect(addGroupWidget, &TACAddGroupWidget1::groupCreated, this, [this](const QString& groupId) {
             qDebug() << "收到群组创建成功信号，刷新群列表，群组ID:" << groupId;
             // 关闭所有已打开的群聊窗口
             for (auto it = m_scheduleDlg.begin(); it != m_scheduleDlg.end(); ++it) {
@@ -922,7 +922,7 @@ public:
         closeButton->move(this->width() - 22, 0);
     }
 
-    TACAddGroupWidget* addGroupWidget = NULL;
+    TACAddGroupWidget1* addGroupWidget = NULL;
     FriendNotifyDialog* friendNotifyDlg = NULL;
     GroupNotifyDialog* grpNotifyDlg = NULL;
 

@@ -370,8 +370,8 @@ private slots:
                         QJsonObject respObj = respDoc.object();
                         QJsonObject dataObj = respObj.value("data").toObject();
                         QJsonObject teacherObj = dataObj.value("teacher").toObject();
-                        QString newUniqueId = QString::number(teacherObj.value("teacher_unique_id").toInt());
-
+                        //QString newUniqueId = QString::number(teacherObj.value("teacher_unique_id").toInt());
+                        QString newUniqueId = teacherObj.value("teacher_unique_id").toString();
                         table->setItem(row, 1, new QTableWidgetItem(newUniqueId));
                     }
 
@@ -428,7 +428,8 @@ private slots:
                     chkItem->setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsEnabled);
                     //table->setItem(i, 0, chkItem);
 
-                    QTableWidgetItem* bhItem = new QTableWidgetItem(QString::number(teacherObj.value("teacher_unique_id").toInt()));
+                    //QTableWidgetItem* bhItem = new QTableWidgetItem(QString::number(teacherObj.value("teacher_unique_id").toInt()));
+                    QTableWidgetItem* bhItem = new QTableWidgetItem(teacherObj.value("teacher_unique_id").toString());
                     bhItem->setFlags(bhItem->flags() & ~Qt::ItemIsEditable);
                     //table->setItem(i, 1, bhItem);
 

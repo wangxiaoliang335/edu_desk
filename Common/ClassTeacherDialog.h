@@ -63,8 +63,9 @@ public:
                             QString name = teacherInfo.value("name").toString();
                             QString subject = teacherInfo.value("subject").toString();
                             QString idCard = teacherInfo.value("id_card").toString();
-                            int iteacher_unique_id = teacherInfo.value("teacher_unique_id").toInt();
-                            QString teacher_unique_id = QString("%1").arg(iteacher_unique_id, 6, 10, QChar('0'));
+                            //int iteacher_unique_id = teacherInfo.value("teacher_unique_id").toInt();
+                            //QString teacher_unique_id = QString("%1").arg(iteacher_unique_id, 6, 10, QChar('0'));
+                            QString teacher_unique_id = teacherInfo.value("teacher_unique_id").toString();
 
                             // user_details 对象
                             QJsonObject userDetails = friendObj.value("user_details").toObject();
