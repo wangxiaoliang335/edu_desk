@@ -30,6 +30,7 @@
 
 class ClassTeacherDialog;
 class ClassTeacherDelDialog;
+class FriendSelectDialog;
 class FriendButton : public QPushButton {
     Q_OBJECT
 public:
@@ -86,7 +87,7 @@ private:
     QString m_groupNumberId;
     QVector<GroupMemberInfo> m_groupMemberInfo;
     QHBoxLayout* circlesLayout = NULL;
-    ClassTeacherDialog* m_classTeacherDlg = NULL;
+    FriendSelectDialog* m_friendSelectDlg = NULL;
     //ClassTeacherDelDialog* m_classTeacherDelDlg = NULL;
     CourseDialog* m_courseDlg;
     QPushButton* m_btnDismiss = nullptr; // 解散群聊按钮

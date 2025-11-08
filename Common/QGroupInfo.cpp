@@ -1,6 +1,7 @@
 ﻿#include "QGroupInfo.h"
 #include "ClassTeacherDialog.h"
 #include "ClassTeacherDelDialog.h"
+#include "FriendSelectDialog.h"
 
 // 解散群聊回调数据结构
 struct DismissGroupCallbackData {
@@ -26,7 +27,7 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId)
     m_groupNumberId = groupNumberId;
 
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
-    m_classTeacherDlg = new ClassTeacherDialog(this);
+    m_friendSelectDlg = new FriendSelectDialog(this);
     //m_classTeacherDelDlg = new ClassTeacherDelDialog(this);
     m_courseDlg = new CourseDialog();
     m_courseDlg->setWindowTitle("课程表");
@@ -37,8 +38,6 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId)
     //m_courseDlg->setCourse(1, 1, "音乐");
     //m_courseDlg->setCourse(2, 1, "语文", true); // 高亮
     //m_courseDlg->setCourse(3, 4, "体育", true);
-
-    m_classTeacherDlg->setWindowTitle(" ");
 
     // 顶部用户信息
     QHBoxLayout* topLayout = new QHBoxLayout;
@@ -212,13 +211,26 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
         if (!circlePlus) {
             circlePlus = new FriendButton("+", this);
             connect(circlePlus, &FriendButton::clicked, this, [this]() {
-                if (m_classTeacherDlg && m_classTeacherDlg->isHidden())
+                if (m_friendSelectDlg)
                 {
-                    m_classTeacherDlg->show();
-                }
-                else
-                {
-                    m_classTeacherDlg->hide();
+                    if (m_friendSelectDlg->isHidden())
+                    {
+                        // 获取当前群组成员ID列表，用于排除
+                        QVector<QString> memberIds;
+                        for (const auto& member : m_groupMemberInfo)
+                        {
+                            memberIds.append(member.member_id);
+                        }
+                        m_friendSelectDlg->setExcludedMemberIds(memberIds);
+                        m_friendSelectDlg->setGroupId(m_groupNumberId); // 设置群组ID
+                        m_friendSelectDlg->setGroupName(m_groupName); // 设置群组名称
+                        m_friendSelectDlg->InitData();
+                        m_friendSelectDlg->show();
+                    }
+                    else
+                    {
+                        m_friendSelectDlg->hide();
+                    }
                 }
             });
             circlesLayout->addWidget(circlePlus);
@@ -332,13 +344,26 @@ void QGroupInfo::InitGroupMember()
         if (!circlePlus) {
             circlePlus = new FriendButton("+", this);
             connect(circlePlus, &FriendButton::clicked, this, [this]() {
-                if (m_classTeacherDlg && m_classTeacherDlg->isHidden())
+                if (m_friendSelectDlg)
                 {
-                    m_classTeacherDlg->show();
-                }
-                else
-                {
-                    m_classTeacherDlg->hide();
+                    if (m_friendSelectDlg->isHidden())
+                    {
+                        // 获取当前群组成员ID列表，用于排除
+                        QVector<QString> memberIds;
+                        for (const auto& member : m_groupMemberInfo)
+                        {
+                            memberIds.append(member.member_id);
+                        }
+                        m_friendSelectDlg->setExcludedMemberIds(memberIds);
+                        m_friendSelectDlg->setGroupId(m_groupNumberId); // 设置群组ID
+                        m_friendSelectDlg->setGroupName(m_groupName); // 设置群组名称
+                        m_friendSelectDlg->InitData();
+                        m_friendSelectDlg->show();
+                    }
+                    else
+                    {
+                        m_friendSelectDlg->hide();
+                    }
                 }
                 });
             circlesLayout->addWidget(circlePlus);

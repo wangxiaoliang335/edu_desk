@@ -1,0 +1,50 @@
+#pragma once
+#pragma execution_character_set("utf-8")
+
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QCheckBox>
+#include <QScrollArea>
+#include <QWidget>
+#include <QMessageBox>
+#include <QMap>
+#include "TAHttpHandler.h"
+#include "CommonInfo.h"
+#include "ImSDK/includes/TIMCloud.h"
+#include "ImSDK/includes/TIMCloudDef.h"
+
+class FriendSelectDialog : public QDialog
+{
+    Q_OBJECT
+
+public:
+    FriendSelectDialog(QWidget* parent = nullptr);
+    ~FriendSelectDialog();
+
+    void InitData();
+    void setExcludedMemberIds(const QVector<QString>& memberIds); // 设置需要排除的成员ID列表
+    void setGroupId(const QString& groupId); // 设置当前群组ID
+    void setGroupName(const QString& groupName); // 设置当前群组名称
+    QVector<QString> getSelectedFriendIds(); // 获取选中的好友ID列表
+
+private slots:
+    void onOkClicked(); // 确定按钮点击处理
+    void onHttpSuccess(const QString& responseString);
+    void onHttpFailed(const QString& errResponseString);
+
+private:
+    void clearLayout(QVBoxLayout* layout);
+    TAHttpHandler* m_httpHandler = NULL;
+    QVBoxLayout* m_friendsLayout = NULL;
+    QScrollArea* m_scrollArea = NULL;
+    QWidget* m_scrollWidget = NULL;
+    QVector<QCheckBox*> m_checkBoxes; // 保存所有复选框
+    QVector<QString> m_excludedMemberIds; // 需要排除的成员ID列表
+    QString m_groupId; // 当前群组ID
+    QString m_groupName; // 当前群组名称
+    QMap<QString, QString> m_friendInfoMap; // 存储好友信息：key为teacher_unique_id，value为name
+    void inviteMembersToServer(const QVector<QString>& memberIds, const QVector<QString>& memberNames); // 邀请成员到服务器
+};
+

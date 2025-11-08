@@ -608,7 +608,8 @@ private:
         // createGroupParam[kTIMCreateGroupParamGroupId] = "class_" + classUniqueId;
         
         // 群组类型（可选，默认为Public）
-        createGroupParam[kTIMCreateGroupParamGroupType] = (int)kTIMGroup_Public; // 确保是整数类型
+        // 注意：只有私有群可以直接拉用户入群，公开群、聊天室邀请用户入群需要用户同意
+        createGroupParam[kTIMCreateGroupParamGroupType] = (int)kTIMGroup_Private; // 使用私有群，确保可以直接邀请成员
         
         // 加群选项（可选，默认为Any）
         createGroupParam[kTIMCreateGroupParamAddOption] = (int)kTIMGroupAddOpt_Any; // 确保是整数类型
@@ -655,23 +656,49 @@ private:
         */
         
         // 构造初始成员数组
-        // 注意：创建者会自动成为群主，不需要在成员数组中指定
-        // 只添加被邀请的其他成员
+        // 注意：如果提供了成员数组，必须包含创建者（群主），且角色必须设置为300
+        // 创建者（当前登录用户）必须是第一个成员，且角色必须是300
+        // 重要：创建者必须是当前通过TIMLogin登录的用户，且ID必须与TIMLogin时使用的user_id完全一致
         QJsonArray memberArray;
+        
+        // 首先添加创建者（群主），角色必须为300
+        // 注意：创建者必须是当前登录的用户（通过TIMLogin登录的用户）
+        // 确保使用字符串类型的ID，与TIMLogin时使用的格式一致
+        QString creatorId = userinfo.teacher_unique_id;
+        QJsonObject ownerMemberInfo;
+        ownerMemberInfo[kTIMGroupMemberInfoIdentifier] = creatorId; // 创建者ID（群主），必须是字符串类型
+        ownerMemberInfo[kTIMGroupMemberInfoMemberRole] = 300; // 群主角色必须为300
+        memberArray.append(ownerMemberInfo);
+        
+        qDebug() << "========== 创建群组 - 添加创建者（群主）==========";
+        qDebug() << "当前登录用户ID（创建者）:" << creatorId;
+        qDebug() << "创建者角色: 300";
+        qDebug() << "注意：创建者必须是当前通过TIMLogin登录的用户，且必须是成员数组的第一个成员";
+        qDebug() << "重要：创建者ID必须与TIMLogin时使用的user_id完全一致（包括类型和值）";
+        
+        // 然后添加被邀请的其他成员
+        // 暂时注释掉，因为会导致错误码10004
+        // 注意：群主必须是第一个成员，被邀请成员添加在后面
+        /*
         if (teacherUniqueId != userinfo.teacher_unique_id && !teacherUniqueId.isEmpty()) {
             QJsonObject invitedMemberInfo;
             invitedMemberInfo[kTIMGroupMemberInfoIdentifier] = teacherUniqueId; // 被邀请的教师ID
             // 注意：在创建群组时，初始成员的角色应该设置为 1 (Normal)
             // 0 = None, 1 = Normal, 2 = Admin, 3 = Owner
-            // 创建者自动成为Owner，所以这里只能设置为Normal
             invitedMemberInfo[kTIMGroupMemberInfoMemberRole] = (int)kTIMMemberRole_Normal; // 设置为普通成员，确保是整数类型
             memberArray.append(invitedMemberInfo);
+            
+            qDebug() << "========== 创建群组 - 添加被邀请成员 ==========";
+            qDebug() << "被邀请成员ID:" << teacherUniqueId;
+            qDebug() << "被邀请成员角色: 1 (Normal)";
         }
+        */
         
-        // 只有当成员数组不为空时才添加
-        if (!memberArray.isEmpty()) {
-            createGroupParam[kTIMCreateGroupParamGroupMemberArray] = memberArray;
-        }
+        // 始终添加成员数组（至少包含群主）
+        createGroupParam[kTIMCreateGroupParamGroupMemberArray] = memberArray;
+        
+        qDebug() << "========== 创建群组 - 成员数组总数 ==========";
+        qDebug() << "成员数量:" << memberArray.size();
         
         // 转换为JSON字符串
         QJsonDocument doc(createGroupParam);
@@ -699,6 +726,26 @@ private:
         QByteArray formattedJson = doc.toJson(QJsonDocument::Indented);
         qDebug() << "========== 创建群组参数（格式化）==========";
         qDebug() << QString::fromUtf8(formattedJson);
+        
+        // 验证成员数组中的第一个成员是否是创建者
+        if (memberArray.size() > 0) {
+            QJsonObject firstMember = memberArray[0].toObject();
+            QString firstMemberId = firstMember[kTIMGroupMemberInfoIdentifier].toString();
+            int firstMemberRole = firstMember[kTIMGroupMemberInfoMemberRole].toInt();
+            qDebug() << "========== 验证成员数组 ==========";
+            qDebug() << "成员数组第一个成员ID:" << firstMemberId;
+            qDebug() << "成员数组第一个成员角色:" << firstMemberRole;
+            qDebug() << "当前登录用户ID（创建者）:" << userinfo.teacher_unique_id;
+            if (firstMemberId != userinfo.teacher_unique_id) {
+                qWarning() << "警告：成员数组第一个成员ID与当前登录用户ID不匹配！";
+                qWarning() << "这可能导致错误码10004：uint32_role must be 300";
+            }
+            if (firstMemberRole != 300) {
+                qWarning() << "警告：成员数组第一个成员角色不是300！";
+                qWarning() << "这可能导致错误码10004：uint32_role must be 300";
+            }
+        }
+        
         qDebug() << "========== 创建群组参数（紧凑格式，UTF-8字节）==========";
         qDebug() << jsonData;
         qDebug() << "========== 创建群组参数（字符串形式）==========";
@@ -792,7 +839,7 @@ private:
         // 群组基础信息
         groupObj["group_id"] = groupId;
         groupObj["group_name"] = groupName;
-        groupObj["group_type"] = kTIMGroup_Public; // 公开群
+        groupObj["group_type"] = kTIMGroup_Private; // 私有群（只有私有群可以直接拉用户入群）
         groupObj["face_url"] = ""; // 创建时未设置头像
         groupObj["info_seq"] = 0;
         groupObj["latest_seq"] = 0;
@@ -801,7 +848,7 @@ private:
         // 群组详细信息
         groupObj["detail_group_id"] = groupId;
         groupObj["detail_group_name"] = groupName;
-        groupObj["detail_group_type"] = kTIMGroup_Public;
+        groupObj["detail_group_type"] = kTIMGroup_Private; // 私有群（只有私有群可以直接拉用户入群）
         groupObj["detail_face_url"] = "";
         groupObj["create_time"] = QDateTime::currentDateTime().toSecsSinceEpoch(); // 当前时间戳
         groupObj["detail_info_seq"] = 0;
@@ -810,11 +857,12 @@ private:
         groupObj["last_info_time"] = QDateTime::currentDateTime().toSecsSinceEpoch();
         groupObj["last_msg_time"] = 0;
         groupObj["next_msg_seq"] = 0;
-        // 计算成员数量：群主 + 被邀请的成员
-        int memberCount = 1; // 群主
-        if (teacherUniqueId != userinfo.teacher_unique_id && !teacherUniqueId.isEmpty()) {
-            memberCount = 2; // 群主 + 被邀请的教师
-        }
+        // 计算成员数量：只有群主（被邀请成员暂时不添加）
+        int memberCount = 1; // 只有群主
+        // 暂时注释掉被邀请成员
+        // if (teacherUniqueId != userinfo.teacher_unique_id && !teacherUniqueId.isEmpty()) {
+        //     memberCount = 2; // 群主 + 被邀请的教师
+        // }
         groupObj["member_num"] = memberCount;
         groupObj["max_member_num"] = 2000;
         groupObj["online_member_num"] = 0;
@@ -890,6 +938,8 @@ private:
         qDebug() << "上传JSON:" << QString::fromUtf8(jsonData);
         
         // 如果有被邀请的成员，也需要为被邀请的成员创建群组信息并上传
+        // 暂时注释掉，因为创建群组时不添加被邀请成员
+        /*
         if (teacherUniqueId != userinfo.teacher_unique_id && !teacherUniqueId.isEmpty()) {
             // 为被邀请的成员创建群组信息对象
             QJsonObject invitedGroupObj = groupObj; // 复制群组基本信息
@@ -925,6 +975,7 @@ private:
             qDebug() << "上传被邀请成员群组信息到服务器，群组ID:" << groupId << "，成员ID:" << teacherUniqueId;
             qDebug() << "上传JSON:" << QString::fromUtf8(invitedJsonData);
         }
+        */
     }
 
 private:
