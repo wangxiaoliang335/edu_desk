@@ -156,7 +156,7 @@ public:
             m_httpHandler->get(url);
         }
 
-        m_scheduleDlg = new ScheduleDialog(this, pWs);
+        m_scheduleDlg = new ScheduleDialog("", this, pWs);
         m_scheduleDlg->InitWebSocket();
 
         // 在创建对话框后立即建立连接，而不是等到按钮点击

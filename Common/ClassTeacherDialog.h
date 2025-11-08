@@ -34,7 +34,7 @@ public:
     {
         setWindowTitle("班级 / 教师选择");
         resize(420, 300);
-        setStyleSheet("background-color:#dde2f0; font-size:14px;");
+        setStyleSheet("background-color:#555555; font-size:14px;");
 
         m_pWs = pWs;
         m_httpHandler = new TAHttpHandler(this);

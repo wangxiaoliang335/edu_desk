@@ -602,7 +602,7 @@ public:
             connect(left, &QPushButton::clicked, this, [this, rightText, unique_group_id, classid, iGroupOwner]() {
                 if (!m_scheduleDlg[unique_group_id])
                 {
-                    m_scheduleDlg[unique_group_id] = new ScheduleDialog(this, m_pWs);
+                    m_scheduleDlg[unique_group_id] = new ScheduleDialog(classid, this, m_pWs);
                     m_scheduleDlg[unique_group_id]->InitWebSocket();
                     QList<Notification> curNotification;
                     for (auto iter : notifications)

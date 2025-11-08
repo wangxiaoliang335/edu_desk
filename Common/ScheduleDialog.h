@@ -84,11 +84,14 @@ class ScheduleDialog : public QDialog
 {
 	Q_OBJECT
 public:
-	ScheduleDialog(QWidget* parent = nullptr, TaQTWebSocket* pWs = NULL) : QDialog(parent)
+	ScheduleDialog(QString classid, QWidget* parent = nullptr, TaQTWebSocket* pWs = NULL) : QDialog(parent)
 	{
 		setWindowTitle("课程表");
 		resize(700, 500);
 		setStyleSheet("QPushButton { font-size:14px; } QLabel { font-size:14px; }");
+
+		m_classid = classid;
+
 		m_httpHandler = new TAHttpHandler(this);
 		if (m_httpHandler)
 		{
