@@ -51,12 +51,6 @@ void TACMainDialog::Init(QString qPhone, int user_id)
     navBarWidget->visibleCloseButton(false);
 
     m_ws = new TaQTWebSocket(this);
-
-    if (InitSDK())
-    {
-        Login(std::to_string(user_id));
-    }
-
     m_httpHandler = new TAHttpHandler(this);
     if (m_httpHandler)
     {
@@ -98,9 +92,16 @@ void TACMainDialog::Init(QString qPhone, int user_id)
                                 m_userInfo.avatar = oUserInfo.at(0)["avatar"].toString();
                                 m_userInfo.strIdNumber = oUserInfo.at(0)["id_number"].toString();
                                 m_userInfo.schoolId = oUserInfo.at(0)["schoolId"].toString();
-                                int iteacher_unique_id = oUserInfo.at(0)["teacher_unique_id"].toInt();
-                                m_userInfo.teacher_unique_id = QString("%1").arg(iteacher_unique_id, 6, 10, QChar('0'));
+                                //int iteacher_unique_id = oUserInfo.at(0)["teacher_unique_id"].toString();
+                                //m_userInfo.teacher_unique_id = QString("%1").arg(iteacher_unique_id, 6, 10, QChar('0'));
+
+                                m_userInfo.teacher_unique_id = oUserInfo.at(0)["teacher_unique_id"].toString();
                                 QString avatarBase64 = oUserInfo.at(0)["avatar_base64"].toString();
+
+                                if (InitSDK())
+                                {
+                                    Login(m_userInfo.teacher_unique_id.toStdString());
+                                }
 
                                 // 没有文件名就用手机号或ID代替
                                 if (m_userInfo.avatar.isEmpty())
@@ -133,7 +134,7 @@ void TACMainDialog::Init(QString qPhone, int user_id)
                                 file.write(imageData);
                                 file.close();
 
-                                if (userMenuDlg)
+                                /*if (userMenuDlg)
                                 {
                                     userMenuDlg->InitData(m_userInfo);
                                     userMenuDlg->InitUI();
@@ -154,7 +155,7 @@ void TACMainDialog::Init(QString qPhone, int user_id)
                                 if (schoolInfoDlg)
                                 {
                                     schoolInfoDlg->InitData(m_userInfo);
-                                }
+                                }*/
 
                             }
                         }
@@ -509,6 +510,30 @@ void TACMainDialog::Login(std::string userid) { //登入
             //ths->Logf("Login", kTIMLog_Error, "Failure!code:%d desc", code, desc);
             return;
         }
+
+        if (ths->userMenuDlg)
+        {
+            ths->userMenuDlg->InitData(ths->m_userInfo);
+            ths->userMenuDlg->InitUI();
+            CommonInfo::InitData(ths->m_userInfo);
+
+            if (TACMainDialog::m_ws)
+            {
+                TaQTWebSocket::InitWebSocket(TACMainDialog::m_ws);
+            }
+
+            if (ths->friendGrpDlg)
+            {
+                ths->friendGrpDlg->InitWebSocket();
+                ths->friendGrpDlg->InitData();
+            }
+        }
+
+        if (ths->schoolInfoDlg)
+        {
+            ths->schoolInfoDlg->InitData(ths->m_userInfo);
+        }
+
         ////登入成功
         //ths->Log("Login", kTIMLog_Info, "Success!");
         //ths->ChangeMainView(LOGIN_VIEW, MAIN_LOGIC_VIEW);

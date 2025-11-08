@@ -1,15 +1,16 @@
 #pragma once
+#pragma execution_character_set("utf-8")
 
 #include "TAFloatingWidget.h"
 #include "SearchDialog.h"
 #include "ClassTeacherDialog.h"
-class TACAddGroupWidget : public TAFloatingWidget
+class TACAddGroupWidget1 : public TAFloatingWidget
 {
 	Q_OBJECT
 
 public:
-	TACAddGroupWidget(QWidget *parent, TaQTWebSocket* pWs);
-	~TACAddGroupWidget();
+	TACAddGroupWidget1(QWidget *parent, TaQTWebSocket* pWs);
+	~TACAddGroupWidget1();
 
 	void InitData();
 	void InitWebSocket();
@@ -20,11 +21,12 @@ signals:
 	void scheduleDialogNeeded(const QString& groupId, const QString& groupName); // 需要创建/初始化ScheduleDialog的信号
 	void scheduleDialogRefreshNeeded(const QString& groupId); // 需要刷新ScheduleDialog成员列表的信号
 protected:
-	void showEvent(QShowEvent* event) override;
-	void resizeEvent(QResizeEvent* event) override;
+	//void showEvent(QShowEvent* event) override;
+	//void resizeEvent(QResizeEvent* event) override;
 private:
 	void initShow();
 private:
 	SearchDialog* m_searchDlg = NULL;
 	ClassTeacherDialog* m_classTeacherDlg = NULL;
+	QPointer<QVBoxLayout> contentLayout;
 };

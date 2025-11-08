@@ -9,29 +9,29 @@
 #define WIDGET_BORDER_COLOR_C QColor(255,255,255,25)
 #define WIDGET_BORDER_WIDTH_C 1
 
-TACAddGroupWidget::TACAddGroupWidget(QWidget *parent, TaQTWebSocket* pWs)
+TACAddGroupWidget1::TACAddGroupWidget1(QWidget *parent, TaQTWebSocket* pWs)
 	: TAFloatingWidget(parent)
 {
 	m_searchDlg = new SearchDialog(this);
 	// 连接SearchDialog的加入群组成功信号，转发给FriendGroupDialog
-	connect(m_searchDlg, &SearchDialog::groupJoined, this, &TACAddGroupWidget::groupJoined);
+	connect(m_searchDlg, &SearchDialog::groupJoined, this, &TACAddGroupWidget1::groupJoined);
 	m_classTeacherDlg = new ClassTeacherDialog(this, pWs);
 	// 连接ClassTeacherDialog的群组创建成功信号，转发给FriendGroupDialog
-	connect(m_classTeacherDlg, &ClassTeacherDialog::groupCreated, this, &TACAddGroupWidget::groupCreated);
+	connect(m_classTeacherDlg, &ClassTeacherDialog::groupCreated, this, &TACAddGroupWidget1::groupCreated);
 	// 连接ClassTeacherDialog的ScheduleDialog相关信号，转发给FriendGroupDialog
-	connect(m_classTeacherDlg, &ClassTeacherDialog::scheduleDialogNeeded, this, &TACAddGroupWidget::scheduleDialogNeeded);
-	connect(m_classTeacherDlg, &ClassTeacherDialog::scheduleDialogRefreshNeeded, this, &TACAddGroupWidget::scheduleDialogRefreshNeeded);
+	connect(m_classTeacherDlg, &ClassTeacherDialog::scheduleDialogNeeded, this, &TACAddGroupWidget1::scheduleDialogNeeded);
+	connect(m_classTeacherDlg, &ClassTeacherDialog::scheduleDialogRefreshNeeded, this, &TACAddGroupWidget1::scheduleDialogRefreshNeeded);
 	this->setObjectName("TACDesktopManagerWidget");
 
 	this->setBackgroundColor(WIDGET_BACKGROUND_COLOR_C);
 	this->setBorderColor(WIDGET_BORDER_COLOR_C);
-	this->setBorderWidth(WIDGET_BORDER_WIDTH_C);
-	this->setRadius(15);
-	this->visibleCloseButton(false);
+	this->setBorderWidth(0);
+	this->setRadius(12);
+	//this->visibleCloseButton(true);
 
 	QVBoxLayout* layout = new QVBoxLayout(this);
-	layout->setContentsMargins(10, 10, 10, 10);
-	layout->setSpacing(5);
+	layout->setContentsMargins(24, 24, 24, 24);
+	layout->setSpacing(16);
 
 	QLabel* label = new QLabel("", this);
 	label->setAlignment(Qt::AlignCenter);
@@ -85,10 +85,10 @@ TACAddGroupWidget::TACAddGroupWidget(QWidget *parent, TaQTWebSocket* pWs)
 
 }
 
-TACAddGroupWidget::~TACAddGroupWidget()
+TACAddGroupWidget1::~TACAddGroupWidget1()
 {}
 
-void TACAddGroupWidget::InitWebSocket()
+void TACAddGroupWidget1::InitWebSocket()
 {
 	if (m_classTeacherDlg)
 	{
@@ -96,7 +96,7 @@ void TACAddGroupWidget::InitWebSocket()
 	}
 }
 
-void TACAddGroupWidget::InitData()
+void TACAddGroupWidget1::InitData()
 {
 	if (m_classTeacherDlg)
 	{
@@ -104,7 +104,7 @@ void TACAddGroupWidget::InitData()
 	}
 }
 
-QVector<QString> TACAddGroupWidget::getNoticeMsg()
+QVector<QString> TACAddGroupWidget1::getNoticeMsg()
 {
 	if (m_classTeacherDlg)
 	{
@@ -113,17 +113,26 @@ QVector<QString> TACAddGroupWidget::getNoticeMsg()
 	return QVector<QString>();
 }
 
-void TACAddGroupWidget::showEvent(QShowEvent* event)
-{
-	QWidget::showEvent(event);
-	initShow();
-}
+//void TACAddGroupWidget1::showEvent(QShowEvent* event)
+//{
+//	QWidget::showEvent(event);
+//	initShow();
+//}
+//
+//void TACAddGroupWidget1::resizeEvent(QResizeEvent* event)
+//{
+//	QWidget::resizeEvent(event);
+//	initShow();
+//}
 
-void TACAddGroupWidget::resizeEvent(QResizeEvent* event)
+void TACAddGroupWidget1::initShow()
 {
-	QWidget::resizeEvent(event);
-	initShow();
-}
-void TACAddGroupWidget::initShow()
-{
+	//QRect rect = this->getScreenGeometryWithTaskbar();
+	//if (rect.isEmpty())
+	//	return;
+	//QSize windowSize = this->size();
+	//int x = rect.x() + (rect.width() - windowSize.width()) * 5 / 6;
+	////int x = rect.x() + rect.width() - windowSize.width();
+	//int y = rect.y() + rect.height() - windowSize.height() - 140;
+	//this->move(x, y);
 }
