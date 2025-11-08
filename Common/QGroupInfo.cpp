@@ -2,6 +2,7 @@
 #include "ClassTeacherDialog.h"
 #include "ClassTeacherDelDialog.h"
 #include "FriendSelectDialog.h"
+#include "MemberKickDialog.h"
 
 // 解散群聊回调数据结构
 struct DismissGroupCallbackData {
@@ -31,6 +32,14 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId)
     // 连接成员邀请成功信号，刷新成员列表
     if (m_friendSelectDlg) {
         connect(m_friendSelectDlg, &FriendSelectDialog::membersInvitedSuccess, this, [this](const QString& groupId) {
+            // 刷新成员列表（通知父窗口刷新）
+            refreshMemberList(groupId);
+        });
+    }
+    m_memberKickDlg = new MemberKickDialog(this);
+    // 连接成员踢出成功信号，刷新成员列表
+    if (m_memberKickDlg) {
+        connect(m_memberKickDlg, &MemberKickDialog::membersKickedSuccess, this, [this](const QString& groupId) {
             // 刷新成员列表（通知父窗口刷新）
             refreshMemberList(groupId);
         });
@@ -245,14 +254,22 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
         if (!circleMinus) {
             circleMinus = new FriendButton("-", this);
             connect(circleMinus, &FriendButton::clicked, this, [this]() {
-                /*if (m_classTeacherDelDlg && m_classTeacherDelDlg->isHidden())
+                if (m_memberKickDlg)
                 {
-                    m_classTeacherDelDlg->show();
+                    if (m_memberKickDlg->isHidden())
+                    {
+                        // 设置群组ID和名称
+                        m_memberKickDlg->setGroupId(m_groupNumberId);
+                        m_memberKickDlg->setGroupName(m_groupName);
+                        // 初始化成员列表数据（排除群主）
+                        m_memberKickDlg->InitData(m_groupMemberInfo);
+                        m_memberKickDlg->show();
+                    }
+                    else
+                    {
+                        m_memberKickDlg->hide();
+                    }
                 }
-                else
-                {
-                    m_classTeacherDelDlg->hide();
-                }*/
             });
             circlesLayout->addWidget(circleMinus);
         }
@@ -378,14 +395,22 @@ void QGroupInfo::InitGroupMember()
         if (!circleMinus) {
             circleMinus = new FriendButton("-", this);
             connect(circleMinus, &FriendButton::clicked, this, [this]() {
-                /*if (m_classTeacherDelDlg && m_classTeacherDelDlg->isHidden())
+                if (m_memberKickDlg)
                 {
-                    m_classTeacherDelDlg->show();
+                    if (m_memberKickDlg->isHidden())
+                    {
+                        // 设置群组ID和名称
+                        m_memberKickDlg->setGroupId(m_groupNumberId);
+                        m_memberKickDlg->setGroupName(m_groupName);
+                        // 初始化成员列表数据（排除群主）
+                        m_memberKickDlg->InitData(m_groupMemberInfo);
+                        m_memberKickDlg->show();
+                    }
+                    else
+                    {
+                        m_memberKickDlg->hide();
+                    }
                 }
-                else
-                {
-                    m_classTeacherDelDlg->hide();
-                }*/
                 });
             circlesLayout->addWidget(circleMinus);
         }
@@ -658,7 +683,15 @@ void QGroupInfo::onDismissGroupClicked()
                 dlg->sendDismissGroupRequestToServer(data->groupId, data->userId, data);
             } else {
                 QString errorDesc = QString::fromUtf8(desc ? desc : "未知错误");
-                QString errorMsg = QString("解散群聊失败\n错误码: %1\n错误描述: %2").arg(code).arg(errorDesc);
+                QString errorMsg;
+                
+                // 特殊处理常见的错误码
+                if (code == 10004) {
+                    errorMsg = QString("解散群聊失败\n错误码: %1\n错误描述: %2\n\n注意：私有群无法解散群组。\n只有公开群、聊天室和直播大群的群主可以解散群组。").arg(code).arg(errorDesc);
+                } else {
+                    errorMsg = QString("解散群聊失败\n错误码: %1\n错误描述: %2").arg(code).arg(errorDesc);
+                }
+                
                 qDebug() << errorMsg;
                 QMessageBox::critical(dlg, "解散失败", errorMsg);
                 

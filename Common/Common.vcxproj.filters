@@ -172,6 +172,9 @@
     <ClCompile Include="FriendSelectDialog.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="MemberKickDialog.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="AudioReceiver.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -367,6 +370,9 @@
       <Filter>Header Files</Filter>
     </QtMoc>
     <QtMoc Include="FriendSelectDialog.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="MemberKickDialog.h">
       <Filter>Header Files</Filter>
     </QtMoc>
   </ItemGroup>

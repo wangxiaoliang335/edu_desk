@@ -2,6 +2,8 @@
 
 #include <QApplication>
 #include <QDialog>
+
+class MemberKickDialog; // 前向声明
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -90,6 +92,7 @@ private:
     QVector<GroupMemberInfo> m_groupMemberInfo;
     QHBoxLayout* circlesLayout = NULL;
     FriendSelectDialog* m_friendSelectDlg = NULL;
+    MemberKickDialog* m_memberKickDlg = NULL; // 踢出成员对话框
     //ClassTeacherDelDialog* m_classTeacherDelDlg = NULL;
     CourseDialog* m_courseDlg;
     QPushButton* m_btnDismiss = nullptr; // 解散群聊按钮

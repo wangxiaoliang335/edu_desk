@@ -179,6 +179,7 @@
     <QtMoc Include="CourseTableWidget.h" />
     <QtMoc Include="CourseDialog.h" />
     <QtMoc Include="FriendSelectDialog.h" />
+    <QtMoc Include="MemberKickDialog.h" />
     <ClInclude Include="GenerateTestUserSig.h" />
     <ClInclude Include="UniqueNumberGenerator.h" />
     <ClInclude Include="util.h" />
@@ -212,6 +213,7 @@
     <ClCompile Include="QClassMgr.cpp" />
     <ClCompile Include="QGroupInfo.cpp" />
     <ClCompile Include="FriendSelectDialog.cpp" />
+    <ClCompile Include="MemberKickDialog.cpp" />
     <ClCompile Include="QSchoolInfoWidget.cpp" />
     <ClCompile Include="RegisterDialog.cpp" />
     <ClCompile Include="ResetPwdDialog.cpp" />

@@ -1,0 +1,47 @@
+#pragma once
+#pragma execution_character_set("utf-8")
+
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QCheckBox>
+#include <QScrollArea>
+#include <QWidget>
+#include <QMessageBox>
+#include <QMap>
+#include "CommonInfo.h"
+#include "ImSDK/includes/TIMCloud.h"
+#include "ImSDK/includes/TIMCloudDef.h"
+
+class MemberKickDialog : public QDialog
+{
+    Q_OBJECT
+
+signals:
+    void membersKickedSuccess(const QString& groupId); // 成员踢出成功并上传到服务器成功信号，通知刷新成员列表
+
+public:
+    MemberKickDialog(QWidget* parent = nullptr);
+    ~MemberKickDialog();
+
+    void InitData(const QVector<GroupMemberInfo>& memberList); // 初始化成员列表数据
+    void setGroupId(const QString& groupId); // 设置当前群组ID
+    void setGroupName(const QString& groupName); // 设置当前群组名称
+    QVector<QString> getSelectedMemberIds(); // 获取选中的成员ID列表
+
+private slots:
+    void onOkClicked(); // 确定按钮点击处理
+
+private:
+    void clearLayout(QVBoxLayout* layout);
+    QVBoxLayout* m_membersLayout = NULL;
+    QScrollArea* m_scrollArea = NULL;
+    QWidget* m_scrollWidget = NULL;
+    QVector<QCheckBox*> m_checkBoxes; // 保存所有复选框
+    QString m_groupId; // 当前群组ID
+    QString m_groupName; // 当前群组名称
+    QMap<QString, QString> m_memberInfoMap; // 存储成员信息：key为member_id，value为member_name
+    void kickMembersFromServer(const QVector<QString>& memberIds, const QVector<QString>& memberNames); // 从服务器移除成员
+};
+
