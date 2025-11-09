@@ -24,6 +24,10 @@ FriendSelectDialog::FriendSelectDialog(QWidget* parent)
         connect(m_httpHandler, &TAHttpHandler::success, this, &FriendSelectDialog::onHttpSuccess);
         connect(m_httpHandler, &TAHttpHandler::failed, this, &FriendSelectDialog::onHttpFailed);
     }
+    
+    // 初始化REST API
+    m_restAPI = new TIMRestAPI(this);
+    // 注意：管理员账号信息在使用REST API时再设置，因为此时用户可能还未登录
 
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(10, 10, 10, 10);
@@ -255,44 +259,25 @@ void FriendSelectDialog::onOkClicked()
         return;
     }
     
-    // 调用腾讯SDK邀请成员接口
-    QJsonObject inviteParam;
-    inviteParam[kTIMGroupInviteMemberParamGroupId] = m_groupId;
-    QJsonArray identifierArray;
+    if (!m_restAPI) {
+        QMessageBox::critical(this, "错误", "REST API未初始化！");
+        return;
+    }
+    
+    // 在使用REST API前设置管理员账号信息
+    // 注意：REST API需要使用应用管理员账号，使用当前登录用户的teacher_unique_id
+    std::string adminUserId = GenerateTestUserSig::instance().getAdminUserId();
+    if (!adminUserId.empty()) {
+        std::string adminUserSig = GenerateTestUserSig::instance().genTestUserSig(adminUserId);
+        m_restAPI->setAdminInfo(QString::fromStdString(adminUserId), QString::fromStdString(adminUserSig));
+    }
+    
+    // 构造成员ID数组（REST API格式）
+    QJsonArray memberArray;
     for (const QString& teacherId : selectedTeacherIds)
     {
-        identifierArray.append(teacherId);
+        memberArray.append(teacherId);
     }
-    inviteParam[kTIMGroupInviteMemberParamIdentifierArray] = identifierArray;
-    inviteParam[kTIMGroupInviteMemberParamUserData] = ""; // 添加user_data字段，即使为空字符串
-    
-    QJsonDocument doc(inviteParam);
-    
-    // 验证JSON是否有效
-    if (doc.isNull() || doc.isEmpty()) {
-        QMessageBox::critical(this, "错误", "生成的JSON参数为空或无效！");
-        return;
-    }
-    
-    // 使用Compact格式生成JSON，确保UTF-8编码
-    QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
-    
-    // 验证JSON字符串是否有效
-    QJsonParseError parseError;
-    QJsonDocument verifyDoc = QJsonDocument::fromJson(jsonData, &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
-        QString errorMsg = QString("JSON格式验证失败: %1\n位置: %2").arg(parseError.errorString()).arg(parseError.offset);
-        qDebug() << errorMsg;
-        QMessageBox::critical(this, "JSON格式错误", errorMsg);
-        return;
-    }
-    
-    // 输出格式化的JSON用于调试
-    QByteArray formattedJson = doc.toJson(QJsonDocument::Indented);
-    qDebug() << "========== 邀请成员参数（格式化）==========";
-    qDebug() << QString::fromUtf8(formattedJson);
-    qDebug() << "========== 邀请成员参数（紧凑格式）==========";
-    qDebug() << QString::fromUtf8(jsonData);
     
     // 创建回调数据结构
     struct InviteCallbackData {
@@ -308,75 +293,40 @@ void FriendSelectDialog::onOkClicked()
     callbackData->memberNames = selectedNames;
     callbackData->groupId = m_groupId;
     
-    // 确保JSON字符串以null结尾（腾讯SDK要求）
-    // QByteArray::constData() 返回的字符串可能没有null终止符，需要显式添加
-    QByteArray jsonDataWithNull = jsonData;
-    if (jsonDataWithNull.isEmpty() || jsonDataWithNull.at(jsonDataWithNull.length() - 1) != '\0') {
-        jsonDataWithNull.append('\0');
-    }
+    qDebug() << "========== 邀请成员 - REST API ==========";
+    qDebug() << "群组ID:" << m_groupId;
+    qDebug() << "成员数量:" << memberArray.size();
     
-    const char* jsonCStr = jsonDataWithNull.constData();
-    
-    qDebug() << "========== 传递给TIMGroupInviteMember的JSON字符串 ==========";
-    qDebug() << jsonCStr;
-    qDebug() << "========== JSON字符串长度（不含null） ==========";
-    qDebug() << jsonData.length();
-    qDebug() << "========== JSON字符串（含null）长度 ==========";
-    qDebug() << jsonDataWithNull.length();
-    qDebug() << "========== JSON字符串（十六进制，前100字节） ==========";
-    qDebug() << jsonDataWithNull.left(100).toHex();
-    
-    int ret = TIMGroupInviteMember(jsonCStr,
-        [](int32_t code, const char* desc, const char* json_params, const void* user_data) {
-            InviteCallbackData* data = (InviteCallbackData*)user_data;
-            if (!data || !data->dlg) {
-                delete data;
-                return;
-            }
-            
-            if (ERR_SUCC != code) {
-                QString errorDesc = QString::fromUtf8(desc ? desc : "未知错误");
+    // 调用REST API邀请成员
+    m_restAPI->inviteGroupMember(m_groupId, memberArray,
+        [=](int errorCode, const QString& errorDesc, const QJsonObject& result) {
+            if (errorCode != 0) {
                 QString errorMsg;
                 
                 // 特殊处理常见的错误码
-                if (code == 10007) {
-                    errorMsg = QString("邀请成员失败\n错误码: %1\n错误描述: %2\n\n该群组未启用邀请功能，请检查群组类型和设置。").arg(code).arg(errorDesc);
+                if (errorCode == 10007) {
+                    errorMsg = QString("邀请成员失败\n错误码: %1\n错误描述: %2\n\n该群组未启用邀请功能，请检查群组类型和设置。").arg(errorCode).arg(errorDesc);
                 } else {
-                    errorMsg = QString("邀请成员失败\n错误码: %1\n错误描述: %2").arg(code).arg(errorDesc);
+                    errorMsg = QString("邀请成员失败\n错误码: %1\n错误描述: %2").arg(errorCode).arg(errorDesc);
                 }
                 
                 qDebug() << errorMsg;
-                QMessageBox::critical(data->dlg, "邀请失败", errorMsg);
-                delete data;
+                QMessageBox::critical(callbackData->dlg, "邀请失败", errorMsg);
+                delete callbackData;
                 return;
             }
             
-            // 邀请成功，解析返回结果
-            if (json_params) {
-                QJsonParseError parseError;
-                QJsonDocument respDoc = QJsonDocument::fromJson(QString::fromUtf8(json_params).toUtf8(), &parseError);
-                if (parseError.error == QJsonParseError::NoError && respDoc.isArray()) {
-                    QJsonArray resultArray = respDoc.array();
-                    qDebug() << "邀请成员成功，返回结果数量:" << resultArray.size();
-                    
-                    // 调用服务器接口邀请成员
-                    data->dlg->inviteMembersToServer(data->memberIds, data->memberNames);
-                    
-                    QMessageBox::information(data->dlg, "邀请成功", "好友邀请已发送");
-                    data->dlg->accept(); // 关闭对话框
-                }
-            }
+            // 邀请成功
+            qDebug() << "邀请成员成功";
             
-            delete data;
-        }, callbackData);
-    
-    if (TIM_SUCC != ret) {
-        QString errorDescStr = getTIMResultErrorString(ret);
-        QString errorDesc = QString("调用TIMGroupInviteMember接口失败\n错误码: %1\n错误描述: %2").arg(ret).arg(errorDescStr);
-        qDebug() << errorDesc;
-        QMessageBox::critical(this, "邀请失败", errorDesc);
-        delete callbackData;
-    }
+            // 调用服务器接口邀请成员
+            callbackData->dlg->inviteMembersToServer(callbackData->memberIds, callbackData->memberNames);
+            
+            QMessageBox::information(callbackData->dlg, "邀请成功", "好友邀请已发送");
+            callbackData->dlg->accept(); // 关闭对话框
+            
+            delete callbackData;
+        });
 }
 
 void FriendSelectDialog::inviteMembersToServer(const QVector<QString>& memberIds, const QVector<QString>& memberNames)
