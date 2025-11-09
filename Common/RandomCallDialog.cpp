@@ -140,8 +140,8 @@ RandomCallDialog::RandomCallDialog(QWidget* parent)
     });
     connect(btnTable, &QPushButton::clicked, this, [this, btnTable]() {
         // 显示下拉菜单
-        // 将按钮的底部位置转换为相对于对话框的坐标，X坐标对齐按钮左边
-        QPoint globalPos = btnTable->mapToGlobal(QPoint(0, btnTable->height()));
+        // 将按钮的顶部位置转换为相对于对话框的坐标，X坐标对齐按钮左边，向上偏移一些让下拉菜单更靠近按钮
+        QPoint globalPos = btnTable->mapToGlobal(QPoint(0, 0));
         QPoint localPos = this->mapFromGlobal(globalPos);
         // 设置下拉菜单的宽度与按钮相同，左边对齐
         tableComboBox->setFixedWidth(btnTable->width());
@@ -163,8 +163,8 @@ RandomCallDialog::RandomCallDialog(QWidget* parent)
     });
     connect(btnAttr, &QPushButton::clicked, this, [this, btnAttr]() {
         // 显示下拉菜单
-        // 将按钮的底部位置转换为相对于对话框的坐标，X坐标对齐按钮左边
-        QPoint globalPos = btnAttr->mapToGlobal(QPoint(0, btnAttr->height()));
+        // 将按钮的顶部位置转换为相对于对话框的坐标，X坐标对齐按钮左边，向上偏移一些让下拉菜单更靠近按钮
+        QPoint globalPos = btnAttr->mapToGlobal(QPoint(0, 0));
         QPoint localPos = this->mapFromGlobal(globalPos);
         // 设置下拉菜单的宽度与按钮相同，左边对齐
         attributeComboBox->setFixedWidth(btnAttr->width());

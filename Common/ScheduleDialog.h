@@ -24,6 +24,7 @@
 #include <QColor>
 #include <QUrl>
 #include <QUrlQuery>
+#include <QDate>
 #include <QGroupInfo.h>
 #include <Windows.h>
 #include "CustomListDialog.h"
@@ -174,11 +175,74 @@ public:
 					else if (obj["data"].isObject())
 					{
 						QJsonObject dataObj = obj["data"].toObject();
-						QString group_id = dataObj["group_id"].toString();
 						
-						// 处理 /groups/members 接口返回的成员列表
-						if (dataObj["members"].isArray())
+						// 处理成绩表数据（/student-scores/get 接口返回）
+						// 数据格式：{"code": 200, "data": {"scores": [...]}}
+						if (dataObj.contains("scores") && dataObj["scores"].isArray())
 						{
+							QJsonArray scoresArray = dataObj["scores"].toArray();
+							m_students.clear();
+							
+							for (int i = 0; i < scoresArray.size(); i++)
+							{
+								QJsonObject scoreObj = scoresArray[i].toObject();
+								
+								StudentInfo student;
+								student.id = scoreObj["student_id"].toString();
+								student.name = scoreObj["student_name"].toString();
+								student.originalIndex = i;
+								
+								// 读取各科成绩并填充到 attributes 中（处理 null 值）
+								if (scoreObj.contains("chinese") && !scoreObj["chinese"].isNull()) {
+									double chinese = scoreObj["chinese"].toDouble();
+									student.attributes["语文"] = chinese;
+								}
+								if (scoreObj.contains("math") && !scoreObj["math"].isNull()) {
+									double math = scoreObj["math"].toDouble();
+									student.attributes["数学"] = math;
+								}
+								if (scoreObj.contains("english") && !scoreObj["english"].isNull()) {
+									double english = scoreObj["english"].toDouble();
+									student.attributes["英语"] = english;
+								}
+								
+								// 读取总分（字段名是 total_score）
+								if (scoreObj.contains("total_score") && !scoreObj["total_score"].isNull()) {
+									double total = scoreObj["total_score"].toDouble();
+									student.attributes["总分"] = total;
+									student.score = total; // 使用总分作为排序依据
+								} else {
+									// 如果没有总分，计算总分
+									double total = 0;
+									if (student.attributes.contains("语文")) {
+										total += student.attributes["语文"];
+									}
+									if (student.attributes.contains("数学")) {
+										total += student.attributes["数学"];
+									}
+									if (student.attributes.contains("英语")) {
+										total += student.attributes["英语"];
+									}
+									student.attributes["总分"] = total;
+									student.score = total;
+								}
+								
+							m_students.append(student);
+						}
+						
+						qDebug() << "从服务器获取成绩表成功，学生数量:" << m_students.size();
+						
+						// 自动刷新座位表，使用"正序"排序（按成绩从高到低）
+						if (!m_students.isEmpty() && seatTable) {
+							arrangeSeats(m_students, "正序");
+							qDebug() << "已自动刷新座位表，使用正序排序";
+						}
+						}
+						// 处理 /groups/members 接口返回的成员列表
+						else if (dataObj.contains("group_id") && dataObj["members"].isArray())
+						{
+							QString group_id = dataObj["group_id"].toString();
+							
 							m_groupMemberInfo.clear(); // 清空之前的成员列表
 							
 							QJsonArray memberArray = dataObj["members"].toArray();
@@ -1016,6 +1080,36 @@ public:
 			QUrl url("http://47.100.126.194:5000/groups/members");
 			QUrlQuery query;
 			query.addQueryItem("group_id", unique_group_id);
+			url.setQuery(query);
+			m_httpHandler->get(url.toString());
+		}
+		
+		// 从服务器获取成绩表数据（如果是班级群）
+		if (m_httpHandler && isClassGroup && !classid.isEmpty())
+		{
+			// 根据当前日期计算学期
+			QDate currentDate = QDate::currentDate();
+			int year = currentDate.year();
+			int month = currentDate.month();
+			
+			QString term;
+			// 9月-1月是上学期（第一学期），2月-8月是下学期（第二学期）
+			if (month >= 9 || month <= 1) {
+				if (month >= 9) {
+					term = QString("%1-%2-1").arg(year).arg(year + 1);
+				} else {
+					term = QString("%1-%2-1").arg(year - 1).arg(year);
+				}
+			} else {
+				term = QString("%1-%2-2").arg(year - 1).arg(year);
+			}
+			
+			// 获取成绩表数据
+			QUrl url("http://47.100.126.194:5000/student-scores/get");
+			QUrlQuery query;
+			query.addQueryItem("class_id", classid);
+			query.addQueryItem("exam_name", "期中考试");
+			query.addQueryItem("term", term);
 			url.setQuery(query);
 			m_httpHandler->get(url.toString());
 		}
