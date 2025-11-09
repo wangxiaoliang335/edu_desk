@@ -92,11 +92,24 @@ signals:
     void groupTipReceived(const QString& name, const QString& time, 
                          const QString& action, const QString& groupName, 
                          const QString& remark);
+    
+    // 新成员入群信号（用于自动刷新成员列表）
+    void newMemberJoined(const QString& groupId, const QStringList& memberIds);
+
+public:
+    // 静态方法：获取实例（用于外部连接信号）
+    static GroupNotifyDialog* instance()
+    {
+        return s_instance();
+    }
 
 private:
     // 静态回调函数（在TIMInit之前注册）
     static void staticGroupTipsCallback(const char* json_group_tip_array, const void* user_data)
     {
+        qDebug() << "========== 收到群组系统消息回调 ==========";
+        qDebug() << "原始JSON数据:" << QString::fromUtf8(json_group_tip_array);
+        
         // 解析JSON数组
         QJsonParseError parseError;
         QJsonDocument doc = QJsonDocument::fromJson(QByteArray(json_group_tip_array), &parseError);
@@ -111,6 +124,8 @@ private:
         }
         
         QJsonArray tipArray = doc.array();
+        qDebug() << "群组系统消息数量:" << tipArray.size();
+        
         for (const QJsonValue& value : tipArray) {
             if (!value.isObject()) continue;
             
@@ -122,6 +137,11 @@ private:
             QString groupName = tipObj[kTIMGroupTipsElemGroupName].toString();
             QString opUser = tipObj[kTIMGroupTipsElemOpUser].toString();
             uint time = tipObj[kTIMGroupTipsElemTime].toInt();
+            
+            qDebug() << "消息类型:" << tipType << "(kTIMGroupTip_Invite=" << kTIMGroupTip_Invite << ")";
+            qDebug() << "群组ID:" << groupId;
+            qDebug() << "群组名称:" << groupName;
+            qDebug() << "操作者:" << opUser;
             
             // 获取操作者信息
             QString opUserName = opUser;
@@ -144,9 +164,17 @@ private:
             QString remark;
             
             switch (tipType) {
-                case kTIMGroupTip_Invite:  // 邀请加入
+                case kTIMGroupTip_Invite:  // 邀请加入（新成员入群）
                     if (userList.size() > 0) {
                         actionText = QString("邀请 %1 加入").arg(userList.join(", "));
+                        
+                        // 发出新成员入群信号，用于自动刷新成员列表
+                        if (s_instance()) {
+                            qDebug() << "检测到新成员入群，群组ID:" << groupId << "，新成员:" << userList.join(", ");
+                            QMetaObject::invokeMethod(s_instance(), "onNewMemberJoined", Qt::QueuedConnection,
+                                Q_ARG(QString, groupId),
+                                Q_ARG(QStringList, userList));
+                        }
                     } else {
                         actionText = "邀请加入";
                     }
@@ -212,16 +240,26 @@ private:
             QDateTime dateTime = QDateTime::fromSecsSinceEpoch(time);
             QString timeStr = dateTime.toString("yyyy-MM-dd hh:mm:ss");
             
+            qDebug() << "操作文本:" << actionText;
+            qDebug() << "备注:" << remark;
+            qDebug() << "GroupNotifyDialog实例是否存在:" << (s_instance() != nullptr);
+            
             // 发出全局信号，通知所有GroupNotifyDialog实例（使用QMetaObject::invokeMethod确保线程安全）
             if (s_instance()) {
+                qDebug() << "正在发送信号到GroupNotifyDialog实例";
                 QMetaObject::invokeMethod(s_instance(), "onGroupTipReceived", Qt::QueuedConnection,
                     Q_ARG(QString, opUserName),
                     Q_ARG(QString, timeStr),
                     Q_ARG(QString, actionText),
                     Q_ARG(QString, groupName),
                     Q_ARG(QString, remark));
+            } else {
+                qWarning() << "警告：GroupNotifyDialog实例不存在，无法显示群组通知！";
+                qWarning() << "请确保在收到通知之前创建了GroupNotifyDialog实例";
             }
         }
+        
+        qDebug() << "==========================================";
     }
     
     // 信号槽处理函数
@@ -229,7 +267,32 @@ private:
                            const QString& action, const QString& groupName, 
                            const QString& remark)
     {
+        qDebug() << "========== GroupNotifyDialog::onGroupTipReceived ==========";
+        qDebug() << "名称:" << name;
+        qDebug() << "时间:" << time;
+        qDebug() << "操作:" << action;
+        qDebug() << "群组名称:" << groupName;
+        qDebug() << "备注:" << remark;
+        qDebug() << "正在添加通知项到列表";
+        
         addItem(listLayout, name, time, action, groupName, remark);
+        
+        qDebug() << "通知项已添加";
+        qDebug() << "==========================================";
+    }
+    
+    // 新成员入群处理函数
+    void onNewMemberJoined(const QString& groupId, const QStringList& memberIds)
+    {
+        qDebug() << "========== GroupNotifyDialog::onNewMemberJoined ==========";
+        qDebug() << "群组ID:" << groupId;
+        qDebug() << "新成员ID列表:" << memberIds.join(", ");
+        qDebug() << "发出新成员入群信号，通知相关窗口刷新成员列表";
+        
+        // 发出信号，通知其他窗口刷新成员列表
+        emit newMemberJoined(groupId, memberIds);
+        
+        qDebug() << "==========================================";
     }
     
     // 静态实例指针（用于发出信号）- 使用函数返回引用避免C++17要求

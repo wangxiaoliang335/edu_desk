@@ -175,6 +175,9 @@
     <ClCompile Include="MemberKickDialog.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="TIMRestAPI.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="AudioReceiver.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -373,6 +376,9 @@
       <Filter>Header Files</Filter>
     </QtMoc>
     <QtMoc Include="MemberKickDialog.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="TIMRestAPI.h">
       <Filter>Header Files</Filter>
     </QtMoc>
   </ItemGroup>

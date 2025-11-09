@@ -29,6 +29,8 @@ class MemberKickDialog; // 前向声明
 #include "ImSDK/includes/TIMCloud.h"
 #include "ImSDK/includes/TIMCloudDef.h"
 #include "ImSDK/includes/TIMCloudCallback.h"
+#include "TIMRestAPI.h"
+#include "GenerateTestUserSig.h"
 
 class ClassTeacherDialog;
 class ClassTeacherDelDialog;
@@ -75,6 +77,12 @@ public:
     void InitGroupMember();
     QVector<GroupMemberInfo> getGroupMemberInfo() const { return m_groupMemberInfo; } // 获取当前成员列表
     
+    /**
+     * @brief 使用REST API获取群成员列表
+     * @param groupId 群组ID
+     */
+    void fetchGroupMemberListFromREST(const QString& groupId);
+    
 signals:
     void memberLeftGroup(const QString& groupId, const QString& leftUserId); // 成员退出群聊信号，传递退出的用户ID
     void groupDismissed(const QString& groupId); // 群聊解散信号，通知父窗口刷新群列表
@@ -87,6 +95,7 @@ private:
     void sendExitGroupRequestToServer(const QString& groupId, const QString& userId, const QString& leftUserId); // 发送退出群聊请求到服务器
     void sendDismissGroupRequestToServer(const QString& groupId, const QString& userId, void* callbackData = nullptr); // 发送解散群聊请求到服务器
     void refreshMemberList(const QString& groupId); // 刷新成员列表（通知父窗口刷新）
+    TIMRestAPI* m_restAPI = NULL;
     QString m_groupName;
     QString m_groupNumberId;
     QVector<GroupMemberInfo> m_groupMemberInfo;

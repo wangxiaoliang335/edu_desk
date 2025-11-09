@@ -13,6 +13,8 @@
 #include "CommonInfo.h"
 #include "ImSDK/includes/TIMCloud.h"
 #include "ImSDK/includes/TIMCloudDef.h"
+#include "TIMRestAPI.h"
+#include "GenerateTestUserSig.h"
 
 class MemberKickDialog : public QDialog
 {
@@ -35,6 +37,7 @@ private slots:
 
 private:
     void clearLayout(QVBoxLayout* layout);
+    TIMRestAPI* m_restAPI = NULL;
     QVBoxLayout* m_membersLayout = NULL;
     QScrollArea* m_scrollArea = NULL;
     QWidget* m_scrollWidget = NULL;

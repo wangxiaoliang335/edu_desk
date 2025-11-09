@@ -46,7 +46,7 @@ private:
    /**
      * Follow the steps below to obtain the key required for UserSig calculation.
      * 
-     * Step 1. Log in to the [Tencent Cloud IM console](https://console.intl.cloud.tencent.com/im), and create an application if you don’t have one.
+     * Step 1. Log in to the [Tencent Cloud IM console](https://console.intl.cloud.tencent.com/im), and create an application if you don't have one.
      * Step 2. Click Application Configuration to go to the basic configuration page and locate Account System Integration.
      * Step 3. Click View Key to view the encrypted key used for UserSig calculation. Then copy and paste the key to the variable below.
      * 
@@ -54,10 +54,19 @@ private:
      * Reference: https://intl.cloud.tencent.com/document/product/1047/34385
      */
     const char* SECRETKEY = "11ddbddae4444052e35f30d2b7db54c5a9d04811a3436411d01da7e57db64b01";
+
 public:
     static GenerateTestUserSig& instance();
 
     uint32_t getSDKAppID() const;
+
+    /**
+     * 获取REST API管理员账号UserID
+     * 从CommonInfo中获取当前登录用户的teacher_unique_id作为管理员账号
+     * 注意：需要确保CommonInfo::InitData()已经调用并设置了用户信息
+     * @return 管理员账号UserID，如果未设置则返回空字符串
+     */
+    std::string getAdminUserId() const;
 
     /**
      * Calculate UserSig

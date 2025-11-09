@@ -14,6 +14,8 @@
 #include "CommonInfo.h"
 #include "ImSDK/includes/TIMCloud.h"
 #include "ImSDK/includes/TIMCloudDef.h"
+#include "TIMRestAPI.h"
+#include "GenerateTestUserSig.h"
 
 class FriendSelectDialog : public QDialog
 {
@@ -40,6 +42,7 @@ private slots:
 private:
     void clearLayout(QVBoxLayout* layout);
     TAHttpHandler* m_httpHandler = NULL;
+    TIMRestAPI* m_restAPI = NULL;
     QVBoxLayout* m_friendsLayout = NULL;
     QScrollArea* m_scrollArea = NULL;
     QWidget* m_scrollWidget = NULL;

@@ -4,6 +4,7 @@
 * Function: 用于获取 TIMLogin 接口所必须的 UserSig，腾讯云使用 UserSig 进行安全校验，保护您的 IM 功能不被盗用
 */
 #include "GenerateTestUserSig.h"
+#include "CommonInfo.h"
 #include "./zlib/zlib.h"
 
 #include <time.h>
@@ -371,4 +372,14 @@ std::string GenerateTestUserSig::genTestUserSig(const std::string& userId)
     GenerateTestUserSigImpl impl(SDKAPPID, SECRETKEY, currTime, EXPIRETIME);
 
     return impl.genTestUserSig(userId);
+}
+
+std::string GenerateTestUserSig::getAdminUserId() const
+{
+    // 从CommonInfo获取当前登录用户的teacher_unique_id作为管理员账号
+    UserInfo userInfo = CommonInfo::GetData();
+    if (!userInfo.teacher_unique_id.isEmpty()) {
+        return userInfo.teacher_unique_id.toStdString();
+    }
+    return std::string();  // 如果未设置，返回空字符串
 }

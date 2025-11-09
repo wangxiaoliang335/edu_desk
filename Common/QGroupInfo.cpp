@@ -28,6 +28,11 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId)
     m_groupNumberId = groupNumberId;
 
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
+    
+    // 初始化REST API
+    m_restAPI = new TIMRestAPI(this);
+    // 注意：管理员账号信息在使用REST API时再设置，因为此时用户可能还未登录
+    
     m_friendSelectDlg = new FriendSelectDialog(this);
     // 连接成员邀请成功信号，刷新成员列表
     if (m_friendSelectDlg) {
@@ -529,48 +534,53 @@ void QGroupInfo::onExitGroupClicked()
     callbackData->userId = userId;
     callbackData->userName = userName;
     
-    // 调用腾讯SDK的退出群聊接口
-    QByteArray groupIdBytes = m_groupNumberId.toUtf8();
-    int retCode = TIMGroupQuit(groupIdBytes.constData(),
-        [](int32_t code, const char* desc, const char* json_params, const void* user_data) {
-            ExitGroupCallbackData* data = (ExitGroupCallbackData*)user_data;
-            QGroupInfo* dlg = data->dlg;
-            
-            if (code == TIM_SUCC) {
-                qDebug() << "腾讯SDK退出群聊成功:" << data->groupId;
-                
-                // 立即从本地成员列表中移除当前用户
-                QVector<GroupMemberInfo> updatedMemberList;
-                QString leftUserId = data->userId; // 记录退出的用户ID
-                for (const auto& member : dlg->m_groupMemberInfo) {
-                    if (member.member_id != data->userId) {
-                        updatedMemberList.append(member);
-                    }
-                }
-                dlg->m_groupMemberInfo = updatedMemberList;
-                
-                // 立即更新UI（移除退出的成员）
-                dlg->InitGroupMember(dlg->m_groupNumberId, dlg->m_groupMemberInfo);
-                
-                // 腾讯SDK成功，现在调用自己的服务器接口（传递退出的用户ID，用于后续处理）
-                dlg->sendExitGroupRequestToServer(data->groupId, data->userId, leftUserId);
-            } else {
-                QString errorDesc = QString::fromUtf8(desc ? desc : "未知错误");
-                QString errorMsg = QString("退出群聊失败\n错误码: %1\n错误描述: %2").arg(code).arg(errorDesc);
+    // 检查REST API是否初始化
+    if (!m_restAPI) {
+        QMessageBox::critical(this, "错误", "REST API未初始化！");
+        delete callbackData;
+        return;
+    }
+    
+    // 在使用REST API前设置管理员账号信息
+    // 注意：REST API需要使用应用管理员账号，使用当前登录用户的teacher_unique_id
+    std::string adminUserId = GenerateTestUserSig::instance().getAdminUserId();
+    if (!adminUserId.empty()) {
+        std::string adminUserSig = GenerateTestUserSig::instance().genTestUserSig(adminUserId);
+        m_restAPI->setAdminInfo(QString::fromStdString(adminUserId), QString::fromStdString(adminUserSig));
+    }
+    
+    // 调用REST API退出群聊接口
+    m_restAPI->quitGroup(m_groupNumberId, userId,
+        [=](int errorCode, const QString& errorDesc, const QJsonObject& result) {
+            if (errorCode != 0) {
+                QString errorMsg = QString("退出群聊失败\n错误码: %1\n错误描述: %2").arg(errorCode).arg(errorDesc);
                 qDebug() << errorMsg;
-                QMessageBox::critical(dlg, "退出失败", errorMsg);
+                QMessageBox::critical(callbackData->dlg, "退出失败", errorMsg);
+                delete callbackData;
+                return;
             }
             
+            qDebug() << "REST API退出群聊成功:" << callbackData->groupId;
+            
+            // 立即从本地成员列表中移除当前用户
+            QVector<GroupMemberInfo> updatedMemberList;
+            QString leftUserId = callbackData->userId; // 记录退出的用户ID
+            for (const auto& member : callbackData->dlg->m_groupMemberInfo) {
+                if (member.member_id != callbackData->userId) {
+                    updatedMemberList.append(member);
+                }
+            }
+            callbackData->dlg->m_groupMemberInfo = updatedMemberList;
+            
+            // 立即更新UI（移除退出的成员）
+            callbackData->dlg->InitGroupMember(callbackData->dlg->m_groupNumberId, callbackData->dlg->m_groupMemberInfo);
+            
+            // REST API成功，现在调用自己的服务器接口（传递退出的用户ID，用于后续处理）
+            callbackData->dlg->sendExitGroupRequestToServer(callbackData->groupId, callbackData->userId, leftUserId);
+            
             // 释放回调数据
-            delete data;
-        }, callbackData);
-    
-    if (retCode != TIM_SUCC) {
-        QString errorMsg = QString("调用TIMGroupQuit接口失败，错误码: %1").arg(retCode);
-        qDebug() << errorMsg;
-        QMessageBox::critical(this, "错误", errorMsg);
-        delete callbackData;
-    }
+            delete callbackData;
+        });
 }
 
 void QGroupInfo::sendExitGroupRequestToServer(const QString& groupId, const QString& userId, const QString& leftUserId)
@@ -669,43 +679,47 @@ void QGroupInfo::onDismissGroupClicked()
     callbackData->userId = userId;
     callbackData->userName = userName;
     
-    // 调用腾讯SDK的解散群聊接口
-    QByteArray groupIdBytes = m_groupNumberId.toUtf8();
-    int retCode = TIMGroupDelete(groupIdBytes.constData(),
-        [](int32_t code, const char* desc, const char* json_params, const void* user_data) {
-            DismissGroupCallbackData* data = (DismissGroupCallbackData*)user_data;
-            QGroupInfo* dlg = data->dlg;
-            
-            if (code == TIM_SUCC) {
-                qDebug() << "腾讯SDK解散群聊成功:" << data->groupId;
-                
-                // 腾讯SDK成功，现在调用自己的服务器接口（传递回调数据以便后续释放）
-                dlg->sendDismissGroupRequestToServer(data->groupId, data->userId, data);
-            } else {
-                QString errorDesc = QString::fromUtf8(desc ? desc : "未知错误");
+    // 检查REST API是否初始化
+    if (!m_restAPI) {
+        QMessageBox::critical(this, "错误", "REST API未初始化！");
+        delete callbackData;
+        return;
+    }
+    
+    // 在使用REST API前设置管理员账号信息
+    // 注意：REST API需要使用应用管理员账号，使用当前登录用户的teacher_unique_id
+    std::string adminUserId = GenerateTestUserSig::instance().getAdminUserId();
+    if (!adminUserId.empty()) {
+        std::string adminUserSig = GenerateTestUserSig::instance().genTestUserSig(adminUserId);
+        m_restAPI->setAdminInfo(QString::fromStdString(adminUserId), QString::fromStdString(adminUserSig));
+    }
+    
+    // 调用REST API解散群聊接口
+    m_restAPI->destroyGroup(m_groupNumberId,
+        [=](int errorCode, const QString& errorDesc, const QJsonObject& result) {
+            if (errorCode != 0) {
                 QString errorMsg;
                 
                 // 特殊处理常见的错误码
-                if (code == 10004) {
-                    errorMsg = QString("解散群聊失败\n错误码: %1\n错误描述: %2\n\n注意：私有群无法解散群组。\n只有公开群、聊天室和直播大群的群主可以解散群组。").arg(code).arg(errorDesc);
+                if (errorCode == 10004) {
+                    errorMsg = QString("解散群聊失败\n错误码: %1\n错误描述: %2\n\n注意：私有群无法解散群组。\n只有公开群、聊天室和直播大群的群主可以解散群组。").arg(errorCode).arg(errorDesc);
                 } else {
-                    errorMsg = QString("解散群聊失败\n错误码: %1\n错误描述: %2").arg(code).arg(errorDesc);
+                    errorMsg = QString("解散群聊失败\n错误码: %1\n错误描述: %2").arg(errorCode).arg(errorDesc);
                 }
                 
                 qDebug() << errorMsg;
-                QMessageBox::critical(dlg, "解散失败", errorMsg);
+                QMessageBox::critical(callbackData->dlg, "解散失败", errorMsg);
                 
                 // 释放回调数据
-                delete data;
+                delete callbackData;
+                return;
             }
-        }, callbackData);
-    
-    if (retCode != TIM_SUCC) {
-        QString errorMsg = QString("调用TIMGroupDelete接口失败，错误码: %1").arg(retCode);
-        qDebug() << errorMsg;
-        QMessageBox::critical(this, "错误", errorMsg);
-        delete callbackData;
-    }
+            
+            qDebug() << "REST API解散群聊成功:" << callbackData->groupId;
+            
+            // REST API成功，现在调用自己的服务器接口（传递回调数据以便后续释放）
+            callbackData->dlg->sendDismissGroupRequestToServer(callbackData->groupId, callbackData->userId, callbackData);
+        });
 }
 
 void QGroupInfo::sendDismissGroupRequestToServer(const QString& groupId, const QString& userId, void* callbackData)
@@ -783,6 +797,97 @@ void QGroupInfo::refreshMemberList(const QString& groupId)
     // 通知父窗口（ScheduleDialog）刷新成员列表
     emit membersRefreshed(groupId);
     qDebug() << "发出成员列表刷新信号，群组ID:" << groupId;
+}
+
+void QGroupInfo::fetchGroupMemberListFromREST(const QString& groupId)
+{
+    if (!m_restAPI) {
+        qWarning() << "REST API未初始化，无法获取群成员列表";
+        return;
+    }
+    
+    // 设置管理员账号信息
+    std::string adminUserId = GenerateTestUserSig::instance().getAdminUserId();
+    if (!adminUserId.empty()) {
+        std::string adminUserSig = GenerateTestUserSig::instance().genTestUserSig(adminUserId);
+        m_restAPI->setAdminInfo(QString::fromStdString(adminUserId), QString::fromStdString(adminUserSig));
+    } else {
+        qWarning() << "管理员账号未设置，无法获取群成员列表";
+        return;
+    }
+    
+    // 使用REST API获取群成员列表
+    m_restAPI->getGroupMemberList(groupId, 100, 0, 
+        [this](int errorCode, const QString& errorDesc, const QJsonObject& result) {
+            if (errorCode != 0) {
+                qDebug() << "获取群成员列表失败，错误码:" << errorCode << "，描述:" << errorDesc;
+                return;
+            }
+            
+            // 解析成员列表
+            QVector<GroupMemberInfo> memberList;
+            QJsonArray memberArray = result["MemberList"].toArray();
+            
+            for (const QJsonValue& value : memberArray) {
+                if (!value.isObject()) continue;
+                
+                QJsonObject memberObj = value.toObject();
+                GroupMemberInfo memberInfo;
+                
+                // 获取成员账号
+                memberInfo.member_id = memberObj["Member_Account"].toString();
+                
+                // 获取成员角色
+                QString role = memberObj["Role"].toString();
+                if (role == "Owner") {
+                    memberInfo.member_role = "群主";
+                } else if (role == "Admin") {
+                    memberInfo.member_role = "管理员";
+                } else {
+                    memberInfo.member_role = "成员";
+                }
+                
+                // 获取成员名称（如果有）
+                if (memberObj.contains("NameCard") && !memberObj["NameCard"].toString().isEmpty()) {
+                    memberInfo.member_name = memberObj["NameCard"].toString();
+                } else {
+                    // 如果没有群名片，使用账号ID
+                    memberInfo.member_name = memberInfo.member_id;
+                }
+                
+                memberList.append(memberInfo);
+            }
+            
+            // 合并更新成员列表（保留原有成员名称等信息）
+            // 从REST API获取的成员列表可能没有成员名称，所以需要合并而不是直接替换
+            int existingCount = m_groupMemberInfo.size();
+            int newCount = 0;
+            
+            for (const GroupMemberInfo& newMember : memberList) {
+                // 检查 m_groupMemberInfo 中是否已存在该成员
+                bool found = false;
+                for (GroupMemberInfo& existingMember : m_groupMemberInfo) {
+                    if (existingMember.member_id == newMember.member_id) {
+                        // 成员已存在，只更新角色信息（保留原有的成员名称）
+                        existingMember.member_role = newMember.member_role;
+                        found = true;
+                        break;
+                    }
+                }
+                
+                // 如果成员不存在，添加到列表中
+                if (!found) {
+                    m_groupMemberInfo.append(newMember);
+                    newCount++;
+                }
+            }
+            
+            // 刷新UI（使用更新后的完整成员列表）
+            InitGroupMember(m_groupNumberId, m_groupMemberInfo);
+            
+            qDebug() << "成功更新群成员列表，原有" << existingCount << "个成员，新增" 
+                     << newCount << "个成员，当前共" << m_groupMemberInfo.size() << "个成员";
+        });
 }
 
 QGroupInfo::~QGroupInfo()

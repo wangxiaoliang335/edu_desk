@@ -34,6 +34,7 @@
 #include "QGroupInfo.h"
 #include "TAHttpHandler.h"
 #include "ArrangeSeatDialog.h"
+#include "GroupNotifyDialog.h"
 // 前向声明，避免循环依赖
 class HeatmapSegmentDialog;
 class HeatmapViewDialog;
@@ -368,6 +369,26 @@ public:
 				
 				// 关闭当前窗口
 				this->close();
+			}
+		});
+		
+		// 连接新成员入群信号，自动刷新成员列表
+		// GroupNotifyDialog是单例，通过静态方法获取实例并连接信号
+		// 使用QTimer延迟连接，确保GroupNotifyDialog已经创建
+		QTimer::singleShot(500, this, [this]() {
+			// 通过GroupNotifyDialog的静态方法获取实例
+			GroupNotifyDialog* notifyDlg = GroupNotifyDialog::instance();
+			if (notifyDlg) {
+				connect(notifyDlg, &GroupNotifyDialog::newMemberJoined, this, [this](const QString& groupId, const QStringList& memberIds) {
+					// 如果新成员加入的是当前群组，自动刷新成员列表
+					if (groupId == m_unique_group_id) {
+						qDebug() << "检测到新成员入群，自动刷新成员列表，群组ID:" << groupId << "，新成员:" << memberIds.join(", ");
+						refreshMemberList(groupId);
+					}
+				});
+				qDebug() << "已连接GroupNotifyDialog的新成员入群信号";
+			} else {
+				qWarning() << "GroupNotifyDialog实例不存在，无法连接新成员入群信号";
 			}
 		});
 
@@ -962,9 +983,14 @@ public:
 		if (m_groupInfo)
 		{
 			m_groupInfo->initData(groupName, unique_group_id);
+			
+			// 优先使用REST API获取群成员列表（从腾讯云IM直接获取，数据更准确）
+			// 如果REST API失败，可以回退到使用自己的服务器接口
+			m_groupInfo->fetchGroupMemberListFromREST(unique_group_id);
 		}
 
-		// 调用获取群组成员列表的接口
+		// 备用方案：调用自己的服务器接口获取群组成员列表
+		// 注意：如果使用REST API成功，这个接口可以作为数据同步的备用方案
 		if (m_httpHandler && !unique_group_id.isEmpty())
 		{
 			// 使用QUrl和QUrlQuery来正确编码URL参数（特别是#等特殊字符）
@@ -976,10 +1002,18 @@ public:
 		}
 	}
 
-	// 刷新成员列表（从服务器获取最新成员列表）
+	// 刷新成员列表（优先使用REST API从腾讯云IM获取最新成员列表）
 	void refreshMemberList(QString groupId)
 	{
 		m_unique_group_id = groupId;
+		
+		// 优先使用REST API获取群成员列表
+		if (m_groupInfo && !m_unique_group_id.isEmpty())
+		{
+			m_groupInfo->fetchGroupMemberListFromREST(m_unique_group_id);
+		}
+		
+		// 备用方案：调用自己的服务器接口获取群组成员列表
 		if (m_httpHandler && !m_unique_group_id.isEmpty())
 		{
 			// 使用QUrl和QUrlQuery来正确编码URL参数（特别是#等特殊字符）

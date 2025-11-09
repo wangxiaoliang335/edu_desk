@@ -17,6 +17,9 @@ MemberKickDialog::MemberKickDialog(QWidget* parent)
     setWindowTitle("踢出群成员");
     resize(400, 500);
     setStyleSheet("background-color:#555555; font-size:14px;");
+    
+    m_restAPI = new TIMRestAPI(this);
+    // 注意：管理员账号信息在使用REST API时再设置，因为此时用户可能还未登录
 
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(10, 10, 10, 10);
@@ -178,44 +181,25 @@ void MemberKickDialog::onOkClicked()
         return;
     }
     
-    // 调用腾讯SDK踢出成员接口
-    QJsonObject deleteMemberParam;
-    deleteMemberParam[kTIMGroupDeleteMemberParamGroupId] = m_groupId;
-    QJsonArray identifierArray;
+    if (!m_restAPI) {
+        QMessageBox::critical(this, "错误", "REST API未初始化！");
+        return;
+    }
+    
+    // 在使用REST API前设置管理员账号信息
+    // 注意：REST API需要使用应用管理员账号，使用当前登录用户的teacher_unique_id
+    std::string adminUserId = GenerateTestUserSig::instance().getAdminUserId();
+    if (!adminUserId.empty()) {
+        std::string adminUserSig = GenerateTestUserSig::instance().genTestUserSig(adminUserId);
+        m_restAPI->setAdminInfo(QString::fromStdString(adminUserId), QString::fromStdString(adminUserSig));
+    }
+    
+    // 构造成员ID数组（REST API格式）
+    QJsonArray memberArray;
     for (const QString& memberId : selectedMemberIds)
     {
-        identifierArray.append(memberId);
+        memberArray.append(memberId);
     }
-    deleteMemberParam[kTIMGroupDeleteMemberParamIdentifierArray] = identifierArray;
-    deleteMemberParam[kTIMGroupDeleteMemberParamUserData] = ""; // 添加user_data字段，即使为空字符串
-    
-    QJsonDocument doc(deleteMemberParam);
-    
-    // 验证JSON是否有效
-    if (doc.isNull() || doc.isEmpty()) {
-        QMessageBox::critical(this, "错误", "生成的JSON参数为空或无效！");
-        return;
-    }
-    
-    // 生成JSON字符串
-    QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
-    
-    // 验证JSON字符串
-    QJsonParseError parseError;
-    QJsonDocument verifyDoc = QJsonDocument::fromJson(jsonData, &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
-        QString errorMsg = QString("JSON格式验证失败: %1\n位置: %2").arg(parseError.errorString()).arg(parseError.offset);
-        qDebug() << errorMsg;
-        QMessageBox::critical(this, "JSON格式错误", errorMsg);
-        return;
-    }
-    
-    // 输出格式化的JSON用于调试
-    QByteArray formattedJson = doc.toJson(QJsonDocument::Indented);
-    qDebug() << "========== 踢出成员参数（格式化）==========";
-    qDebug() << QString::fromUtf8(formattedJson);
-    qDebug() << "========== 踢出成员参数（紧凑格式）==========";
-    qDebug() << QString::fromUtf8(jsonData);
     
     // 创建回调数据结构
     struct KickCallbackData {
@@ -231,68 +215,40 @@ void MemberKickDialog::onOkClicked()
     callbackData->memberNames = selectedMemberNames;
     callbackData->groupId = m_groupId;
     
-    // 确保JSON字符串是null-terminated
-    QByteArray jsonDataWithNull = jsonData;
-    if (jsonDataWithNull.isEmpty() || jsonDataWithNull.at(jsonDataWithNull.length() - 1) != '\0') {
-        jsonDataWithNull.append('\0');
-    }
+    qDebug() << "========== 踢出成员 - REST API ==========";
+    qDebug() << "群组ID:" << m_groupId;
+    qDebug() << "成员数量:" << memberArray.size();
     
-    const char* jsonCStr = jsonDataWithNull.constData();
-    
-    qDebug() << "========== 传递给TIMGroupDeleteMember的JSON字符串 ==========";
-    qDebug() << jsonCStr;
-    
-    int ret = TIMGroupDeleteMember(jsonCStr,
-        [](int32_t code, const char* desc, const char* json_params, const void* user_data) {
-            KickCallbackData* data = (KickCallbackData*)user_data;
-            if (!data || !data->dlg) {
-                delete data;
-                return;
-            }
-            
-            if (ERR_SUCC != code) {
-                QString errorDesc = QString::fromUtf8(desc ? desc : "未知错误");
+    // 调用REST API踢出成员
+    m_restAPI->deleteGroupMember(m_groupId, memberArray, "",
+        [=](int errorCode, const QString& errorDesc, const QJsonObject& result) {
+            if (errorCode != 0) {
                 QString errorMsg;
                 
                 // 特殊处理常见的错误码
-                if (code == 10007) {
-                    errorMsg = QString("踢出成员失败\n错误码: %1\n错误描述: %2\n\n操作权限不足，只有群主或管理员可以踢出成员。").arg(code).arg(errorDesc);
+                if (errorCode == 10007) {
+                    errorMsg = QString("踢出成员失败\n错误码: %1\n错误描述: %2\n\n操作权限不足，只有群主或管理员可以踢出成员。").arg(errorCode).arg(errorDesc);
                 } else {
-                    errorMsg = QString("踢出成员失败\n错误码: %1\n错误描述: %2").arg(code).arg(errorDesc);
+                    errorMsg = QString("踢出成员失败\n错误码: %1\n错误描述: %2").arg(errorCode).arg(errorDesc);
                 }
                 
                 qDebug() << errorMsg;
-                QMessageBox::critical(data->dlg, "踢出失败", errorMsg);
-                delete data;
+                QMessageBox::critical(callbackData->dlg, "踢出失败", errorMsg);
+                delete callbackData;
                 return;
             }
             
-            // 踢出成功，解析返回结果
-            if (json_params) {
-                QJsonParseError parseError;
-                QJsonDocument respDoc = QJsonDocument::fromJson(QString::fromUtf8(json_params).toUtf8(), &parseError);
-                if (parseError.error == QJsonParseError::NoError && respDoc.isArray()) {
-                    QJsonArray resultArray = respDoc.array();
-                    qDebug() << "踢出成员成功，返回结果数量:" << resultArray.size();
-                    
-                    // 调用服务器API移除成员
-                    data->dlg->kickMembersFromServer(data->memberIds, data->memberNames);
-                    
-                    QMessageBox::information(data->dlg, "踢出成功", "成员已成功踢出群组");
-                    data->dlg->accept(); // 关闭对话框
-                }
-            }
+            // 踢出成功
+            qDebug() << "踢出成员成功";
             
-            delete data;
-        }, callbackData);
-    
-    if (TIM_SUCC != ret) {
-        QString errorDescStr = getTIMResultErrorString(ret);
-        QString errorDesc = QString("调用TIMGroupDeleteMember接口失败\n错误码: %1\n错误描述: %2").arg(ret).arg(errorDescStr);
-        qDebug() << errorDesc;
-        QMessageBox::critical(this, "踢出失败", errorDesc);
-        delete callbackData;
-    }
+            // 调用服务器API移除成员
+            callbackData->dlg->kickMembersFromServer(callbackData->memberIds, callbackData->memberNames);
+            
+            QMessageBox::information(callbackData->dlg, "踢出成功", "成员已成功踢出群组");
+            callbackData->dlg->accept(); // 关闭对话框
+            
+            delete callbackData;
+        });
 }
 
 void MemberKickDialog::kickMembersFromServer(const QVector<QString>& memberIds, const QVector<QString>& memberNames)
