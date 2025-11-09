@@ -678,11 +678,11 @@ private:
                 qDebug() << "创建群组成功，群组ID:" << groupId;
                 
                 if (!groupId.isEmpty()) {
-                    // 上传群组信息到服务器
+                    // 上传群组信息到服务器（班级群，is_class_group=1）
                     if (callbackData->dlg && callbackData->dlg->m_httpHandler) {
                         callbackData->dlg->uploadGroupInfoToServer(groupId, callbackData->groupName, callbackData->teacher_name, 
                                                                    callbackData->teacherUniqueId, callbackData->classUniqueId, 
-                                                                   callbackData->userInfo);
+                                                                   callbackData->userInfo, true); // true表示班级群
                     }
                     
                     QMessageBox::information(callbackData->dlg, "创建群组成功", 
@@ -699,7 +699,7 @@ private:
     // 上传群组信息到服务器
     void uploadGroupInfoToServer(const QString& groupId, const QString& groupName, const QString teacher_name,
                                  const QString& teacherUniqueId, const QString& classUniqueId,
-                                 const UserInfo& userinfo) {
+                                 const UserInfo& userinfo, bool isClassGroup = true) {
         // 构造群组信息对象（参考FriendGroupDialog的格式）
         QJsonObject groupObj;
         
@@ -741,6 +741,8 @@ private:
         // 添加自定义字段：班级ID和学校ID（这些字段会从腾讯IM SDK的自定义字段中读取）
         groupObj["classid"] = classUniqueId;
         groupObj["schoolid"] = userinfo.schoolId;
+        // 添加 is_class_group 字段：1表示班级群，0表示普通群
+        groupObj["is_class_group"] = isClassGroup ? 1 : 0;
         
         // 注意：腾讯IM SDK的自定义字段存储在 group_detial_info_custom_info 中
         // 可以通过以下方式访问：

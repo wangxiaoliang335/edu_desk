@@ -4,6 +4,7 @@
 #include "TAFloatingWidget.h"
 #include "SearchDialog.h"
 #include "ClassTeacherDialog.h"
+#include "NormalGroupDialog.h"
 class TACAddGroupWidget1 : public TAFloatingWidget
 {
 	Q_OBJECT
@@ -28,5 +29,6 @@ private:
 private:
 	SearchDialog* m_searchDlg = NULL;
 	ClassTeacherDialog* m_classTeacherDlg = NULL;
+	NormalGroupDialog* m_normalGroupDlg = NULL;
 	QPointer<QVBoxLayout> contentLayout;
 };

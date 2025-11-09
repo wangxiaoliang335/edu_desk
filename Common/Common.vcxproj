@@ -154,6 +154,7 @@
     <QtMoc Include="TACAddGroupWidget.h" />
     <QtMoc Include="SearchDialog.h" />
     <QtMoc Include="ClassTeacherDialog.h" />
+    <QtMoc Include="NormalGroupDialog.h" />
     <QtMoc Include="ScheduleDialog.h" />
     <QtMoc Include="FriendNotifyDialog.h" />
     <QtMoc Include="GroupNotifyDialog.h" />
@@ -197,6 +198,7 @@
     <ClCompile Include="common\log.cpp" />
     <ClCompile Include="common\TaskQueue.cpp" />
     <ClCompile Include="FriendGroupDialog.cpp" />
+    <ClCompile Include="NormalGroupDialog.cpp" />
     <ClCompile Include="GenerateTestUserSig.cpp" />
     <ClCompile Include="MidtermGradeDialog.cpp" />
     <ClCompile Include="HeatmapSegmentDialog.cpp" />

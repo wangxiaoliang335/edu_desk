@@ -417,17 +417,24 @@ public:
 		QPushButton* btnEdit = new QPushButton("✎");
 		btnEdit->setFixedSize(24, 24);
 
-		QPushButton* btnSeat = new QPushButton("座次表");
-		QPushButton* btnCam = new QPushButton("摄像头");
-		btnTalk = new QPushButton("按住开始对讲");
-		QPushButton* btnMsg = new QPushButton("通知");
-		QPushButton* btnTask = new QPushButton("作业");
-		QString greenStyle = "background-color: green; color: white; padding: 4px 8px;";
-		btnSeat->setStyleSheet(greenStyle);
-		btnCam->setStyleSheet(greenStyle);
-		btnTalk->setStyleSheet(greenStyle);
-		btnMsg->setStyleSheet(greenStyle);
-		btnTask->setStyleSheet(greenStyle);
+	// 班级群功能按钮（普通群不显示）
+	QPushButton* btnSeat = new QPushButton("座次表");
+	QPushButton* btnCam = new QPushButton("摄像头");
+	btnTalk = new QPushButton("按住开始对讲");
+	QPushButton* btnMsg = new QPushButton("通知");
+	QPushButton* btnTask = new QPushButton("作业");
+	QString greenStyle = "background-color: green; color: white; padding: 4px 8px;";
+	btnSeat->setStyleSheet(greenStyle);
+	btnCam->setStyleSheet(greenStyle);
+	btnTalk->setStyleSheet(greenStyle);
+	btnMsg->setStyleSheet(greenStyle);
+	btnTask->setStyleSheet(greenStyle);
+	
+	// 保存按钮指针，用于根据群组类型显示/隐藏
+	m_btnSeat = btnSeat;
+	m_btnCam = btnCam;
+	m_btnMsg = btnMsg;
+	m_btnTask = btnTask;
 
 		QPushButton* btnMore = new QPushButton("...");
 		btnMore->setFixedSize(48, 24);
@@ -965,12 +972,22 @@ public:
 	void showGradientHeatmap(); // 显示渐变热力图
 	void setSegments(const QList<struct SegmentRange>& segments); // 设置分段区间
 	
-	void InitData(QString groupName, QString unique_group_id, QString classid, bool iGroupOwner)
+	void InitData(QString groupName, QString unique_group_id, QString classid, bool iGroupOwner, bool isClassGroup = true)
 	{
 		m_groupName = groupName;
 		m_unique_group_id = unique_group_id;
 		m_classid = classid;
 		m_iGroupOwner = iGroupOwner;
+		m_isClassGroup = isClassGroup; // 保存群组类型
+		
+		// 根据群组类型显示/隐藏班级群功能按钮
+		if (m_btnSeat) m_btnSeat->setVisible(isClassGroup);
+		if (m_btnCam) m_btnCam->setVisible(isClassGroup);
+		if (m_btnMsg) m_btnMsg->setVisible(isClassGroup);
+		if (m_btnTask) m_btnTask->setVisible(isClassGroup);
+		// btnTalk 对讲功能也只在班级群显示
+		if (btnTalk) btnTalk->setVisible(isClassGroup);
+		
 		if (m_lblClass)
 		{
 			m_lblClass->setText(groupName);
@@ -1351,6 +1368,12 @@ private:
 	QString m_userName;
 	QPushButton* btnTalk = NULL;
 	bool m_isBeginTalk = false;
+	// 班级群功能按钮指针（普通群不显示）
+	QPushButton* m_btnSeat = nullptr;
+	QPushButton* m_btnCam = nullptr;
+	QPushButton* m_btnMsg = nullptr;
+	QPushButton* m_btnTask = nullptr;
+	bool m_isClassGroup = true; // 默认为班级群
 	QGroupInfo* m_groupInfo;
 	TAHttpHandler* m_httpHandler = NULL;
 	// 用于记录按下开始时间

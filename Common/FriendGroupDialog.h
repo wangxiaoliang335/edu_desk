@@ -29,7 +29,7 @@ class RowItem : public QFrame {
 public:
     explicit RowItem(const QString& text, QWidget* parent = nullptr) : QFrame(parent) {
         setObjectName("RowItem");
-        setFixedHeight(48);
+        setFixedHeight(24);
         setStyleSheet(
             "QFrame#RowItem { background:#ffffff; border-bottom:1px solid #eaeaea; }\n"
             "QLabel { color:#222; font-size:15px; }\n"
@@ -78,7 +78,7 @@ public:
         m_pWs = pWs;
 
         setWindowTitle("好友 / 群聊");
-        resize(500, 600);
+        resize(500, 650);
 
         //m_scheduleDlg = new ScheduleDialog(this, pWs);
         //m_scheduleDlg->InitWebSocket();
@@ -100,11 +100,6 @@ public:
                         
                         // 处理群主群组列表（owner_groups）
                         if (dataObj["owner_groups"].isArray()) {
-                            // 只在第一次添加标题
-                            if (gAdminLayout && gAdminLayout->count() == 0) {
-                                gAdminLayout->addLayout(makeRowBtn("管理", "1", "orange", "black"));
-                            }
-                            
                             QJsonArray ownerGroupsArray = dataObj["owner_groups"].toArray();
                             for (int i = 0; i < ownerGroupsArray.size(); i++) {
                                 QJsonObject groupObj = ownerGroupsArray[i].toObject();
@@ -128,20 +123,48 @@ public:
                                     avatarPath = ""; // 或者设置一个默认头像路径
                                 }
                                 
-                                // 添加到管理布局（群主群组）
-                                if (gAdminLayout) {
-                                    gAdminLayout->addLayout(makePairBtn(avatarPath, groupName, "white", "red", groupId, classid, true));
+                                // 读取 is_class_group 字段（默认为1，表示班级群）
+                                bool isClassGroup = groupObj.contains("is_class_group") ? (groupObj["is_class_group"].toInt() == 1) : true;
+                                
+                                // 根据群组类型添加到对应的管理布局
+                                if (isClassGroup) {
+                                    // 班级群：添加到班级群管理布局
+                                    if (gAdminLayout && gAdminLayout->count() == 0) {
+                                        gAdminLayout->addLayout(makeRowBtn("管理", "1", "orange", "black"));
+                                    }
+                                    if (gAdminLayout) {
+                                        QHBoxLayout* pairLayout = makePairBtn(avatarPath, groupName, "white", "red", groupId, classid, true, isClassGroup);
+                                        // 在按钮上设置 is_class_group 属性，以便后续使用
+                                        if (pairLayout && pairLayout->count() > 0) {
+                                            QLayoutItem* item = pairLayout->itemAt(0);
+                                            if (item && item->widget()) {
+                                                item->widget()->setProperty("isClassGroup", isClassGroup);
+                                            }
+                                        }
+                                        gAdminLayout->addLayout(pairLayout);
+                                    }
+                                } else {
+                                    // 普通群：添加到普通群管理布局
+                                    if (gNormalAdminLayout && gNormalAdminLayout->count() == 0) {
+                                        gNormalAdminLayout->addLayout(makeRowBtn("管理", "1", "orange", "black"));
+                                    }
+                                    if (gNormalAdminLayout) {
+                                        QHBoxLayout* pairLayout = makePairBtn(avatarPath, groupName, "white", "red", groupId, classid, true, isClassGroup);
+                                        // 在按钮上设置 is_class_group 属性，以便后续使用
+                                        if (pairLayout && pairLayout->count() > 0) {
+                                            QLayoutItem* item = pairLayout->itemAt(0);
+                                            if (item && item->widget()) {
+                                                item->widget()->setProperty("isClassGroup", isClassGroup);
+                                            }
+                                        }
+                                        gNormalAdminLayout->addLayout(pairLayout);
+                                    }
                                 }
                             }
                         }
                         
                         // 处理成员群组列表（member_groups）
                         if (dataObj["member_groups"].isArray()) {
-                            // 只在第一次添加标题
-                            if (gJoinLayout && gJoinLayout->count() == 0) {
-                                gJoinLayout->addLayout(makeRowBtn("加入", "3", "orange", "black"));
-                            }
-                            
                             QJsonArray memberGroupsArray = dataObj["member_groups"].toArray();
                             for (int i = 0; i < memberGroupsArray.size(); i++) {
                                 QJsonObject groupObj = memberGroupsArray[i].toObject();
@@ -165,9 +188,42 @@ public:
                                     avatarPath = ""; // 或者设置一个默认头像路径
                                 }
                                 
-                                // 添加到加入布局（非群主群组）
-                                if (gJoinLayout) {
-                                    gJoinLayout->addLayout(makePairBtn(avatarPath, groupName, "white", "red", groupId, classid, false));
+                                // 读取 is_class_group 字段（默认为1，表示班级群）
+                                bool isClassGroup = groupObj.contains("is_class_group") ? (groupObj["is_class_group"].toInt() == 1) : true;
+                                
+                                // 根据群组类型添加到对应的加入布局
+                                if (isClassGroup) {
+                                    // 班级群：添加到班级群加入布局
+                                    if (gJoinLayout && gJoinLayout->count() == 0) {
+                                        gJoinLayout->addLayout(makeRowBtn("加入", "3", "orange", "black"));
+                                    }
+                                    if (gJoinLayout) {
+                                        QHBoxLayout* pairLayout = makePairBtn(avatarPath, groupName, "white", "red", groupId, classid, false, isClassGroup);
+                                        // 在按钮上设置 is_class_group 属性，以便后续使用
+                                        if (pairLayout && pairLayout->count() > 0) {
+                                            QLayoutItem* item = pairLayout->itemAt(0);
+                                            if (item && item->widget()) {
+                                                item->widget()->setProperty("isClassGroup", isClassGroup);
+                                            }
+                                        }
+                                        gJoinLayout->addLayout(pairLayout);
+                                    }
+                                } else {
+                                    // 普通群：添加到普通群加入布局
+                                    if (gNormalJoinLayout && gNormalJoinLayout->count() == 0) {
+                                        gNormalJoinLayout->addLayout(makeRowBtn("加入", "3", "orange", "black"));
+                                    }
+                                    if (gNormalJoinLayout) {
+                                        QHBoxLayout* pairLayout = makePairBtn(avatarPath, groupName, "white", "red", groupId, classid, false, isClassGroup);
+                                        // 在按钮上设置 is_class_group 属性，以便后续使用
+                                        if (pairLayout && pairLayout->count() > 0) {
+                                            QLayoutItem* item = pairLayout->itemAt(0);
+                                            if (item && item->widget()) {
+                                                item->widget()->setProperty("isClassGroup", isClassGroup);
+                                            }
+                                        }
+                                        gNormalJoinLayout->addLayout(pairLayout);
+                                    }
                                 }
                             }
                         }
@@ -244,16 +300,14 @@ public:
                         qDebug() << "msg:" << oTmp["message"].toString(); // 如果 msg 是中文，也能正常输出
                         //errLabel->setText(strTmp);
                         //user_id = oTmp["user_id"].toInt();
+
+                        fLayout->addStretch(); // 添加弹簧，将内容推到顶部
                     }
                     else if (obj["data"].isObject())
                     {
                         QJsonObject dataObj = obj["data"].toObject();
                         if (dataObj["groups"].isArray())
                         {
-                            // 只在布局为空时添加标题行，避免重复添加
-                            if (gAdminLayout && gAdminLayout->count() == 0) {
-                                gAdminLayout->addLayout(makeRowBtn("管理", "1", "orange", "black"));
-                            }
                             QJsonArray groupArray = dataObj["groups"].toArray();
                             for (int i = 0; i < groupArray.size(); i++)
                             {
@@ -295,15 +349,43 @@ public:
                                 //lblAvatar->setPixmap(pixmap.scaled(lblAvatar->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
                                 //lblAvatar->setScaledContents(true);
 
-                                gAdminLayout->addLayout(makePairBtn(filePath, groupObj.value("nickname").toString(), "white", "red", unique_group_id, classid, true));
+                                // 读取 is_class_group 字段（默认为1，表示班级群）
+                                bool isClassGroup = groupObj.contains("is_class_group") ? (groupObj["is_class_group"].toInt() == 1) : true;
+                                
+                                // 根据群组类型添加到对应的管理布局
+                                if (isClassGroup) {
+                                    // 班级群：添加到班级群管理布局
+                                    if (gAdminLayout && gAdminLayout->count() == 0) {
+                                        gAdminLayout->addLayout(makeRowBtn("管理", "1", "orange", "black"));
+                                    }
+                                    QHBoxLayout* pairLayout = makePairBtn(filePath, groupObj.value("nickname").toString(), "white", "red", unique_group_id, classid, true, isClassGroup);
+                                    // 在按钮上设置 is_class_group 属性，以便后续使用
+                                    if (pairLayout && pairLayout->count() > 0) {
+                                        QLayoutItem* item = pairLayout->itemAt(0);
+                                        if (item && item->widget()) {
+                                            item->widget()->setProperty("isClassGroup", isClassGroup);
+                                        }
+                                    }
+                                    gAdminLayout->addLayout(pairLayout);
+                                } else {
+                                    // 普通群：添加到普通群管理布局
+                                    if (gNormalAdminLayout && gNormalAdminLayout->count() == 0) {
+                                        gNormalAdminLayout->addLayout(makeRowBtn("管理", "1", "orange", "black"));
+                                    }
+                                    QHBoxLayout* pairLayout = makePairBtn(filePath, groupObj.value("nickname").toString(), "white", "red", unique_group_id, classid, true, isClassGroup);
+                                    // 在按钮上设置 is_class_group 属性，以便后续使用
+                                    if (pairLayout && pairLayout->count() > 0) {
+                                        QLayoutItem* item = pairLayout->itemAt(0);
+                                        if (item && item->widget()) {
+                                            item->widget()->setProperty("isClassGroup", isClassGroup);
+                                        }
+                                    }
+                                    gNormalAdminLayout->addLayout(pairLayout);
+                                }
                             }
                         }
                         else if (dataObj["joingroups"].isArray())
                         {
-                            // 只在布局为空时添加标题行，避免重复添加
-                            if (gJoinLayout && gJoinLayout->count() == 0) {
-                                gJoinLayout->addLayout(makeRowBtn("加入", "3", "orange", "black"));
-                            }
                             QJsonArray groupArray = dataObj["joingroups"].toArray();
                             for (int i = 0; i < groupArray.size(); i++)
                             {
@@ -345,7 +427,39 @@ public:
                                 //lblAvatar->setPixmap(pixmap.scaled(lblAvatar->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
                                 //lblAvatar->setScaledContents(true);
 
-                                gJoinLayout->addLayout(makePairBtn(filePath, groupObj.value("nickname").toString(), "white", "red", unique_group_id, classid, false));
+                                // 读取 is_class_group 字段（默认为1，表示班级群）
+                                bool isClassGroup = groupObj.contains("is_class_group") ? (groupObj["is_class_group"].toInt() == 1) : true;
+                                
+                                // 根据群组类型添加到对应的加入布局
+                                if (isClassGroup) {
+                                    // 班级群：添加到班级群加入布局
+                                    if (gJoinLayout && gJoinLayout->count() == 0) {
+                                        gJoinLayout->addLayout(makeRowBtn("加入", "3", "orange", "black"));
+                                    }
+                                    QHBoxLayout* pairLayout = makePairBtn(filePath, groupObj.value("nickname").toString(), "white", "red", unique_group_id, classid, false, isClassGroup);
+                                    // 在按钮上设置 is_class_group 属性，以便后续使用
+                                    if (pairLayout && pairLayout->count() > 0) {
+                                        QLayoutItem* item = pairLayout->itemAt(0);
+                                        if (item && item->widget()) {
+                                            item->widget()->setProperty("isClassGroup", isClassGroup);
+                                        }
+                                    }
+                                    gJoinLayout->addLayout(pairLayout);
+                                } else {
+                                    // 普通群：添加到普通群加入布局
+                                    if (gNormalJoinLayout && gNormalJoinLayout->count() == 0) {
+                                        gNormalJoinLayout->addLayout(makeRowBtn("加入", "3", "orange", "black"));
+                                    }
+                                    QHBoxLayout* pairLayout = makePairBtn(filePath, groupObj.value("nickname").toString(), "white", "red", unique_group_id, classid, false, isClassGroup);
+                                    // 在按钮上设置 is_class_group 属性，以便后续使用
+                                    if (pairLayout && pairLayout->count() > 0) {
+                                        QLayoutItem* item = pairLayout->itemAt(0);
+                                        if (item && item->widget()) {
+                                            item->widget()->setProperty("isClassGroup", isClassGroup);
+                                        }
+                                    }
+                                    gNormalJoinLayout->addLayout(pairLayout);
+                                }
                             }
                         }
                     }
@@ -497,7 +611,7 @@ public:
         // 好友界面
         QWidget* friendPage = new QWidget;
         fLayout = new QVBoxLayout(friendPage);
-        fLayout->setSpacing(10);
+        //fLayout->setSpacing(10);
         fLayout->addLayout(makeRowBtn("班级", "3", "blue", "white"));
         fLayout->addLayout(makePairBtn("班级头像", "班级昵称", "orange", "black", "", "", false));
         fLayout->addLayout(makePairBtn("班级头像", "班级昵称", "orange", "black", "", "", false));
@@ -508,16 +622,33 @@ public:
         // 群聊界面
         QWidget* groupPage = new QWidget;
         gLayout = new QVBoxLayout(groupPage);
-        gAdminLayout = new QVBoxLayout; // 创建独立布局，不指定父对象
-        gJoinLayout = new QVBoxLayout; // 创建独立布局，不指定父对象
-        gLayout->setSpacing(10);
+        gAdminLayout = new QVBoxLayout; // 班级群-管理布局
+        gJoinLayout = new QVBoxLayout; // 班级群-加入布局
+        gNormalAdminLayout = new QVBoxLayout; // 普通群-管理布局
+        gNormalJoinLayout = new QVBoxLayout; // 普通群-加入布局
+        //gLayout->setSpacing(2); // 减少间距，使按钮和子布局更紧凑
+        //gLayout->setContentsMargins(0, 0, 0, 0);
+        // 设置子布局的边距为0，使它们更紧凑
+        //gAdminLayout->setContentsMargins(0, 0, 0, 0);
+        //gAdminLayout->setSpacing(0);
+        //gJoinLayout->setContentsMargins(0, 0, 0, 0);
+        //gJoinLayout->setSpacing(0);
+        //gNormalAdminLayout->setContentsMargins(0, 0, 0, 0);
+        //gNormalAdminLayout->setSpacing(0);
+        gNormalJoinLayout->setContentsMargins(0, 0, 0, 0);
+        //gNormalJoinLayout->setSpacing(0);
         //gLayout->addLayout(makePairBtn("群头像", "群昵称", "white", "red"));
         //gLayout->addLayout(makePairBtn("群头像", "群昵称", "white", "red"));
 
         gLayout->addLayout(makeRowBtn("班级群", "3", "blue", "white"));
         gLayout->addLayout(gAdminLayout);
         gLayout->addLayout(gJoinLayout);
+        gLayout->setSpacing(10); // 减少间距，使按钮和子布局更紧凑
+        gLayout->addStretch(); // 添加弹簧，将内容推到顶部
         gLayout->addLayout(makeRowBtn("普通群", "3", "blue", "white"));
+        gLayout->addLayout(gNormalAdminLayout);
+        gLayout->addLayout(gNormalJoinLayout);
+        gLayout->addStretch(); // 添加弹簧，将内容推到顶部
 
         stack->addWidget(friendPage);
         stack->addWidget(groupPage);
@@ -542,7 +673,7 @@ public:
         QVBoxLayout* mainLayout = new QVBoxLayout(this);
         mainLayout->addLayout(closeLayout);
         mainLayout->addLayout(topLayout);
-        mainLayout->addSpacing(10);
+        mainLayout->addSpacing(5);
         mainLayout->addLayout(switchLayout);
         mainLayout->addWidget(stack);
     }
@@ -580,7 +711,7 @@ public:
     }
 
     // 帮助函数：生成一行两个不同用途的按钮（如头像+昵称）
-    QHBoxLayout* makePairBtn(const QString& leftText, const QString& rightText, const QString& bgColor, const QString& fgColor, QString unique_group_id, QString classid, bool iGroupOwner)
+    QHBoxLayout* makePairBtn(const QString& leftText, const QString& rightText, const QString& bgColor, const QString& fgColor, QString unique_group_id, QString classid, bool iGroupOwner, bool isClassGroup = true)
     {
         QHBoxLayout* pair = new QHBoxLayout;
         QPushButton* left = new QPushButton();
@@ -599,7 +730,10 @@ public:
         pair->addWidget(right);
         if (!unique_group_id.isEmpty())
         {
-            connect(left, &QPushButton::clicked, this, [this, rightText, unique_group_id, classid, iGroupOwner]() {
+            connect(left, &QPushButton::clicked, this, [this, left, rightText, unique_group_id, classid, iGroupOwner, isClassGroup]() {
+                // 从按钮属性中获取 is_class_group（如果设置了，优先使用参数值）
+                bool actualIsClassGroup = left->property("isClassGroup").isValid() ? left->property("isClassGroup").toBool() : isClassGroup;
+                
                 if (!m_scheduleDlg[unique_group_id])
                 {
                     m_scheduleDlg[unique_group_id] = new ScheduleDialog(classid, this, m_pWs);
@@ -620,7 +754,7 @@ public:
 
                 if (m_scheduleDlg[unique_group_id] && m_scheduleDlg[unique_group_id]->isHidden())
                 {
-                    m_scheduleDlg[unique_group_id]->InitData(rightText, unique_group_id, classid, iGroupOwner);
+                    m_scheduleDlg[unique_group_id]->InitData(rightText, unique_group_id, classid, iGroupOwner, actualIsClassGroup);
                     m_scheduleDlg[unique_group_id]->show();
                 }
                 else
@@ -675,6 +809,8 @@ public:
         
         clearLayoutSafely(gAdminLayout);
         clearLayoutSafely(gJoinLayout);
+        clearLayoutSafely(gNormalAdminLayout);
+        clearLayoutSafely(gNormalJoinLayout);
         clearLayoutSafely(fLayout); // 也清空好友布局
 
         // 确保所有已存在的 ScheduleDialog 都建立了群聊退出信号连接
@@ -985,8 +1121,10 @@ public:
      TAHttpHandler* m_httpHandler = NULL;
      QVBoxLayout* fLayout = NULL;
      QVBoxLayout* gLayout = NULL;
-     QVBoxLayout* gAdminLayout = NULL;
-     QVBoxLayout* gJoinLayout = NULL;
+     QVBoxLayout* gAdminLayout = NULL; // 班级群-管理布局
+     QVBoxLayout* gJoinLayout = NULL; // 班级群-加入布局
+     QVBoxLayout* gNormalAdminLayout = NULL; // 普通群-管理布局
+     QVBoxLayout* gNormalJoinLayout = NULL; // 普通群-加入布局
      TaQTWebSocket* m_pWs = NULL;
      QMap<QString, ScheduleDialog*> m_scheduleDlg;
      QList<Notification> notifications;

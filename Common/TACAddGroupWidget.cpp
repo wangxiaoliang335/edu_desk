@@ -21,6 +21,10 @@ TACAddGroupWidget1::TACAddGroupWidget1(QWidget *parent, TaQTWebSocket* pWs)
 	// 连接ClassTeacherDialog的ScheduleDialog相关信号，转发给FriendGroupDialog
 	connect(m_classTeacherDlg, &ClassTeacherDialog::scheduleDialogNeeded, this, &TACAddGroupWidget1::scheduleDialogNeeded);
 	connect(m_classTeacherDlg, &ClassTeacherDialog::scheduleDialogRefreshNeeded, this, &TACAddGroupWidget1::scheduleDialogRefreshNeeded);
+	
+	m_normalGroupDlg = new NormalGroupDialog(this);
+	// 连接NormalGroupDialog的群组创建成功信号，转发给FriendGroupDialog
+	connect(m_normalGroupDlg, &NormalGroupDialog::groupCreated, this, &TACAddGroupWidget1::groupCreated);
 	this->setObjectName("TACDesktopManagerWidget");
 
 	this->setBackgroundColor(WIDGET_BACKGROUND_COLOR_C);
@@ -48,6 +52,12 @@ TACAddGroupWidget1::TACAddGroupWidget1(QWidget *parent, TaQTWebSocket* pWs)
 
 	QPushButton* createFolderButton = new QPushButton("创建普通群", this);
 	layout->addWidget(createFolderButton);
+	connect(createFolderButton, &QPushButton::clicked, this, [=]() {
+		if (m_normalGroupDlg && m_normalGroupDlg->isHidden())
+		{
+			m_normalGroupDlg->show();
+		}
+	});
 
 	QPushButton* countdowButton = new QPushButton("加好友/群", this);
 	layout->addWidget(countdowButton);
