@@ -736,7 +736,9 @@ void MidtermGradeDialog::openSeatingArrangementDialog()
     QList<StudentInfo> students;
     
     // 获取列索引
-    int colId = -1, colName = -1, colTotal = -1;
+    int colId = -1, colName = -1, colTotal = -1, colChinese = -1, colMath = -1, colEnglish = -1;
+    QMap<QString, int> otherColumns; // 存储其他列（如"背诵"等）
+    
     for (int col = 0; col < table->columnCount(); ++col) {
         QTableWidgetItem* headerItem = table->horizontalHeaderItem(col);
         if (!headerItem) continue;
@@ -744,6 +746,13 @@ void MidtermGradeDialog::openSeatingArrangementDialog()
         if (headerText == "学号") colId = col;
         else if (headerText == "姓名") colName = col;
         else if (headerText == "总分") colTotal = col;
+        else if (headerText == "语文") colChinese = col;
+        else if (headerText == "数学") colMath = col;
+        else if (headerText == "英语") colEnglish = col;
+        else {
+            // 其他列（如"背诵"等）也保存起来
+            otherColumns[headerText] = col;
+        }
     }
     
     if (colName < 0) {
@@ -774,11 +783,59 @@ void MidtermGradeDialog::openSeatingArrangementDialog()
                 bool ok;
                 student.score = totalItem->text().toDouble(&ok);
                 if (!ok) student.score = 0;
+                // 同时保存到 attributes 中
+                student.attributes["总分"] = student.score;
             } else {
                 student.score = 0;
             }
         } else {
             student.score = 0;
+        }
+        
+        // 读取各科成绩并填充到 attributes 中
+        if (colChinese >= 0) {
+            QTableWidgetItem* item = table->item(row, colChinese);
+            if (item && !item->text().trimmed().isEmpty()) {
+                bool ok;
+                double score = item->text().toDouble(&ok);
+                if (ok) {
+                    student.attributes["语文"] = score;
+                }
+            }
+        }
+        if (colMath >= 0) {
+            QTableWidgetItem* item = table->item(row, colMath);
+            if (item && !item->text().trimmed().isEmpty()) {
+                bool ok;
+                double score = item->text().toDouble(&ok);
+                if (ok) {
+                    student.attributes["数学"] = score;
+                }
+            }
+        }
+        if (colEnglish >= 0) {
+            QTableWidgetItem* item = table->item(row, colEnglish);
+            if (item && !item->text().trimmed().isEmpty()) {
+                bool ok;
+                double score = item->text().toDouble(&ok);
+                if (ok) {
+                    student.attributes["英语"] = score;
+                }
+            }
+        }
+        
+        // 读取其他列（如"背诵"等）并填充到 attributes 中
+        for (auto it = otherColumns.begin(); it != otherColumns.end(); ++it) {
+            QString columnName = it.key();
+            int col = it.value();
+            QTableWidgetItem* item = table->item(row, col);
+            if (item && !item->text().trimmed().isEmpty()) {
+                bool ok;
+                double score = item->text().toDouble(&ok);
+                if (ok) {
+                    student.attributes[columnName] = score;
+                }
+            }
         }
         
         student.originalIndex = students.size();

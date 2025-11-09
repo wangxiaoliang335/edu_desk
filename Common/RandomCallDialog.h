@@ -73,5 +73,14 @@ private:
     bool isAnimating;
     
     QMap<QPushButton*, QString> originalStyles; // 保存原始按钮样式
+    
+    // 窗口拖动相关
+    QPoint m_dragPosition;
+    bool m_dragging;
+    
+protected:
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
 };
 

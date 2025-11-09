@@ -88,7 +88,9 @@ public:
 	ScheduleDialog(QString classid, QWidget* parent = nullptr, TaQTWebSocket* pWs = NULL) : QDialog(parent)
 	{
 		setWindowTitle("课程表");
-		resize(700, 500);
+		// 座位区域：10列×121像素=1210像素宽，6行×50像素=300像素高
+		// 窗口大小：宽度1238（1251×0.99），高度669（676×0.99）
+		resize(1238, 669);
 		setStyleSheet("QPushButton { font-size:14px; } QLabel { font-size:14px; }");
 
 		m_classid = classid;
@@ -662,9 +664,9 @@ public:
 
 		// 座位表格区域 - 重新设计座位布局
 		// 第1行：4个座位（过道两侧各2个）
-		// 第2-4行：每行9个座位（左列3个 + 中列3个 + 右列3个，中间有两条过道）
-		// 总共31个座位
-		seatTable = new QTableWidget(4, 11); // 4行，11列（包含过道列）
+		// 第2-6行：每行8个座位（左列3个 + 中列3个 + 右列2个，中间有两条过道）
+		// 总共44个座位
+		seatTable = new QTableWidget(6, 10); // 6行，10列（包含过道列）
 		seatTable->horizontalHeader()->setVisible(false);
 		seatTable->verticalHeader()->setVisible(false);
 		seatTable->setStyleSheet(
@@ -678,17 +680,17 @@ public:
 			"}"
 		);
 		
-		// 设置列宽和行高
-		for (int col = 0; col < 11; ++col) {
-			seatTable->setColumnWidth(col, 50);
+		// 设置列宽和行高（列宽再扩大1.1倍：从110改为121）
+		for (int col = 0; col < 10; ++col) {
+			seatTable->setColumnWidth(col, 121);
 		}
-		for (int row = 0; row < 4; ++row) {
+		for (int row = 0; row < 6; ++row) {
 			seatTable->setRowHeight(row, 50);
 		}
 		
 		// 初始化所有单元格，为每个单元格创建按钮
-		for (int row = 0; row < 4; ++row) {
-			for (int col = 0; col < 11; ++col) {
+		for (int row = 0; row < 6; ++row) {
+			for (int col = 0; col < 10; ++col) {
 				QPushButton* btn = new QPushButton("");
 				btn->setStyleSheet(
 					"QPushButton { "
@@ -719,8 +721,8 @@ public:
 		}
 		
 		// 第1行布局：4个座位（过道两侧各2个）
-		// 左侧2个座位：列0-1，右侧2个座位：列9-10，中间列2-8合并为过道
-		seatTable->setSpan(0, 2, 1, 7); // 合并第1行的列2-8作为中央过道
+		// 左侧2个座位：列0-1，右侧2个座位：列8-9，中间列2-7合并为过道
+		seatTable->setSpan(0, 2, 1, 6); // 合并第1行的列2-7作为中央过道
 		QPushButton* aisle1Btn = qobject_cast<QPushButton*>(seatTable->cellWidget(0, 2));
 		if (aisle1Btn) {
 			aisle1Btn->setEnabled(false);
@@ -732,9 +734,9 @@ public:
 			);
 		}
 		
-		// 第2-4行布局：每行9个座位
-		// 左列3个：列0-2，过道列3，中列3个：列4-6，过道列7，右列3个：列8-10
-		for (int row = 1; row < 4; ++row) {
+		// 第2-6行布局：每行8个座位
+		// 左列3个：列0-2，过道列3，中列3个：列4-6，过道列7，右列2个：列8-9
+		for (int row = 1; row < 6; ++row) {
 			// 左列座位：列0-2
 			for (int col = 0; col < 3; ++col) {
 				QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
@@ -777,8 +779,8 @@ public:
 				);
 			}
 			
-			// 右列座位：列8-10
-			for (int col = 8; col < 11; ++col) {
+			// 右列座位：列8-9
+			for (int col = 8; col < 10; ++col) {
 				QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
 				if (btn) {
 					btn->setText("");
@@ -796,8 +798,8 @@ public:
 				btn->setProperty("isSeat", true);
 			}
 		}
-		// 右侧2个座位：列9-10
-		for (int col = 9; col < 11; ++col) {
+		// 右侧2个座位：列8-9
+		for (int col = 8; col < 10; ++col) {
 			QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(0, col));
 			if (btn) {
 				btn->setText("");
@@ -1423,8 +1425,8 @@ inline void ScheduleDialog::arrangeSeats(const QList<StudentInfo>& students, con
 	
 	// 获取所有座位按钮（标记为 isSeat 的按钮），按行列顺序排列
 	QList<QPushButton*> seatButtons;
-	for (int row = 0; row < 4; ++row) {
-		for (int col = 0; col < 11; ++col) {
+	for (int row = 0; row < 6; ++row) {
+		for (int col = 0; col < 10; ++col) {
 			QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
 			if (btn && btn->property("isSeat").toBool()) {
 				seatButtons.append(btn);

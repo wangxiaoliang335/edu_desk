@@ -4,6 +4,7 @@
 #include <QTimer>
 #include <QGraphicsEffect>
 #include <QGraphicsDropShadowEffect>
+#include <QMouseEvent>
 #include <random>
 #include <algorithm>
 
@@ -13,11 +14,12 @@ RandomCallDialog::RandomCallDialog(QWidget* parent)
     , animationTimer(nullptr)
     , animationStep(0)
     , isAnimating(false)
+    , m_dragging(false)
 {
     // 设置无边框窗口
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     setStyleSheet("background-color: #e0f0ff;");
-    resize(500, 350);
+    resize(500, 350); // 还原为原始大小
 
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     mainLayout->setSpacing(20);
@@ -138,8 +140,12 @@ RandomCallDialog::RandomCallDialog(QWidget* parent)
     });
     connect(btnTable, &QPushButton::clicked, this, [this, btnTable]() {
         // 显示下拉菜单
-        QPoint pos = btnTable->mapToGlobal(QPoint(0, btnTable->height()));
-        tableComboBox->move(pos);
+        // 将按钮的底部位置转换为相对于对话框的坐标，X坐标对齐按钮左边
+        QPoint globalPos = btnTable->mapToGlobal(QPoint(0, btnTable->height()));
+        QPoint localPos = this->mapFromGlobal(globalPos);
+        // 设置下拉菜单的宽度与按钮相同，左边对齐
+        tableComboBox->setFixedWidth(btnTable->width());
+        tableComboBox->move(localPos);
         tableComboBox->showPopup();
     });
 
@@ -157,8 +163,12 @@ RandomCallDialog::RandomCallDialog(QWidget* parent)
     });
     connect(btnAttr, &QPushButton::clicked, this, [this, btnAttr]() {
         // 显示下拉菜单
-        QPoint pos = btnAttr->mapToGlobal(QPoint(0, btnAttr->height()));
-        attributeComboBox->move(pos);
+        // 将按钮的底部位置转换为相对于对话框的坐标，X坐标对齐按钮左边
+        QPoint globalPos = btnAttr->mapToGlobal(QPoint(0, btnAttr->height()));
+        QPoint localPos = this->mapFromGlobal(globalPos);
+        // 设置下拉菜单的宽度与按钮相同，左边对齐
+        attributeComboBox->setFixedWidth(btnAttr->width());
+        attributeComboBox->move(localPos);
         attributeComboBox->showPopup();
     });
 
@@ -258,8 +268,8 @@ void RandomCallDialog::setSeatTable(QTableWidget* seatTable)
     
     // 保存原始样式并连接所有座位按钮的点击事件
     if (m_seatTable) {
-        for (int row = 0; row < 4; ++row) {
-            for (int col = 0; col < 11; ++col) {
+        for (int row = 0; row < 6; ++row) {
+            for (int col = 0; col < 10; ++col) {
                 QPushButton* btn = qobject_cast<QPushButton*>(m_seatTable->cellWidget(row, col));
                 if (btn && btn->property("isSeat").toBool()) {
                     // 保存原始样式
@@ -591,5 +601,33 @@ QString RandomCallDialog::getStudentName(const QString& studentId)
         }
     }
     return "";
+}
+
+void RandomCallDialog::mousePressEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton) {
+        m_dragging = true;
+        m_dragPosition = event->globalPos() - frameGeometry().topLeft();
+        event->accept();
+    }
+    QDialog::mousePressEvent(event);
+}
+
+void RandomCallDialog::mouseMoveEvent(QMouseEvent* event)
+{
+    if (m_dragging && (event->buttons() & Qt::LeftButton)) {
+        move(event->globalPos() - m_dragPosition);
+        event->accept();
+    }
+    QDialog::mouseMoveEvent(event);
+}
+
+void RandomCallDialog::mouseReleaseEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton) {
+        m_dragging = false;
+        event->accept();
+    }
+    QDialog::mouseReleaseEvent(event);
 }
 
