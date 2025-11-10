@@ -5,6 +5,7 @@
 #include <QGraphicsEffect>
 #include <QGraphicsDropShadowEffect>
 #include <QMouseEvent>
+#include <QApplication>
 #include <random>
 #include <algorithm>
 
@@ -334,6 +335,7 @@ void RandomCallDialog::onAnimationFinished()
     if (animationStep >= 30) {
         animationTimer->stop();
         isAnimating = false;
+        qDebug() << "动画结束，步数:" << animationStep;
         
         // 随机选择一个参与者
         if (!m_participants.isEmpty()) {
@@ -342,6 +344,8 @@ void RandomCallDialog::onAnimationFinished()
             std::uniform_int_distribution<> dis(0, m_participants.size() - 1);
             int randomIndex = dis(g);
             selectedStudentId = m_participants[randomIndex].id;
+            
+            qDebug() << "最终选中的学生ID:" << selectedStudentId << "，姓名:" << m_participants[randomIndex].name;
             
             // 高亮选中的学生
             highlightStudent(selectedStudentId, true);
@@ -352,14 +356,25 @@ void RandomCallDialog::onAnimationFinished()
         return;
     }
     
-    // 随机高亮一个参与者
+    // 随机高亮一个参与者（动画过程中）
     if (!m_participants.isEmpty()) {
         clearAllHighlights();
+        // 强制刷新界面，确保清除效果可见
+        if (m_seatTable) {
+            m_seatTable->update();
+            QApplication::processEvents(); // 处理事件，确保界面更新
+        }
+        
         std::random_device rd;
         std::mt19937 g(rd());
         std::uniform_int_distribution<> dis(0, m_participants.size() - 1);
         int randomIndex = dis(g);
-        highlightStudent(m_participants[randomIndex].id, true);
+        QString studentId = m_participants[randomIndex].id;
+        qDebug() << "动画步骤" << animationStep << "，高亮学生ID:" << studentId;
+        highlightStudent(studentId, true);
+        
+        // 再次强制刷新界面
+        QApplication::processEvents();
     }
 }
 
@@ -486,17 +501,25 @@ void RandomCallDialog::updateParticipants()
 
 void RandomCallDialog::startRandomAnimation()
 {
-    if (m_participants.isEmpty()) return;
+    if (m_participants.isEmpty()) {
+        qDebug() << "startRandomAnimation: 参与者列表为空";
+        return;
+    }
     
+    qDebug() << "开始随机动画，参与者数量:" << m_participants.size() << "，座位表格:" << (m_seatTable ? "存在" : "不存在");
     isAnimating = true;
     animationStep = 0;
     animationTimer->start();
+    qDebug() << "动画定时器已启动，间隔:" << animationTimer->interval() << "ms";
 }
 
 void RandomCallDialog::highlightStudent(const QString& studentId, bool highlight)
 {
     QPushButton* btn = findSeatButtonByStudentId(studentId);
-    if (!btn) return;
+    if (!btn) {
+        qDebug() << "highlightStudent: 未找到学生ID为" << studentId << "的座位按钮";
+        return;
+    }
     
     if (highlight) {
         // 保存原始样式（如果还没有保存）
@@ -504,18 +527,39 @@ void RandomCallDialog::highlightStudent(const QString& studentId, bool highlight
             originalStyles[btn] = btn->styleSheet();
         }
         
-        // 添加高亮效果：黄色边框和阴影
-        QString highlightStyle = originalStyles[btn] + 
-            "border: 3px solid yellow !important; "
-            "background-color: rgba(255, 255, 0, 0.5) !important;";
+        // 添加高亮效果：明显的蓝色边框和背景
+        QString highlightStyle = 
+            "QPushButton { "
+            "border: 5px solid #0066FF !important; "
+            "background-color: #3399FF !important; "
+            "color: #FFFFFF !important; "
+            "font-weight: bold !important; "
+            "font-size: 14px !important; "
+            "border-radius: 4px !important; "
+            "}";
         btn->setStyleSheet(highlightStyle);
         
-        // 添加阴影效果
+        // 添加明显的蓝色阴影效果
         QGraphicsDropShadowEffect* shadow = new QGraphicsDropShadowEffect;
-        shadow->setBlurRadius(15);
-        shadow->setColor(QColor(255, 255, 0, 255));
+        shadow->setBlurRadius(25);
+        shadow->setColor(QColor(0, 102, 255, 255)); // 蓝色阴影
         shadow->setOffset(0, 0);
+        shadow->setXOffset(0);
+        shadow->setYOffset(0);
         btn->setGraphicsEffect(shadow);
+        
+        // 确保按钮可见（提升到最前）
+        btn->raise();
+        btn->repaint(); // 强制重绘
+        btn->update(); // 更新显示
+        
+        // 如果按钮在表格中，也需要更新表格
+        if (m_seatTable) {
+            m_seatTable->update();
+            m_seatTable->repaint();
+        }
+        
+        qDebug() << "高亮学生ID:" << studentId << "，按钮位置:" << btn->pos() << "，按钮文本:" << btn->text();
     } else {
         // 移除高亮效果
         btn->setGraphicsEffect(nullptr);
@@ -530,8 +574,8 @@ void RandomCallDialog::clearAllHighlights()
 {
     if (!m_seatTable) return;
     
-    for (int row = 0; row < 4; ++row) {
-        for (int col = 0; col < 11; ++col) {
+    for (int row = 0; row < 6; ++row) {
+        for (int col = 0; col < 10; ++col) {
             QPushButton* btn = qobject_cast<QPushButton*>(m_seatTable->cellWidget(row, col));
             if (btn && btn->property("isSeat").toBool()) {
                 btn->setGraphicsEffect(nullptr);
@@ -548,8 +592,8 @@ QPushButton* RandomCallDialog::findSeatButtonByStudentId(const QString& studentI
 {
     if (!m_seatTable) return nullptr;
     
-    for (int row = 0; row < 4; ++row) {
-        for (int col = 0; col < 11; ++col) {
+    for (int row = 0; row < 6; ++row) {
+        for (int col = 0; col < 10; ++col) {
             QPushButton* btn = qobject_cast<QPushButton*>(m_seatTable->cellWidget(row, col));
             if (btn && btn->property("isSeat").toBool()) {
                 if (btn->property("studentId").toString() == studentId) {
