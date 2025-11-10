@@ -8,6 +8,8 @@
 #include <QHeaderView>
 #include <QCheckBox>
 #include <qmessagebox.h>
+#include <algorithm>
+#include <QSet>
 
 QClassMgr::QClassMgr(QWidget *parent)
 	: QWidget(parent)
@@ -60,6 +62,7 @@ QClassMgr::QClassMgr(QWidget *parent)
                 {
                     QJsonObject oTmp = obj["data"].toObject();
                     QString strTmp = oTmp["message"].toString();
+                    int code = oTmp["code"].toInt();
                     //QString strUserId = oTmp["user_id"].toString();
                     qDebug() << "status:" << oTmp["code"].toString();
                     qDebug() << "msg:" << oTmp["message"].toString(); // 如果 msg 是中文，也能正常输出
@@ -75,6 +78,52 @@ QClassMgr::QClassMgr(QWidget *parent)
                                     QJsonObject schoolSub = schoolArr[0].toObject();
                                 }
                             }
+                        }
+                    }
+                    else if (strTmp == "批量插入/更新完成" && code == 200)
+                    {
+                        // 处理 updateClasses 接口返回的班级列表
+                        if (oTmp["classes"].isArray())
+                        {
+                            QJsonArray classes = oTmp["classes"].toArray();
+                            
+                            // 遍历返回的班级列表
+                            for (const QJsonValue& val : classes) {
+                                if (!val.isObject()) continue;
+                                
+                                QJsonObject cls = val.toObject();
+                                QString classCode = cls.value("class_code").toString();
+                                QString schoolStage = cls.value("school_stage").toString();
+                                QString grade = cls.value("grade").toString();
+                                QString className = cls.value("class_name").toString();
+                                
+                                // 在表格中查找匹配的行（学段、年级、班级名称相同，且班级编号为空）
+                                for (int row = 0; row < table_->rowCount(); ++row) {
+                                    QTableWidgetItem* itemSchoolStage = table_->item(row, 0);
+                                    QTableWidgetItem* itemGrade = table_->item(row, 1);
+                                    QTableWidgetItem* itemClassName = table_->item(row, 2);
+                                    QTableWidgetItem* itemClassCode = table_->item(row, 3);
+                                    
+                                    // 检查是否匹配：学段、年级、班级名称相同，且班级编号为空
+                                    if (itemSchoolStage && itemSchoolStage->text() == schoolStage &&
+                                        itemGrade && itemGrade->text() == grade &&
+                                        itemClassName && itemClassName->text() == className &&
+                                        (!itemClassCode || itemClassCode->text().isEmpty())) {
+                                        
+                                        // 更新班级编号
+                                        if (!itemClassCode) {
+                                            itemClassCode = new QTableWidgetItem(classCode);
+                                            itemClassCode->setFlags(itemClassCode->flags() & ~Qt::ItemIsEditable);
+                                            table_->setItem(row, 3, itemClassCode);
+                                        } else {
+                                            itemClassCode->setText(classCode);
+                                        }
+                                        break; // 找到匹配的行后跳出循环
+                                    }
+                                }
+                            }
+                            
+                            QMessageBox::information(this, "成功", QString("已更新 %1 个班级的编号").arg(classes.size()));
                         }
                     }
                     //errLabel->setText(strTmp);
@@ -143,26 +192,87 @@ QClassMgr::QClassMgr(QWidget *parent)
                 QTableWidgetItem* itemSchoolStage = table_->item(row, 0);
                 QTableWidgetItem* itemGrade = table_->item(row, 1);
                 QTableWidgetItem* itemClassName = table_->item(row, 2);
-                QTableWidgetItem* itemClassCode = table_->item(row, 3);
+                QTableWidgetItem* itemClassCode = table_->item(row, 3); // 班级编号列
                 QTableWidgetItem* itemRemark = table_->item(row, 4);
 
-                if (!itemClassCode || itemClassCode->text().isEmpty()) {
-                    // 班级编号是主键，必须有，跳过没编号的行
-                    continue;
+                // 只上传班级编号为空的行
+                if (itemClassCode && !itemClassCode->text().isEmpty()) {
+                    continue; // 跳过有班级编号的行
+                }
+
+                // 检查必填字段
+                if (!itemSchoolStage || itemSchoolStage->text().isEmpty() ||
+                    !itemGrade || itemGrade->text().isEmpty() ||
+                    !itemClassName || itemClassName->text().isEmpty()) {
+                    continue; // 跳过必填字段为空的行
                 }
 
                 QJsonObject obj;
-                obj["school_stage"] = itemSchoolStage ? itemSchoolStage->text() : "";
-                obj["grade"] = itemGrade ? itemGrade->text() : "";
-                obj["class_name"] = itemClassName ? itemClassName->text() : "";
-                obj["class_code"] = itemClassCode->text();
-                obj["remark"] = itemRemark ? itemRemark->text() : "";
+                obj["school_stage"] = itemSchoolStage->text();
+                obj["grade"] = itemGrade->text();
+                obj["class_name"] = itemClassName->text();
+                obj["schoolid"] = m_schoolId; // 添加学校ID
+                // 不再包含 class_code 字段
+                if (itemRemark && !itemRemark->text().isEmpty()) {
+                    obj["remark"] = itemRemark->text();
+                }
                 jsonArray.append(obj);
             }
 
             if (jsonArray.isEmpty()) {
-                qDebug() << "没有数据可上传";
+                QMessageBox::information(this, "提示", "没有数据可上传！");
                 return;
+            }
+
+            // 检查重复：要上传的班级列表内部是否有重复
+            QSet<QString> uploadClassKeys; // 用于检查上传列表内部的重复
+            for (int i = 0; i < jsonArray.size(); ++i) {
+                QJsonObject obj = jsonArray[i].toObject();
+                QString key = obj["school_stage"].toString() + "|" + 
+                             obj["grade"].toString() + "|" + 
+                             obj["class_name"].toString();
+                
+                if (uploadClassKeys.contains(key)) {
+                    QMessageBox::warning(this, "错误", 
+                        QString("要上传的班级列表中存在重复：\n学段：%1\n年级：%2\n班级：%3\n\n请修改后再上传！")
+                        .arg(obj["school_stage"].toString())
+                        .arg(obj["grade"].toString())
+                        .arg(obj["class_name"].toString()));
+                    return;
+                }
+                uploadClassKeys.insert(key);
+            }
+
+            // 检查重复：要上传的班级与表格中已有班级编号的行是否有重复
+            for (int i = 0; i < jsonArray.size(); ++i) {
+                QJsonObject obj = jsonArray[i].toObject();
+                QString uploadSchoolStage = obj["school_stage"].toString();
+                QString uploadGrade = obj["grade"].toString();
+                QString uploadClassName = obj["class_name"].toString();
+                
+                // 检查表格中所有有班级编号的行
+                for (int row = 0; row < table_->rowCount(); ++row) {
+                    QTableWidgetItem* itemClassCode = table_->item(row, 3);
+                    // 只检查有班级编号的行
+                    if (!itemClassCode || itemClassCode->text().isEmpty()) {
+                        continue;
+                    }
+                    
+                    QTableWidgetItem* itemSchoolStage = table_->item(row, 0);
+                    QTableWidgetItem* itemGrade = table_->item(row, 1);
+                    QTableWidgetItem* itemClassName = table_->item(row, 2);
+                    
+                    if (itemSchoolStage && itemSchoolStage->text() == uploadSchoolStage &&
+                        itemGrade && itemGrade->text() == uploadGrade &&
+                        itemClassName && itemClassName->text() == uploadClassName) {
+                        QMessageBox::warning(this, "错误", 
+                            QString("要上传的班级与表格中已有的班级重复：\n学段：%1\n年级：%2\n班级：%3\n\n请修改后再上传！")
+                            .arg(uploadSchoolStage)
+                            .arg(uploadGrade)
+                            .arg(uploadClassName));
+                        return;
+                    }
+                }
             }
 
             QJsonDocument jsonDoc(jsonArray);
@@ -199,16 +309,123 @@ QClassMgr::QClassMgr(QWidget *parent)
     });
 
     connect(btnDelete, &QPushButton::clicked, this, [=] {
-        // 从最后一行往前删，避免索引混乱
-        for (int row = table_->rowCount() - 1; row >= 0; --row)
-        {
-            QTableWidgetItem* item = table_->item(row, 0); // 第一列复选框项
-            if (!item) continue;
-            if (item->checkState() == Qt::Checked)
-            {
-                table_->removeRow(row);
-            }
+        if (!m_httpHandler) {
+            return;
         }
+
+        // 收集勾选复选框且有班级编号的行
+        QJsonArray jsonArray;
+        QList<int> rowsToDelete;
+        
+        for (int row = 0; row < table_->rowCount(); ++row) {
+            QTableWidgetItem* chkItem = table_->item(row, 0); // 第一列复选框
+            QTableWidgetItem* itemClassCode = table_->item(row, 3); // 班级编号列
+            
+            // 检查复选框是否被勾选
+            if (!chkItem || chkItem->checkState() != Qt::Checked) {
+                continue; // 跳过未勾选的行
+            }
+            
+            // 只删除有班级编号的班级
+            if (!itemClassCode || itemClassCode->text().isEmpty()) {
+                QMessageBox::warning(this, "提示", QString("第 %1 行没有班级编号，无法删除！").arg(row + 1));
+                continue; // 跳过没有班级编号的行
+            }
+            
+            // 收集要删除的班级数据
+            QTableWidgetItem* itemSchoolStage = table_->item(row, 0);
+            QTableWidgetItem* itemGrade = table_->item(row, 1);
+            QTableWidgetItem* itemClassName = table_->item(row, 2);
+            QTableWidgetItem* itemRemark = table_->item(row, 4);
+            
+            QJsonObject obj;
+            obj["class_code"] = itemClassCode->text();
+            obj["schoolid"] = m_schoolId; // 添加学校ID
+            if (itemSchoolStage) {
+                obj["school_stage"] = itemSchoolStage->text();
+            }
+            if (itemGrade) {
+                obj["grade"] = itemGrade->text();
+            }
+            if (itemClassName) {
+                obj["class_name"] = itemClassName->text();
+            }
+            if (itemRemark && !itemRemark->text().isEmpty()) {
+                obj["remark"] = itemRemark->text();
+            }
+            jsonArray.append(obj);
+            rowsToDelete.append(row);
+        }
+        
+        if (jsonArray.isEmpty()) {
+            QMessageBox::information(this, "提示", "请先勾选要删除的班级（必须有班级编号）！");
+            return;
+        }
+        
+        // 上传到服务器
+        QJsonDocument jsonDoc(jsonArray);
+        QByteArray jsonData = jsonDoc.toJson();
+        
+        // 发送删除请求
+        QNetworkAccessManager* manager = new QNetworkAccessManager(this);
+        QNetworkRequest request(QUrl("http://47.100.126.194:5000/deleteClasses"));
+        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        
+        QNetworkReply* reply = manager->post(request, jsonData);
+        
+        connect(reply, &QNetworkReply::finished, this, [this, reply, rowsToDelete]() {
+            if (reply->error() == QNetworkReply::NoError) {
+                QByteArray response_data = reply->readAll();
+                QJsonDocument respDoc = QJsonDocument::fromJson(response_data);
+                
+                if (respDoc.isObject()) {
+                    QJsonObject root = respDoc.object();
+                    if (!root.contains("data") || !root["data"].isObject()) {
+                        QMessageBox::warning(this, "错误", "服务器返回格式错误：缺少data字段");
+                        reply->deleteLater();
+                        return;
+                    }
+                    
+                    QJsonObject dataObj = root["data"].toObject();
+                    int code = dataObj.value("code").toInt();
+                    QString message = dataObj.value("message").toString();
+                    
+                    if (code == 200) {
+                        // 获取服务器返回的已删除班级编号列表
+                        QJsonArray deletedCodes = dataObj.value("deleted_codes").toArray();
+                        QSet<QString> deletedCodeSet;
+                        for (const QJsonValue& val : deletedCodes) {
+                            deletedCodeSet.insert(val.toString());
+                        }
+                        
+                        // 根据返回的班级编号列表，从表格中删除对应的行
+                        QList<int> rowsToRemove;
+                        for (int row = 0; row < table_->rowCount(); ++row) {
+                            QTableWidgetItem* itemClassCode = table_->item(row, 3);
+                            if (itemClassCode && deletedCodeSet.contains(itemClassCode->text())) {
+                                rowsToRemove.append(row);
+                            }
+                        }
+                        
+                        // 从后往前删除，避免索引混乱
+                        std::sort(rowsToRemove.begin(), rowsToRemove.end());
+                        for (int i = rowsToRemove.size() - 1; i >= 0; --i) {
+                            table_->removeRow(rowsToRemove[i]);
+                        }
+                        
+                        int deletedCount = dataObj.value("deleted_count").toInt();
+                        QMessageBox::information(this, "成功", QString("删除班级成功！共删除 %1 个班级").arg(deletedCount));
+                    } else {
+                        QMessageBox::warning(this, "删除失败", message);
+                    }
+                } else {
+                    QMessageBox::warning(this, "错误", "服务器返回格式错误：不是有效的JSON对象");
+                }
+            } else {
+                QMessageBox::critical(this, "网络错误", reply->errorString());
+            }
+            reply->deleteLater();
+        });
     });
 
     // 表格
@@ -327,9 +544,6 @@ void QClassMgr::fillRow(int row)
     QString nianji = "一年级";
     QString banji = "3班";
 
-    // 自动生成班级编号：学段+年级+班级去掉汉字，转数字等
-    QString banjiBianhao = generateClassIdAuto(xueduan, nianji);
-
     // 第一列复选框
     QTableWidgetItem* chkItem = new QTableWidgetItem(xueduan);
     chkItem->setCheckState(Qt::Unchecked);
@@ -340,7 +554,8 @@ void QClassMgr::fillRow(int row)
     table_->setItem(row, 1, new QTableWidgetItem(nianji));
     table_->setItem(row, 2, new QTableWidgetItem(banji));
 
-    QTableWidgetItem* bhItem = new QTableWidgetItem(banjiBianhao);
+    // 班级编号列为空，不自动生成
+    QTableWidgetItem* bhItem = new QTableWidgetItem("");
     bhItem->setFlags(bhItem->flags() & ~Qt::ItemIsEditable);
     table_->setItem(row, 3, bhItem);
     table_->setItem(row, 4, new QTableWidgetItem());
