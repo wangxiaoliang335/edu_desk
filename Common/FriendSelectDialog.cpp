@@ -370,7 +370,7 @@ void FriendSelectDialog::inviteMembersToServer(const QVector<QString>& memberIds
         QJsonObject groupObj;
         groupObj["group_id"] = m_groupId;
         groupObj["group_name"] = m_groupName; // 使用设置的群组名称
-        groupObj["group_type"] = kTIMGroup_Private; // 私有群（只有私有群可以直接拉用户入群）
+        groupObj["group_type"] = kTIMGroup_Public; // 公开群（支持设置管理员）
         groupObj["face_url"] = "";
         groupObj["info_seq"] = 0;
         groupObj["latest_seq"] = 0;

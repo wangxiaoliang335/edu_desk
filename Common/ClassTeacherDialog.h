@@ -508,7 +508,7 @@ private:
             createGroupMsg["type"] = "3";
             createGroupMsg["permission_level"] = 1;
             createGroupMsg["headImage_path"] = "/images/group.png";
-            createGroupMsg["group_type"] = 1;
+            createGroupMsg["group_type"] = 0; // 0=公开群（Public），支持设置管理员
             createGroupMsg["nickname"] = groupName;
             createGroupMsg["owner_id"] = userinfo.teacher_unique_id;
             createGroupMsg["owner_name"] = userinfo.strName;
@@ -624,18 +624,17 @@ private:
         QJsonArray memberArray;
         
         // 首先添加创建者（群主）
-        // 注意：对于Private群组，MemberList中不能包含Role字段，否则会报错"this group can not set admin"
-        // createGroup方法会自动处理：对于Private群组会移除Role字段，并使用Owner_Account指定群主
+        // 注意：Public群组在创建时，MemberList中的Role必须设置为"Admin"，不能是"Owner"
+        // 创建者会自动成为群主，或者通过Owner_Account参数指定
         QString creatorId = userinfo.teacher_unique_id;
         QJsonObject ownerMemberInfo;
         ownerMemberInfo["Member_Account"] = creatorId;
-        // 注意：虽然这里设置了Role，但对于Private群组，createGroup方法会自动移除Role字段
-        ownerMemberInfo["Role"] = "Admin"; // 对于非Private群组类型，可以设置角色
+        ownerMemberInfo["Role"] = "Admin"; // 创建Public群组时，Role必须为"Admin"
         memberArray.append(ownerMemberInfo);
         
         qDebug() << "========== 创建群组 - 添加创建者（群主）==========";
         qDebug() << "当前登录用户ID（创建者）:" << creatorId;
-        qDebug() << "注意：对于Private群组，Role字段会被自动移除，使用Owner_Account指定群主";
+        qDebug() << "群组类型：Public（公开群，支持设置管理员）";
         
         // 创建回调数据结构
         struct CreateGroupCallbackData {
@@ -656,7 +655,7 @@ private:
         callbackData->userInfo = userinfo;
         
         // 调用REST API创建群组
-        m_restAPI->createGroup(groupName, "Private", memberArray, 
+        m_restAPI->createGroup(groupName, "Public", memberArray, 
             [=](int errorCode, const QString& errorDesc, const QJsonObject& result) {
                 if (errorCode != 0) {
                     // 创建群组失败
@@ -706,7 +705,7 @@ private:
         // 群组基础信息
         groupObj["group_id"] = groupId;
         groupObj["group_name"] = groupName;
-        groupObj["group_type"] = kTIMGroup_Private; // 私有群（只有私有群可以直接拉用户入群）
+        groupObj["group_type"] = kTIMGroup_Public; // 公开群（支持设置管理员）
         groupObj["face_url"] = ""; // 创建时未设置头像
         groupObj["info_seq"] = 0;
         groupObj["latest_seq"] = 0;

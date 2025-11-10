@@ -115,7 +115,7 @@ private:
         callbackData->userInfo = userinfo;
 
         // 调用REST API创建群组
-        m_restAPI->createGroup(groupName, "Private", memberArray,
+        m_restAPI->createGroup(groupName, "Public", memberArray,
             [=](int errorCode, const QString& errorDesc, const QJsonObject& result) {
                 if (errorCode != 0) {
                     QString errorMsg = QString(QStringLiteral("创建群组失败: %1 (错误码: %2)")).arg(errorDesc).arg(errorCode);
@@ -163,7 +163,7 @@ private:
         // 群组基础信息
         groupObj["group_id"] = groupId;
         groupObj["group_name"] = groupName;
-        groupObj["group_type"] = 1; // 私有群
+        groupObj["group_type"] = 0; // 公开群（Public），支持设置管理员
         groupObj["face_url"] = "";
         groupObj["info_seq"] = 0;
         groupObj["latest_seq"] = 0;
@@ -172,7 +172,7 @@ private:
         // 群组详细信息
         groupObj["detail_group_id"] = groupId;
         groupObj["detail_group_name"] = groupName;
-        groupObj["detail_group_type"] = 1; // 私有群
+        groupObj["detail_group_type"] = 0; // 公开群（Public），支持设置管理员
         groupObj["detail_face_url"] = "";
         groupObj["create_time"] = QDateTime::currentDateTime().toSecsSinceEpoch();
         groupObj["detail_info_seq"] = 0;

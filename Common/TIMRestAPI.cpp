@@ -256,9 +256,14 @@ void TIMRestAPI::createGroup(const QString& groupName, const QString& groupType,
 
     // 初始成员列表（REST API格式）
     // 注意：对于Private群组，MemberList中不能包含Role字段，否则会报错"this group can not set admin"
-    // 创建者会自动成为群主，或者可以通过Owner_Account参数指定
+    // Public、ChatRoom、AVChatRoom等群组类型支持Role字段，可以设置Admin等角色
+    // 注意：如果使用Owner_Account指定群主，MemberList中该成员的Role字段会被忽略，不能同时设置为Owner和Admin
     if (!memberList.isEmpty()) {
-        // 处理MemberList，移除Role字段（Private群组不支持在创建时设置角色）
+        // 获取创建者账号（第一个成员）
+        QJsonObject firstMember = memberList[0].toObject();
+        QString ownerAccount = firstMember["Member_Account"].toString();
+        
+        // 处理MemberList，根据群组类型决定是否保留Role字段
         QJsonArray processedMemberList;
         for (int i = 0; i < memberList.size(); i++) {
             QJsonObject member = memberList[i].toObject();
@@ -270,19 +275,25 @@ void TIMRestAPI::createGroup(const QString& groupName, const QString& groupType,
                 processedMember["Member_Account"] = memberAccount;
                 processedMemberList.append(processedMember);
             } else {
-                // 其他群组类型可以保留Role字段
-                processedMemberList.append(member);
+                // Public、ChatRoom、AVChatRoom等群组类型
+                QJsonObject processedMember = member;
+                
+                // 如果使用Owner_Account指定群主，且当前成员是创建者，则移除Role字段
+                // 避免"you can not set owner to admin"错误
+                if (!ownerAccount.isEmpty() && memberAccount == ownerAccount) {
+                    processedMember.remove("Role");
+                }
+                
+                processedMemberList.append(processedMember);
             }
         }
         requestBody["MemberList"] = processedMemberList;
         
-        // 如果MemberList中有创建者，且是Private群组，使用Owner_Account指定群主
-        if (groupType == "Private" && !memberList.isEmpty()) {
-            QJsonObject firstMember = memberList[0].toObject();
-            QString ownerAccount = firstMember["Member_Account"].toString();
-            if (!ownerAccount.isEmpty()) {
-                requestBody["Owner_Account"] = ownerAccount;
-            }
+        // 使用Owner_Account指定群主（创建者）
+        // 对于Private群组，必须使用Owner_Account指定群主
+        // 对于Public群组，使用Owner_Account指定群主时，MemberList中该成员的Role会被忽略
+        if (!ownerAccount.isEmpty()) {
+            requestBody["Owner_Account"] = ownerAccount;
         }
     }
 
@@ -424,5 +435,14 @@ void TIMRestAPI::modifyGroupMemberInfo(const QString& groupId,
     }
 
     sendRestAPIRequest("group_open_http_svc/modify_group_member_info", requestBody, callback);
+}
+
+void TIMRestAPI::changeGroupOwner(const QString& groupId, const QString& newOwnerAccount, RestAPICallback callback)
+{
+    QJsonObject requestBody;
+    requestBody["GroupId"] = groupId;
+    requestBody["NewOwner_Account"] = newOwnerAccount;
+
+    sendRestAPIRequest("group_open_http_svc/change_group_owner", requestBody, callback);
 }
 

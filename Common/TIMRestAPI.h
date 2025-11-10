@@ -128,6 +128,14 @@ public:
                               const QString& nameCard = QString(),
                               RestAPICallback callback = nullptr);
 
+    /**
+     * @brief 转让群主（修改群主）
+     * @param groupId 群组ID
+     * @param newOwnerAccount 新群主账号
+     * @param callback 回调函数
+     */
+    void changeGroupOwner(const QString& groupId, const QString& newOwnerAccount, RestAPICallback callback);
+
 private:
     /**
      * @brief 发送REST API请求

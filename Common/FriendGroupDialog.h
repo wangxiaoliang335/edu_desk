@@ -784,26 +784,47 @@ public:
             while ((item = layout->takeAt(0)) != nullptr) {
                 if (item->widget()) {
                     // 先移除widget，再删除
-                    item->widget()->setParent(nullptr);
-                    item->widget()->deleteLater();
+                    QWidget* widget = item->widget();
+                    widget->setParent(nullptr);
+                    widget->deleteLater();
+                    delete item;
                 } else if (item->layout()) {
-                    // 如果是布局项，递归清空其中的内容（但不删除布局本身）
+                    // 如果是布局项，递归清空其中的内容
                     QLayout* childLayout = item->layout();
-                    QLayoutItem* childItem;
-                    while ((childItem = childLayout->takeAt(0)) != nullptr) {
-                        if (childItem->widget()) {
-                            childItem->widget()->setParent(nullptr);
-                            childItem->widget()->deleteLater();
-                        } else if (childItem->spacerItem()) {
-                            delete childItem->spacerItem();
+                    if (childLayout) {
+                        // 递归清空子布局的所有内容
+                        QLayoutItem* childItem;
+                        while ((childItem = childLayout->takeAt(0)) != nullptr) {
+                            if (childItem->widget()) {
+                                QWidget* childWidget = childItem->widget();
+                                childWidget->setParent(nullptr);
+                                childWidget->deleteLater();
+                            } else if (childItem->layout()) {
+                                // 如果子项也是布局，递归处理（但这种情况应该很少）
+                                QLayout* grandChildLayout = childItem->layout();
+                                if (grandChildLayout) {
+                                    QLayoutItem* grandChildItem;
+                                    while ((grandChildItem = grandChildLayout->takeAt(0)) != nullptr) {
+                                        if (grandChildItem->widget()) {
+                                            grandChildItem->widget()->setParent(nullptr);
+                                            grandChildItem->widget()->deleteLater();
+                                        }
+                                        // 注意：删除 item 会自动处理 spacerItem，不需要单独删除
+                                        delete grandChildItem;
+                                    }
+                                }
+                            }
+                            // 注意：删除 item 会自动处理 spacerItem，不需要单独删除
+                            delete childItem;
                         }
-                        delete childItem;
                     }
-                    // 注意：不要删除childLayout，因为它可能还在使用
-                } else if (item->spacerItem()) {
-                    delete item->spacerItem();
+                    // 删除布局项（但不删除子布局本身，因为它可能还在使用）
+                    delete item;
+                } else {
+                    // 其他类型的项（包括spacerItem），直接删除
+                    // 注意：删除 item 会自动处理 spacerItem，不需要单独删除
+                    delete item;
                 }
-                delete item;
             }
         };
         

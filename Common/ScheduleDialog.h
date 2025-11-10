@@ -15,6 +15,9 @@
 #include <QWidget>
 #include <QObject>
 #include <QMouseEvent>
+#include <QResizeEvent>
+#include <QEvent>
+#include <QIcon>
 #include <QAudioInput>
 #include <QAudioFormat>
 #include <QIODevice>
@@ -89,10 +92,37 @@ public:
 	ScheduleDialog(QString classid, QWidget* parent = nullptr, TaQTWebSocket* pWs = NULL) : QDialog(parent)
 	{
 		setWindowTitle("课程表");
+		// 设置无边框窗口
+		setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
 		// 座位区域：10列×121像素=1210像素宽，6行×50像素=300像素高
 		// 窗口大小：宽度1238（1251×0.99），高度669（676×0.99）
 		resize(1238, 669);
-		setStyleSheet("QPushButton { font-size:14px; } QLabel { font-size:14px; }");
+		setStyleSheet("QDialog { background-color: #5C5C5C; color: white; border: 1px solid #5C5C5C; font-weight: bold; } "
+			"QPushButton { font-size:14px; color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+			"QLabel { font-size:14px; color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+			"QLineEdit { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+			"QTextEdit { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+			"QGroupBox { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+			"QTableWidget { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; gridline-color: #5C5C5C; font-weight: bold; } "
+			"QTableWidget::item { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+			"QComboBox { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+			"QCheckBox { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+			"QRadioButton { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+			"QScrollArea { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+			"QListWidget { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+			"QSpinBox { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+			"QProgressBar { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+			"QSlider { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; }");
+		
+		// 关闭按钮（右上角）
+		closeButton = new QPushButton(this);
+		closeButton->setIcon(QIcon(":/res/img/widget-close.png"));
+		closeButton->setIconSize(QSize(22, 22));
+		closeButton->setFixedSize(QSize(22, 22));
+		closeButton->setStyleSheet("background: transparent;");
+		closeButton->move(width() - 22, 0);
+		closeButton->hide();
+		connect(closeButton, &QPushButton::clicked, this, &QDialog::reject);
 
 		m_classid = classid;
 
@@ -735,11 +765,12 @@ public:
 		seatTable->verticalHeader()->setVisible(false);
 		seatTable->setStyleSheet(
 			"QTableWidget { "
-			"background-color: #f5f5dc; "
-			"gridline-color: #ccc; "
-			"border: 1px solid #ccc; "
+			"background-color: #5C5C5C; "
+			"gridline-color: #5C5C5C; "
+			"border: 1px solid #5C5C5C; "
 			"}"
 			"QTableWidget::item { "
+			"background-color: transparent; "
 			"padding: 5px; "
 			"}"
 		);
@@ -1444,7 +1475,57 @@ private slots:
 		//m_volumeBar->setValue(volume);
 	}
 
+protected:
+	void enterEvent(QEvent* event) override
+	{
+		QDialog::enterEvent(event);
+		if (closeButton)
+			closeButton->show();
+	}
+
+	void leaveEvent(QEvent* event) override
+	{
+		QDialog::leaveEvent(event);
+		if (closeButton)
+			closeButton->hide();
+	}
+
+	void resizeEvent(QResizeEvent* event) override
+	{
+		QDialog::resizeEvent(event);
+		if (closeButton)
+			closeButton->move(this->width() - 22, 0);
+	}
+
+	void mousePressEvent(QMouseEvent* event) override
+	{
+		if (event->button() == Qt::LeftButton) {
+			m_dragging = true;
+			m_dragStartPos = event->globalPos() - frameGeometry().topLeft();
+		}
+		QDialog::mousePressEvent(event);
+	}
+
+	void mouseMoveEvent(QMouseEvent* event) override
+	{
+		if (m_dragging && (event->buttons() & Qt::LeftButton)) {
+			move(event->globalPos() - m_dragStartPos);
+		}
+		QDialog::mouseMoveEvent(event);
+	}
+
+	void mouseReleaseEvent(QMouseEvent* event) override
+	{
+		if (event->button() == Qt::LeftButton) {
+			m_dragging = false;
+		}
+		QDialog::mouseReleaseEvent(event);
+	}
+
 private:
+	bool m_dragging = false; // 是否正在拖动
+	QPoint m_dragStartPos; // 拖动起始位置
+	QPushButton* closeButton = nullptr; // 关闭按钮
 	CustomListDialog* customListDlg = NULL;
 	QLabel* m_lblClass = NULL;
 	QString m_groupName;

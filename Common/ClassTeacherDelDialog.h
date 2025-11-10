@@ -422,7 +422,7 @@ private:
             createGroupMsg["type"] = "3";
             createGroupMsg["permission_level"] = 1;
             createGroupMsg["headImage_path"] = "/images/group.png";
-            createGroupMsg["group_type"] = 1;
+            createGroupMsg["group_type"] = 0; // 0=公开群（Public），支持设置管理员
             createGroupMsg["nickname"] = grade + class_taught + "的班级群";
             createGroupMsg["owner_id"] = userinfo.teacher_unique_id;
             createGroupMsg["owner_name"] = userinfo.strName;
