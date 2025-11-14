@@ -11,7 +11,8 @@
 #include <QList>
 #include <QColor>
 #include <algorithm>
-#include "ScheduleDialog.h" // 包含 StudentInfo 定义
+//#include "ScheduleDialog.h" // 包含 StudentInfo 定义
+#include "CommonInfo.h"
 #include "HeatmapTypes.h" // 包含 SegmentRange 定义
 
 class HeatmapViewDialog : public QDialog

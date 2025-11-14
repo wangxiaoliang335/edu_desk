@@ -7,6 +7,8 @@
 #include <QGridLayout>
 #include <QSpacerItem>
 #include <QIcon>
+#include <QInputDialog>
+#include <QMessageBox>
 #include <qpainterpath.h>
 #include <qtoolbutton.h>
 #include <QJsonObject>    // JSON 对象
@@ -72,6 +74,23 @@ public:
             m_httpHandler->post(QString("http://47.100.126.194:5000/updateUserInfo"), params);
         }
 	}
+
+signals:
+    void userNameUpdated(const QString& newName);
+
+public:
+    void sendUserInfoUpdate()
+    {
+        if (!m_httpHandler) {
+            return;
+        }
+
+        QMap<QString, QString> params;
+        params["phone"] = m_userInfo.strPhone;
+        params["name"] = m_userInfo.strName;
+        params["id_number"] = m_userInfo.strIdNumber;
+        m_httpHandler->post(QString("http://47.100.126.194:5000/updateUserName"), params);
+    }
 
     void InitUI()
     {
@@ -219,13 +238,31 @@ public:
         nameLabel->setStyleSheet("color: white; font-size: 15px;");
         nameLabel->setEditIcon(QPixmap(".\\res\\img\\com_ic_edit_2.png")); // 编辑图标
 
-        QObject::connect(nameLabel, &NameLabel::editIconClicked, [=]() {
-            qDebug() << "编辑图标被点击";
-        });
+        auto editNameHandler = [=]() {
+            bool ok = false;
+            QString currentName = nameLabel->text();
+            QString newName = QInputDialog::getText(this, QString::fromUtf8("修改姓名"),
+                QString::fromUtf8("请输入新的姓名："), QLineEdit::Normal, currentName, &ok);
+            if (!ok) {
+                return;
+            }
+            newName = newName.trimmed();
+            if (newName.isEmpty()) {
+                QMessageBox::warning(this, QStringLiteral("提示"), QStringLiteral("姓名不能为空！"));
+                return;
+            }
+            if (newName == m_userInfo.strName) {
+                return;
+            }
 
-        QObject::connect(nameLabel, &NameLabel::labelClicked, [=]() {
-            qDebug() << "姓名标签被点击";
-        });
+            nameLabel->setText(newName);
+            m_userInfo.strName = newName;
+            sendUserInfoUpdate();
+            emit userNameUpdated(newName);
+        };
+
+        QObject::connect(nameLabel, &NameLabel::editIconClicked, this, editNameHandler);
+        QObject::connect(nameLabel, &NameLabel::labelClicked, this, editNameHandler);
 
         //QHBoxLayout* nameLayout = new QHBoxLayout;
         //nameLayout->addWidget(nameLabel);

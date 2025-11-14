@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include "WebRTCAudioSender.h"
 #include <QApplication>
 #include <QDialog>
 #include <QVBoxLayout>
@@ -47,17 +48,17 @@ class HeatmapViewDialog;
 #include <random>
 #include <algorithm>
 
-// 学生信息结构（用于排座）
-#ifndef STUDENT_INFO_DEFINED
-#define STUDENT_INFO_DEFINED
-struct StudentInfo {
-    QString id;      // 学号
-    QString name;    // 姓名
-    double score;    // 成绩（用于排序）
-    int originalIndex; // 原始索引
-    QMap<QString, double> attributes; // 多个属性值（如"背诵"、"语文"等）
-};
-#endif
+//// 学生信息结构（用于排座）
+//#ifndef STUDENT_INFO_DEFINED
+//#define STUDENT_INFO_DEFINED
+//struct StudentInfo {
+//    QString id;      // 学号
+//    QString name;    // 姓名
+//    double score;    // 成绩（用于排序）
+//    int originalIndex; // 原始索引
+//    QMap<QString, double> attributes; // 多个属性值（如"背诵"、"语文"等）
+//};
+//#endif
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -976,44 +977,72 @@ public:
 
 		// 信号与槽连接（C++11 lambda）
 		//connect(btnTalk, &QPushButton::clicked, this, &ScheduleDialog::onBtnTalkClicked);
-		// 按下按钮 -> 开始采集
+		
+		// 初始化 WebRTC 音频发送器
+		m_webrtcAudioSender = new WebRTCAudioSender(this);
+		
+		// 按下按钮 -> 开始 WebRTC 音频发送
 		connect(btnTalk, &QPushButton::pressed, this, [=]() {
 			pressStartMs = QDateTime::currentMSecsSinceEpoch();
 			btnTalk->setStyleSheet("background-color: red; color: white; padding: 4px 8px; font-size:14px;");
 			btnTalk->setText("录音中...松开结束");
-			qDebug() << "开始对讲（按钮按下）";
+			qDebug() << "开始对讲（按钮按下）- 使用 WebRTC 协议";
+			
+			// 注释掉原来的音频采集和发送代码（可能后面还会用到）
+			/*
 			start();
-
 			// 发送开始包（flag=0）
 			QByteArray empty;
 			encodeAndSend(empty, 0);
-			//btnTalk->setText("松开结束对讲");
-			});
+			*/
+			
+			// 使用 WebRTC 连接到 SRS 服务器
+			// SRS 服务器地址：47.100.126.194
+			// 使用默认 WebRTC 端口 1985
+			// 流名称使用群组ID或用户ID
+			QString streamName = QString("stream_%1_%2").arg(m_unique_group_id).arg(m_userId);
+			QString webrtcUrl = QString("webrtc://47.100.126.194:1985/live/%1").arg(streamName);
+			
+			if (m_webrtcAudioSender) {
+				if (!m_webrtcAudioSender->connectToServer(webrtcUrl)) {
+					qDebug() << "WebRTC 连接失败";
+					btnTalk->setStyleSheet("background-color: green; color: white; padding: 4px 8px; font-size:14px;");
+					btnTalk->setText("按住开始对讲");
+				} else {
+					qDebug() << "WebRTC 连接成功，开始发送音频";
+				}
+			}
+		});
 
-		// 松开按钮 -> 停止采集
+		// 松开按钮 -> 断开 WebRTC 连接并停止发送
 		connect(btnTalk, &QPushButton::released, this, [=]() {
-			/*stop();
-			btnTalk->setText("按住开始对讲");*/
 			qint64 releaseMs = QDateTime::currentMSecsSinceEpoch();
 			qint64 duration = releaseMs - pressStartMs;
 
+			// 注释掉原来的音频采集和发送代码（可能后面还会用到）
+			/*
 			// 发送结束包（flag=2）
 			QByteArray empty;
 			encodeAndSend(empty, 2);
-
 			stop();  // 停止采集
+			*/
+
+			// 断开 WebRTC 连接
+			if (m_webrtcAudioSender) {
+				m_webrtcAudioSender->disconnectFromServer();
+				qDebug() << "WebRTC 连接已断开";
+			}
 
 			if (duration < 500) {
 				qDebug() << "录音时间过短(" << duration << "ms)，丢弃";
-				// 这里可以直接 return 或做短音频忽略逻辑
 			}
 			else {
-				qDebug() << "录音完成，时长:" << duration << "ms，已发送音频";
+				qDebug() << "录音完成，时长:" << duration << "ms，已通过 WebRTC 发送音频";
 			}
 
 			btnTalk->setStyleSheet("background-color: green; color: white; padding: 4px 8px; font-size:14px;");
 			btnTalk->setText("按住开始对讲");
-			});
+		});
 	}
 
 	void uploadAvatar(QString filePath)
@@ -1559,6 +1588,8 @@ private:
 	//QFile localRecordFile;
 	//bool isLocalRecording = false;
 	QByteArray pcmBuffer;        // 缓冲未编码的PCM数据
+	// WebRTC 音频发送器
+	WebRTCAudioSender* m_webrtcAudioSender = nullptr;
 	QVector<GroupMemberInfo>  m_groupMemberInfo;
 	QTableWidget* seatTable = nullptr; // 座位表格
 	ArrangeSeatDialog* arrangeSeatDlg = nullptr; // 排座对话框

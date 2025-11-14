@@ -23,6 +23,18 @@ struct GroupMemberInfo {
     QString member_role;
 };
 
+// StudentInfo 结构体在 ScheduleDialog.h 中定义，这里使用条件编译避免重复定义
+//#ifndef STUDENT_INFO_DEFINED
+//#define STUDENT_INFO_DEFINED
+struct StudentInfo {
+    QString id;      // 学号
+    QString name;    // 姓名
+    double score;    // 成绩（用于排序）
+    int originalIndex; // 原始索引
+    QMap<QString, double> attributes; // 多个属性值（如"背诵"、"语文"等）
+};
+//#endif
+
 class CommonInfo
 {
 public:

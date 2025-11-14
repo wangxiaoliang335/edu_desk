@@ -1,4 +1,5 @@
 #pragma once
+#include "CommonInfo.h"
 #include <QDialog>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -7,7 +8,6 @@
 #include <QLineEdit>
 #include <QMap>
 #include <QList>
-#include "ScheduleDialog.h" // 包含 StudentInfo 定义
 
 class StudentAttributeDialog : public QDialog
 {

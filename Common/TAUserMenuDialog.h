@@ -64,13 +64,13 @@ public:
         // avatar->setPixmap(pm.scaled(56,56, Qt::KeepAspectRatio, Qt::SmoothTransformation));
 
         QVBoxLayout* namePhoneLayout = new QVBoxLayout;
-        QLabel* nameLabel = new QLabel(m_userInfo.strName);
+        m_nameLabel = new QLabel(m_userInfo.strName);
         QLabel* phoneLabel = new QLabel(m_userInfo.strPhone);
-        nameLabel->setStyleSheet("color: #FFFFFF; font-size: 18px; font-weight: 600;");
+        m_nameLabel->setStyleSheet("color: #FFFFFF; font-size: 18px; font-weight: 600;");
         phoneLabel->setStyleSheet("color: #B0B0B0; font-size: 12px;");
         namePhoneLayout->setContentsMargins(0, 0, 0, 0);
         namePhoneLayout->setSpacing(2);
-        namePhoneLayout->addWidget(nameLabel);
+        namePhoneLayout->addWidget(m_nameLabel);
         namePhoneLayout->addWidget(phoneLabel);
 
         headerLayout->addWidget(avatar);
@@ -116,6 +116,12 @@ public:
 
         userMenuDlg->InitData(m_userInfo);
         userMenuDlg->InitUI();
+        connect(userMenuDlg, &UserInfoDialog::userNameUpdated, this, [=](const QString& newName) {
+            m_userInfo.strName = newName;
+            if (m_nameLabel) {
+                m_nameLabel->setText(newName);
+            }
+        });
 
         // 菜单垂直排列
         QVBoxLayout* menuLayout = new QVBoxLayout;
@@ -162,4 +168,5 @@ public:
     UserInfoDialog* userMenuDlg = NULL;
     UserInfo m_userInfo;
     QPointer<QVBoxLayout> contentLayout;
+    QLabel* m_nameLabel = nullptr;
 };

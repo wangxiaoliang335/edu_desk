@@ -68,12 +68,13 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>C:\workspace\obs\TeacherAssistant\Common;..\Common;..\ffmpeg-n6.0.1-win64-gpl-shared-6.0\include;..\Common\QXlsx\header;..\Common\ImSDK\includes;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\workspace\obs\TeacherAssistant\Common;..\Common;..\ffmpeg-n6.0.1-win64-gpl-shared-6.0\include;..\Common\QXlsx\header;..\Common\ImSDK\includes;..\webrtc_sdk_template\include;..\webrtc_sdk_template\include\third_party\abseil-cpp;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <PreprocessorDefinitions>WEBRTC_WIN;NOMINMAX;WIN32_LEAN_AND_MEAN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>Common.lib;avcodec.lib;avdevice.lib;avfilter.lib;avformat.lib;avutil.lib;postproc.lib;swresample.lib;swscale.lib;imsdk.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>..\Common\x64\Debug;..\ffmpeg-n6.0.1-win64-gpl-shared-6.0\lib;..\Common\ImSDK\lib\Win64\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>Common.lib;avcodec.lib;avdevice.lib;avfilter.lib;avformat.lib;avutil.lib;postproc.lib;swresample.lib;swscale.lib;imsdk.lib;ws2_32.lib;winmm.lib;dmoguids.lib;wmcodecdspuuid.lib;strmiids.lib;secur32.lib;crypt32.lib;iphlpapi.lib;user32.lib;advapi32.lib;ole32.lib;delayimp.lib;MsDmo.lib;webrtc.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\Common\x64\Debug;..\ffmpeg-n6.0.1-win64-gpl-shared-6.0\lib;..\Common\ImSDK\lib\Win64\Debug;..\webrtc_sdk_template\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="Configuration">

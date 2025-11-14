@@ -1,4 +1,5 @@
-﻿#include <QApplication>
+﻿#include "ScheduleDialog.h"
+#include <QApplication>
 #include <QDialog>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -11,7 +12,6 @@
 #include <QTimer>
 #include <qbuttongroup.h>
 #include <qmessagebox.h>
-#include "ScheduleDialog.h"
 #include "TAHttpHandler.h"
 #include "CommonInfo.h"
 #include "TaQTWebSocket.h"

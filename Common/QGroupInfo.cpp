@@ -1,6 +1,6 @@
-﻿#include "QGroupInfo.h"
+﻿#include "ClassTeacherDelDialog.h"
+#include "QGroupInfo.h"
 #include "ClassTeacherDialog.h"
-#include "ClassTeacherDelDialog.h"
 #include "FriendSelectDialog.h"
 #include "MemberKickDialog.h"
 

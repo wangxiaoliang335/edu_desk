@@ -1,3 +1,4 @@
+#include "ScheduleDialog.h"
 #include "MidtermGradeDialog.h"
 #include <QMessageBox>
 #include <QInputDialog>
@@ -17,7 +18,7 @@
 #include <QBrush>
 #include <QColor>
 #include <algorithm>
-#include "ScheduleDialog.h"
+#include "CommonInfo.h"
 #include "ArrangeSeatDialog.h"
 #include <QApplication>
 #include <QDebug>

@@ -1,4 +1,5 @@
 #pragma once
+#include "CommonInfo.h"
 #include <QDialog>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -15,7 +16,6 @@
 #include <QGraphicsDropShadowEffect>
 #include <QDebug>
 #include <QList>
-#include "ScheduleDialog.h" // 包含 StudentInfo 定义
 
 class RandomCallDialog : public QDialog
 {
