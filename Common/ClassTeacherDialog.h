@@ -624,17 +624,17 @@ private:
         QJsonArray memberArray;
         
         // 首先添加创建者（群主）
-        // 注意：Public群组在创建时，MemberList中的Role必须设置为"Admin"，不能是"Owner"
+        // 注意：Meeting群组在创建时，MemberList中的Role必须设置为"Admin"，不能是"Owner"
         // 创建者会自动成为群主，或者通过Owner_Account参数指定
         QString creatorId = userinfo.teacher_unique_id;
         QJsonObject ownerMemberInfo;
         ownerMemberInfo["Member_Account"] = creatorId;
-        ownerMemberInfo["Role"] = "Admin"; // 创建Public群组时，Role必须为"Admin"
+        ownerMemberInfo["Role"] = "Admin"; // 创建Meeting群组时，Role必须为"Admin"
         memberArray.append(ownerMemberInfo);
         
         qDebug() << "========== 创建群组 - 添加创建者（群主）==========";
         qDebug() << "当前登录用户ID（创建者）:" << creatorId;
-        qDebug() << "群组类型：Public（公开群，支持设置管理员）";
+        qDebug() << "群组类型：Meeting（会议群，支持设置管理员）";
         
         // 创建回调数据结构
         struct CreateGroupCallbackData {
@@ -655,7 +655,7 @@ private:
         callbackData->userInfo = userinfo;
         
         // 调用REST API创建群组
-        m_restAPI->createGroup(groupName, "Public", memberArray, 
+        m_restAPI->createGroup(groupName, "Meeting", memberArray, 
             [=](int errorCode, const QString& errorDesc, const QJsonObject& result) {
                 if (errorCode != 0) {
                     // 创建群组失败

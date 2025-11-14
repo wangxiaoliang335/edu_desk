@@ -115,7 +115,7 @@ private:
         callbackData->userInfo = userinfo;
 
         // 调用REST API创建群组
-        m_restAPI->createGroup(groupName, "Public", memberArray,
+        m_restAPI->createGroup(groupName, "Meeting", memberArray,
             [=](int errorCode, const QString& errorDesc, const QJsonObject& result) {
                 if (errorCode != 0) {
                     QString errorMsg = QString(QStringLiteral("创建群组失败: %1 (错误码: %2)")).arg(errorDesc).arg(errorCode);
