@@ -104,6 +104,7 @@ public:
 signals:
     void userNameUpdated(const QString& newName);
     void userAvatarUpdated(const QString& newAvatarPath);
+    void logoutRequested();
 
 public:
     void postUserInfoUpdate()
@@ -126,6 +127,18 @@ public:
         params["name"] = m_userInfo.strName;
         params["id_number"] = m_userInfo.strIdNumber;
         m_httpHandler->post(QString("http://47.100.126.194:5000/updateUserName"), params);
+    }
+
+    void postAdministratorStatus(const QString& status)
+    {
+        if (!m_httpHandler) {
+            return;
+        }
+        QMap<QString, QString> params;
+        params["phone"] = m_userInfo.strPhone;
+        params["id_number"] = m_userInfo.strIdNumber;
+        params["is_administrator"] = status;
+        m_httpHandler->post(QString("http://47.100.126.194:5000/updateUserAdministrator"), params);
     }
 
     QString execStyledDialog(const QString& title, const QString& prompt,
@@ -354,15 +367,32 @@ public:
 
         QPushButton* btnUpgrade = new QPushButton("升级为\n管理员");
         btnUpgrade->setStyleSheet("background-color: lightgreen; color: black; padding:6px 10px; border-radius:6px;");
-
-        QPushButton* btnManager = new QPushButton("管理员");
-        btnManager->setStyleSheet("background-color: yellow; color: black; padding:6px 10px; border-radius:6px;");
+        QLabel* lblManager = new QLabel("管理员");
+        lblManager->setAlignment(Qt::AlignCenter);
+        lblManager->setFixedHeight(40);
+        lblManager->setStyleSheet("background-color: yellow; color: black; border-radius:6px; padding:6px 10px; font-weight:bold;");
+        auto updateAdminWidgets = [=]() {
+            bool isAdmin = (m_userInfo.strIsAdministrator == "1" ||
+                m_userInfo.strIsAdministrator.compare(QString::fromUtf8(u8"是"), Qt::CaseInsensitive) == 0 ||
+                m_userInfo.strIsAdministrator.compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0);
+            btnUpgrade->setVisible(!isAdmin);
+            lblManager->setVisible(isAdmin);
+        };
+        updateAdminWidgets();
+        connect(btnUpgrade, &QPushButton::clicked, this, [=]() {
+            postAdministratorStatus(QStringLiteral("1"));
+            m_userInfo.strIsAdministrator = "1";
+            updateAdminWidgets();
+            });
 
         QPushButton* btnLogout = new QPushButton("退出登录");
         btnLogout->setStyleSheet("background-color: gray; color: white; padding:6px 10px; border-radius:6px;");
+        connect(btnLogout, &QPushButton::clicked, this, [=]() {
+            emit logoutRequested();
+            });
 
         QVBoxLayout* pVBoxLayout = new QVBoxLayout();
-        pVBoxLayout->addWidget(btnManager);
+        pVBoxLayout->addWidget(lblManager);
         pVBoxLayout->addWidget(btnLogout);
 
         QLabel* pLabel = new QLabel(this);

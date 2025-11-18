@@ -14,6 +14,8 @@
 #include <QResizeEvent>
 #include <QEvent>
 #include "UserInfoDialog.h"
+#include "PwdLoginModalDialog.h"
+#include <QWidgetList>
 
 class TAUserMenuDialog : public TAFloatingWidget
 {
@@ -137,6 +139,9 @@ public:
                 m_avatarLabel->setAvatar(QPixmap(newPath));
             }
         });
+        connect(userMenuDlg, &UserInfoDialog::logoutRequested, this, [=]() {
+            handleLogout();
+        });
 
         // 菜单垂直排列
         QVBoxLayout* menuLayout = new QVBoxLayout;
@@ -211,4 +216,52 @@ public:
     AvatarLabel* m_avatarLabel = nullptr;
     QPushButton* closeButton = nullptr;
     bool m_visibleCloseButton = true;
+    PwdLoginModalDialog* m_loginDialog = nullptr;
+    QList<QPointer<QWidget>> m_hiddenWindows;
+
+    void showLoginDialog()
+    {
+        if (!m_loginDialog) {
+            m_loginDialog = new PwdLoginModalDialog();
+            m_loginDialog->setAttribute(Qt::WA_DeleteOnClose);
+            connect(m_loginDialog, &QObject::destroyed, this, [=]() {
+                m_loginDialog = nullptr;
+                });
+            connect(m_loginDialog, &QDialog::accepted, this, &TAUserMenuDialog::restoreWindowsAfterLogin);
+        }
+        m_loginDialog->InitData();
+        m_loginDialog->show();
+        m_loginDialog->raise();
+        m_loginDialog->activateWindow();
+    }
+
+    void handleLogout()
+    {
+        m_hiddenWindows.clear();
+        QWidgetList topWidgets = QApplication::topLevelWidgets();
+        for (QWidget* widget : topWidgets) {
+            if (!widget) {
+                continue;
+            }
+            if (widget == m_loginDialog) {
+                continue;
+            }
+            if (widget->isVisible()) {
+                m_hiddenWindows.append(widget);
+            }
+            widget->hide();
+        }
+        showLoginDialog();
+    }
+
+    void restoreWindowsAfterLogin()
+    {
+        for (auto& widget : m_hiddenWindows) {
+            if (widget) {
+                widget->show();
+                widget->raise();
+            }
+        }
+        m_hiddenWindows.clear();
+    }
 };
