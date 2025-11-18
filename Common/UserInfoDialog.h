@@ -9,6 +9,7 @@
 #include <QIcon>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <QFileDialog>
 #include <qpainterpath.h>
 #include <qtoolbutton.h>
 #include <QJsonObject>    // JSON 对象
@@ -41,50 +42,43 @@ public:
         m_userInfo = userInfo;
     }
 
-	void uploadAvatar(QString filePath)
-	{
-		// ===== 1. 读取头像图片 =====
-		QFile file(filePath);  // 本地头像路径
-		if (!file.open(QIODevice::ReadOnly)) {
-			qDebug() << "Failed to open image file.";
-			return;
-		}
-		QByteArray imageData = file.readAll(); // 二进制数据
-		file.close();
-
-		// ===== 2. 图片转 Base64 =====
-		QString imageBase64 = QString::fromLatin1(imageData.toBase64());
-
-        // ===== 3. 构造 JSON 数据 =====
-        QMap<QString, QString> params;
-        params["avatar"] = imageBase64;
-        params["phone"] = m_userInfo.strPhone;
-        params["name"] = m_userInfo.strName;
-        params["sex"] = m_userInfo.strSex;
-        params["address"] = m_userInfo.strAddress;
-        params["school_name"] = m_userInfo.strSchoolName;
-        params["grade_level"] = m_userInfo.strGradeLevel;
-        params["grade"] = m_userInfo.strGrade;
-        params["subject"] = m_userInfo.strSubject;
-        params["class_taught"] = m_userInfo.strClassTaught;
-        params["is_administrator"] = m_userInfo.strIsAdministrator;
-        params["id_number"] = m_userInfo.strIdNumber;
-        if (m_httpHandler)
-        {
-            m_httpHandler->post(QString("http://47.100.126.194:5000/updateUserInfo"), params);
+    void uploadAvatar(QString filePath)
+    {
+        // ===== 1. 读取头像图片 =====
+        QFile file(filePath);  // 本地头像路径
+        if (!file.open(QIODevice::ReadOnly)) {
+            qDebug() << "Failed to open image file.";
+            return;
         }
-	}
+        QByteArray imageData = file.readAll(); // 二进制数据
+        file.close();
+
+        // ===== 2. 图片转 Base64 =====
+        QString imageBase64 = QString::fromLatin1(imageData.toBase64());
+        m_userInfo.avatar = imageBase64;
+        m_userInfo.strHeadImagePath = filePath;
+        postUserInfoUpdate();
+    }
 
 signals:
     void userNameUpdated(const QString& newName);
 
 public:
-    void sendUserInfoUpdate()
+    void postUserInfoUpdate()
     {
         if (!m_httpHandler) {
             return;
         }
 
+        QMap<QString, QString> params = buildUserInfoParams();
+        m_httpHandler->post(QString("http://47.100.126.194:5000/updateUserInfo"), params);
+    }
+
+    void postUserNameUpdate()
+    {
+        if (!m_httpHandler) {
+            return;
+        }
         QMap<QString, QString> params;
         params["phone"] = m_userInfo.strPhone;
         params["name"] = m_userInfo.strName;
@@ -257,7 +251,7 @@ public:
 
             nameLabel->setText(newName);
             m_userInfo.strName = newName;
-            sendUserInfoUpdate();
+            postUserNameUpdate();
             emit userNameUpdated(newName);
         };
 
@@ -310,27 +304,136 @@ public:
         infoLayout->setHorizontalSpacing(20);
         infoLayout->setVerticalSpacing(12);
 
-        infoLayout->addWidget(new QLabel("性别"), 0, 0);
-        infoLayout->addWidget(new QLabel(m_userInfo.strSex), 0, 1);
-        infoLayout->addItem(new QSpacerItem(0, 0, QSizePolicy::Expanding, QSizePolicy::Minimum), 0, 2);
+        const QIcon editFieldIcon(".\\res\\img\\com_ic_edit_2.png");
+        const QStringList sexOptions = {
+            QString::fromUtf8(u8"男"),
+            QString::fromUtf8(u8"女"),
+            QString::fromUtf8(u8"未知")
+        };
 
-        infoLayout->addWidget(new QLabel("地址"), 1, 0);
-        infoLayout->addWidget(new QLabel(m_userInfo.strAddress), 1, 1);
+        int infoRow = 0;
 
-        infoLayout->addWidget(new QLabel("学校名"), 2, 0);
-        infoLayout->addWidget(new QLabel(m_userInfo.strSchoolName), 2, 1);
+        auto addEditableField = [&](const QString& title, QString UserInfo::*member,
+            const QString& endpoint, const QString& fieldKey, int row) {
+            QLabel* keyLabel = new QLabel(title);
+            keyLabel->setStyleSheet("color: #cccccc;");
 
-        infoLayout->addWidget(new QLabel("学段"), 3, 0);
-        infoLayout->addWidget(new QLabel(m_userInfo.strGradeLevel), 3, 1);
+            NameLabel* valueLabel = new NameLabel;
+            valueLabel->setText(m_userInfo.*member);
+            valueLabel->setStyleSheet("color: white;");
 
-        infoLayout->addWidget(new QLabel("年级"), 4, 0);
-        infoLayout->addWidget(new QLabel(m_userInfo.strGrade), 4, 1);
+            QToolButton* editBtn = new QToolButton;
+            editBtn->setIcon(editFieldIcon);
+            editBtn->setIconSize(QSize(16, 16));
+            editBtn->setCursor(Qt::PointingHandCursor);
+            editBtn->setAutoRaise(true);
+            editBtn->setToolTip(QString::fromUtf8(u8"修改%1").arg(title));
 
-        infoLayout->addWidget(new QLabel("任教学科"), 5, 0);
-        infoLayout->addWidget(new QLabel(m_userInfo.strSubject), 5, 1);
+            auto handler = [this, valueLabel, member, title, endpoint, fieldKey]() {
+                bool ok = false;
+                QString currentValue = valueLabel->text();
+                QString titleText = QString::fromUtf8(u8"修改%1").arg(title);
+                QString promptText = QString::fromUtf8(u8"请输入新的%1：").arg(title);
+                QString newValue = QInputDialog::getText(this, titleText,
+                    promptText, QLineEdit::Normal, currentValue, &ok);
+                if (!ok) {
+                    return;
+                }
+                newValue = newValue.trimmed();
+                if (newValue.isEmpty()) {
+                    QMessageBox::warning(this, QString::fromUtf8(u8"提示"),
+                        QString::fromUtf8(u8"%1不能为空！").arg(title));
+                    return;
+                }
+                if (newValue == currentValue) {
+                    return;
+                }
+                valueLabel->setText(newValue);
+                this->m_userInfo.*member = newValue;
+                postSingleFieldUpdate(endpoint, fieldKey, newValue);
+            };
 
-        infoLayout->addWidget(new QLabel("任教学段"), 6, 0);
-        infoLayout->addWidget(new QLabel(m_userInfo.strClassTaught), 6, 1);
+            connect(valueLabel, &NameLabel::labelClicked, this, handler);
+            connect(valueLabel, &NameLabel::editIconClicked, this, handler);
+            connect(editBtn, &QToolButton::clicked, this, handler);
+
+            infoLayout->addWidget(keyLabel, row, 0);
+            infoLayout->addWidget(valueLabel, row, 1);
+            infoLayout->addWidget(editBtn, row, 2);
+            infoLayout->addItem(new QSpacerItem(0, 0, QSizePolicy::Expanding, QSizePolicy::Minimum), row, 3);
+        };
+
+        auto addChoiceField = [&](const QString& title, QString UserInfo::*member,
+            const QStringList& options, const QString& endpoint, const QString& fieldKey, int row) {
+            QLabel* keyLabel = new QLabel(title);
+            keyLabel->setStyleSheet("color: #cccccc;");
+
+            NameLabel* valueLabel = new NameLabel;
+            valueLabel->setText(m_userInfo.*member);
+            valueLabel->setStyleSheet("color: white;");
+
+            QToolButton* editBtn = new QToolButton;
+            editBtn->setIcon(editFieldIcon);
+            editBtn->setIconSize(QSize(16, 16));
+            editBtn->setCursor(Qt::PointingHandCursor);
+            editBtn->setAutoRaise(true);
+            editBtn->setToolTip(QString::fromUtf8(u8"修改%1").arg(title));
+
+            auto handler = [this, valueLabel, member, title, options, endpoint, fieldKey]() {
+                bool ok = false;
+                QString currentValue = valueLabel->text();
+                QString titleText = QString::fromUtf8(u8"修改%1").arg(title);
+                QString promptText = QString::fromUtf8(u8"请选择新的%1：").arg(title);
+
+                QStringList optionList = options;
+                int currentIndex = optionList.indexOf(currentValue);
+                if (currentIndex < 0 && !currentValue.isEmpty()) {
+                    optionList.prepend(currentValue);
+                    currentIndex = 0;
+                }
+
+                QString newValue = QInputDialog::getItem(this, titleText, promptText,
+                    optionList, currentIndex < 0 ? 0 : currentIndex, false, &ok);
+                if (!ok) {
+                    return;
+                }
+                if (newValue == currentValue) {
+                    return;
+                }
+                valueLabel->setText(newValue);
+                this->m_userInfo.*member = newValue;
+                postSingleFieldUpdate(endpoint, fieldKey, newValue);
+            };
+
+            connect(valueLabel, &NameLabel::labelClicked, this, handler);
+            connect(valueLabel, &NameLabel::editIconClicked, this, handler);
+            connect(editBtn, &QToolButton::clicked, this, handler);
+
+            infoLayout->addWidget(keyLabel, row, 0);
+            infoLayout->addWidget(valueLabel, row, 1);
+            infoLayout->addWidget(editBtn, row, 2);
+            infoLayout->addItem(new QSpacerItem(0, 0, QSizePolicy::Expanding, QSizePolicy::Minimum), row, 3);
+        };
+
+        addChoiceField(QString::fromUtf8(u8"性别"), &UserInfo::strSex, sexOptions,
+            QStringLiteral("http://47.100.126.194:5000/updateUserSex"), QStringLiteral("sex"), infoRow++);
+        addEditableField(QString::fromUtf8(u8"地址"), &UserInfo::strAddress,
+            QStringLiteral("http://47.100.126.194:5000/updateUserAddress"), QStringLiteral("address"), infoRow++);
+        addEditableField(QString::fromUtf8(u8"学校名"), &UserInfo::strSchoolName,
+            QStringLiteral("http://47.100.126.194:5000/updateUserSchoolName"), QStringLiteral("school_name"), infoRow++);
+        addEditableField(QString::fromUtf8(u8"学段"), &UserInfo::strGradeLevel,
+            QStringLiteral("http://47.100.126.194:5000/updateUserGradeLevel"), QStringLiteral("grade_level"), infoRow++);
+
+        infoLayout->addWidget(new QLabel(QString::fromUtf8(u8"年级")), infoRow, 0);
+        infoLayout->addWidget(new QLabel(m_userInfo.strGrade), infoRow, 1);
+        infoRow++;
+
+        infoLayout->addWidget(new QLabel(QString::fromUtf8(u8"任教学科")), infoRow, 0);
+        infoLayout->addWidget(new QLabel(m_userInfo.strSubject), infoRow, 1);
+        infoRow++;
+
+        infoLayout->addWidget(new QLabel(QString::fromUtf8(u8"任教学段")), infoRow, 0);
+        infoLayout->addWidget(new QLabel(m_userInfo.strClassTaught), infoRow, 1);
 
         // ===================== 底部按钮 =====================
         QHBoxLayout* btnBottomLayout = new QHBoxLayout;
@@ -482,4 +585,35 @@ public:
     AvatarLabel* avatarLabel = NULL;
     NameLabel* nameLabel = NULL;
     TAHttpHandler* m_httpHandler = NULL;
+
+private:
+    QMap<QString, QString> buildUserInfoParams() const
+    {
+        QMap<QString, QString> params;
+        params["avatar"] = m_userInfo.avatar;
+        params["phone"] = m_userInfo.strPhone;
+        params["name"] = m_userInfo.strName;
+        params["sex"] = m_userInfo.strSex;
+        params["address"] = m_userInfo.strAddress;
+        params["school_name"] = m_userInfo.strSchoolName;
+        params["grade_level"] = m_userInfo.strGradeLevel;
+        params["grade"] = m_userInfo.strGrade;
+        params["subject"] = m_userInfo.strSubject;
+        params["class_taught"] = m_userInfo.strClassTaught;
+        params["is_administrator"] = m_userInfo.strIsAdministrator;
+        params["id_number"] = m_userInfo.strIdNumber;
+        return params;
+    }
+
+    void postSingleFieldUpdate(const QString& endpoint, const QString& fieldKey, const QString& value)
+    {
+        if (!m_httpHandler || endpoint.isEmpty() || fieldKey.isEmpty()) {
+            return;
+        }
+        QMap<QString, QString> params;
+        params["phone"] = m_userInfo.strPhone;
+        params["id_number"] = m_userInfo.strIdNumber;
+        params[fieldKey] = value;
+        m_httpHandler->post(endpoint, params);
+    }
 };
