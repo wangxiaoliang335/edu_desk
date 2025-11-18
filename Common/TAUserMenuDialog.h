@@ -11,6 +11,8 @@
 #include <QApplication>
 #include <QIcon>
 #include <QPixmap>
+#include <QResizeEvent>
+#include <QEvent>
 #include "UserInfoDialog.h"
 
 class TAUserMenuDialog : public TAFloatingWidget
@@ -19,8 +21,16 @@ class TAUserMenuDialog : public TAFloatingWidget
 public:
     explicit TAUserMenuDialog(QWidget* parent = nullptr)
         : TAFloatingWidget(parent)
+        , m_visibleCloseButton(true)
     {
-        
+        setMouseTracking(true);
+        closeButton = new QPushButton(this);
+        closeButton->setIcon(QIcon(":/res/img/widget-close.png"));
+        closeButton->setIconSize(QSize(22, 22));
+        closeButton->setFixedSize(QSize(22, 22));
+        closeButton->setStyleSheet("background: transparent;");
+        closeButton->hide();
+        connect(closeButton, &QPushButton::clicked, this, &QWidget::hide);
     }
 
     void InitData(UserInfo userInfo)
@@ -31,7 +41,6 @@ public:
     void InitUI()
     {
         // 隐藏标题栏（图片里没有标题栏）
-        //titleBar->setVisible(false);
         contentLayout = new QVBoxLayout();
 
         this->setLayout(this->contentLayout);
@@ -50,10 +59,10 @@ public:
         QHBoxLayout* headerLayout = new QHBoxLayout;
         headerLayout->setSpacing(12);
 
-        AvatarLabel* avatar = new AvatarLabel;
-        avatar->setFixedSize(56, 56);
-        avatar->setAvatar(QPixmap(m_userInfo.strHeadImagePath));
-        avatar->setStyleSheet(
+        m_avatarLabel = new AvatarLabel;
+        m_avatarLabel->setFixedSize(56, 56);
+        m_avatarLabel->setAvatar(QPixmap(m_userInfo.strHeadImagePath));
+        m_avatarLabel->setStyleSheet(
             "QLabel {"
             "background-color: rgba(255,255,255,0.20);"
             "border-radius: 28px;"
@@ -73,7 +82,7 @@ public:
         namePhoneLayout->addWidget(m_nameLabel);
         namePhoneLayout->addWidget(phoneLabel);
 
-        headerLayout->addWidget(avatar);
+        headerLayout->addWidget(m_avatarLabel);
         headerLayout->addLayout(namePhoneLayout);
         headerLayout->addStretch();
 
@@ -122,6 +131,12 @@ public:
                 m_nameLabel->setText(newName);
             }
         });
+        connect(userMenuDlg, &UserInfoDialog::userAvatarUpdated, this, [=](const QString& newPath) {
+            m_userInfo.strHeadImagePath = newPath;
+            if (m_avatarLabel) {
+                m_avatarLabel->setAvatar(QPixmap(newPath));
+            }
+        });
 
         // 菜单垂直排列
         QVBoxLayout* menuLayout = new QVBoxLayout;
@@ -165,8 +180,35 @@ public:
         this->move(x, y);
     }
 
+    void enterEvent(QEvent* event) override
+    {
+        TAFloatingWidget::enterEvent(event);
+        if (m_visibleCloseButton && closeButton) {
+            closeButton->show();
+        }
+    }
+
+    void leaveEvent(QEvent* event) override
+    {
+        TAFloatingWidget::leaveEvent(event);
+        if (closeButton) {
+            closeButton->hide();
+        }
+    }
+
+    void resizeEvent(QResizeEvent* event) override
+    {
+        TAFloatingWidget::resizeEvent(event);
+        if (closeButton) {
+            closeButton->move(this->width() - closeButton->width() - 2, 2);
+        }
+    }
+
     UserInfoDialog* userMenuDlg = NULL;
     UserInfo m_userInfo;
     QPointer<QVBoxLayout> contentLayout;
     QLabel* m_nameLabel = nullptr;
+    AvatarLabel* m_avatarLabel = nullptr;
+    QPushButton* closeButton = nullptr;
+    bool m_visibleCloseButton = true;
 };

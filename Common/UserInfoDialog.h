@@ -22,6 +22,47 @@
 #include "NameLabel.h"
 #include "TAHttpHandler.h"
 
+class DraggableInputDialog : public QInputDialog
+{
+public:
+    explicit DraggableInputDialog(QWidget* parent = nullptr)
+        : QInputDialog(parent)
+        , m_dragging(false)
+    {
+        setMouseTracking(true);
+    }
+
+protected:
+    void mousePressEvent(QMouseEvent* event) override
+    {
+        if (event->button() == Qt::LeftButton) {
+            m_dragging = true;
+            m_dragStartPos = event->globalPos() - frameGeometry().topLeft();
+        }
+        QInputDialog::mousePressEvent(event);
+    }
+
+    void mouseMoveEvent(QMouseEvent* event) override
+    {
+        if (m_dragging && (event->buttons() & Qt::LeftButton)) {
+            move(event->globalPos() - m_dragStartPos);
+        }
+        QInputDialog::mouseMoveEvent(event);
+    }
+
+    void mouseReleaseEvent(QMouseEvent* event) override
+    {
+        if (event->button() == Qt::LeftButton) {
+            m_dragging = false;
+        }
+        QInputDialog::mouseReleaseEvent(event);
+    }
+
+private:
+    bool m_dragging;
+    QPoint m_dragStartPos;
+};
+
 class UserInfoDialog : public QDialog
 {
     Q_OBJECT
@@ -62,6 +103,7 @@ public:
 
 signals:
     void userNameUpdated(const QString& newName);
+    void userAvatarUpdated(const QString& newAvatarPath);
 
 public:
     void postUserInfoUpdate()
@@ -84,6 +126,44 @@ public:
         params["name"] = m_userInfo.strName;
         params["id_number"] = m_userInfo.strIdNumber;
         m_httpHandler->post(QString("http://47.100.126.194:5000/updateUserName"), params);
+    }
+
+    QString execStyledDialog(const QString& title, const QString& prompt,
+        const QString& defaultValue, const QStringList& options,
+        bool* ok, bool asChoice)
+    {
+        DraggableInputDialog dialog(this);
+        dialog.setWindowTitle(title);
+        dialog.setWindowFlag(Qt::FramelessWindowHint, true);
+        dialog.setLabelText(prompt);
+        if (asChoice) {
+            dialog.setInputMode(QInputDialog::TextInput);
+            dialog.setOption(QInputDialog::UseListViewForComboBoxItems, true);
+            dialog.setComboBoxItems(options);
+            dialog.setTextValue(defaultValue);
+        }
+        else {
+            dialog.setInputMode(QInputDialog::TextInput);
+            dialog.setTextValue(defaultValue);
+        }
+        dialog.setStyleSheet(
+            "QInputDialog { background-color: #383c42; color: #ffffff; }"
+            "QLabel { color: #ffffff; }"
+            "QLineEdit, QComboBox { background-color: #262a2f; color: #ffffff; border: 1px solid #555; border-radius: 4px; }"
+            "QPushButton { background-color: #4a4f57; color: #ffffff; border-radius: 4px; padding: 6px 16px; }"
+            "QPushButton:hover { background-color: #5a5f67; }"
+        );
+        QString result = defaultValue;
+        if (dialog.exec() == QDialog::Accepted) {
+            if (ok) {
+                *ok = true;
+            }
+            result = dialog.textValue();
+        }
+        else if (ok) {
+            *ok = false;
+        }
+        return result;
     }
 
     void InitUI()
@@ -202,6 +282,7 @@ public:
             if (!file.isEmpty()) {
                 avatarLabel->setAvatar(QPixmap(file));
                 uploadAvatar(file);
+                emit userAvatarUpdated(file);
             }
         });
 
@@ -232,11 +313,11 @@ public:
         nameLabel->setStyleSheet("color: white; font-size: 15px;");
         nameLabel->setEditIcon(QPixmap(".\\res\\img\\com_ic_edit_2.png")); // 编辑图标
 
-        auto editNameHandler = [=]() {
+        auto editNameHandler = [this]() {
             bool ok = false;
             QString currentName = nameLabel->text();
-            QString newName = QInputDialog::getText(this, QString::fromUtf8("修改姓名"),
-                QString::fromUtf8("请输入新的姓名："), QLineEdit::Normal, currentName, &ok);
+            QString newName = execStyledDialog(QString::fromUtf8("修改姓名"),
+                QString::fromUtf8("请输入新的姓名："), currentName, QStringList(), &ok, false);
             if (!ok) {
                 return;
             }
@@ -311,6 +392,18 @@ public:
             QString::fromUtf8(u8"未知")
         };
 
+        auto showStyledTextDialog = [this](const QString& title, const QString& prompt,
+            const QString& defaultText, bool* ok) -> QString {
+                return execStyledDialog(title, prompt, defaultText, QStringList(), ok, false);
+            };
+
+        auto showStyledChoiceDialog = [&](const QString& title, const QString& prompt,
+            const QStringList& options, int currentIndex, bool* ok) -> QString {
+                int idx = currentIndex >= 0 && currentIndex < options.size() ? currentIndex : 0;
+                QString defaultValue = options.isEmpty() ? QString() : options.at(idx);
+                return execStyledDialog(title, prompt, defaultValue, options, ok, true);
+            };
+
         int infoRow = 0;
 
         auto addEditableField = [&](const QString& title, QString UserInfo::*member,
@@ -329,13 +422,12 @@ public:
             editBtn->setAutoRaise(true);
             editBtn->setToolTip(QString::fromUtf8(u8"修改%1").arg(title));
 
-            auto handler = [this, valueLabel, member, title, endpoint, fieldKey]() {
+            auto handler = [this, valueLabel, member, title, endpoint, fieldKey, showStyledTextDialog]() {
                 bool ok = false;
                 QString currentValue = valueLabel->text();
                 QString titleText = QString::fromUtf8(u8"修改%1").arg(title);
                 QString promptText = QString::fromUtf8(u8"请输入新的%1：").arg(title);
-                QString newValue = QInputDialog::getText(this, titleText,
-                    promptText, QLineEdit::Normal, currentValue, &ok);
+                QString newValue = showStyledTextDialog(titleText, promptText, currentValue, &ok);
                 if (!ok) {
                     return;
                 }
@@ -379,7 +471,7 @@ public:
             editBtn->setAutoRaise(true);
             editBtn->setToolTip(QString::fromUtf8(u8"修改%1").arg(title));
 
-            auto handler = [this, valueLabel, member, title, options, endpoint, fieldKey]() {
+            auto handler = [this, valueLabel, member, title, options, endpoint, fieldKey, showStyledChoiceDialog]() {
                 bool ok = false;
                 QString currentValue = valueLabel->text();
                 QString titleText = QString::fromUtf8(u8"修改%1").arg(title);
@@ -392,8 +484,8 @@ public:
                     currentIndex = 0;
                 }
 
-                QString newValue = QInputDialog::getItem(this, titleText, promptText,
-                    optionList, currentIndex < 0 ? 0 : currentIndex, false, &ok);
+                QString newValue = showStyledChoiceDialog(titleText, promptText,
+                    optionList, currentIndex < 0 ? 0 : currentIndex, &ok);
                 if (!ok) {
                     return;
                 }
@@ -445,6 +537,8 @@ public:
         btnBottomLayout->addStretch();
         btnBottomLayout->addWidget(btnCancel);
         btnBottomLayout->addWidget(btnOk);
+        connect(btnCancel, &QPushButton::clicked, this, &QDialog::reject);
+        connect(btnOk, &QPushButton::clicked, this, &QDialog::accept);
 
         // ===================== 底部工具栏 =====================
         //QHBoxLayout* toolLayout = new QHBoxLayout;
