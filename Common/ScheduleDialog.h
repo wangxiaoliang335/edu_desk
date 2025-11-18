@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "WebRTCAudioSender.h"
+#include "RtmpMediaStreamer.h"
 #include <QApplication>
 #include <QDialog>
 #include <QVBoxLayout>
@@ -11,6 +11,7 @@
 #include <QVariant>
 #include <QFrame>
 #include <qfiledialog.h>
+#include <QDir>
 #include <qdebug.h>
 #include <qlineedit.h>
 #include <QWidget>
@@ -20,8 +21,10 @@
 #include <QEvent>
 #include <QIcon>
 #include <QAudioInput>
+#include <QAudioDeviceInfo>
 #include <QAudioFormat>
 #include <QIODevice>
+#include <QTimer>
 #include <qprogressbar.h>
 #include <QPoint>
 #include <QBrush>
@@ -31,6 +34,7 @@
 #include <QDate>
 #include <QGroupInfo.h>
 #include <Windows.h>
+#include <QRegularExpression>
 #include "CustomListDialog.h"
 #include "ClickableLabel.h"
 #include "TAHttpHandler.h"
@@ -47,6 +51,7 @@ class HeatmapViewDialog;
 #include "HeatmapTypes.h"
 #include <random>
 #include <algorithm>
+#include <exception>
 
 //// 学生信息结构（用于排座）
 //#ifndef STUDENT_INFO_DEFINED
@@ -59,12 +64,6 @@ class HeatmapViewDialog;
 //    QMap<QString, double> attributes; // 多个属性值（如"背诵"、"语文"等）
 //};
 //#endif
-
-extern "C" {
-#include <libavcodec/avcodec.h>
-#include <libavutil/opt.h>
-#include <libswresample/swresample.h>
-}
 
 class ClickableWidget : public QWidget
 {
@@ -978,15 +977,22 @@ public:
 		// 信号与槽连接（C++11 lambda）
 		//connect(btnTalk, &QPushButton::clicked, this, &ScheduleDialog::onBtnTalkClicked);
 		
-		// 初始化 WebRTC 音频发送器
-		m_webrtcAudioSender = new WebRTCAudioSender(this);
+		// 初始化 RTMP 推流器（取代 WebRTC）
+		m_rtmpStreamer = new RtmpMediaStreamer(this);
+		m_rtmpStreamer->setSrsServer(QStringLiteral("47.100.126.194"), 1935);
+		connect(m_rtmpStreamer, &RtmpMediaStreamer::logMessage, this, [](const QString& log) {
+			qDebug() << "[RTMP]" << log;
+		});
+		connect(m_rtmpStreamer, &RtmpMediaStreamer::errorOccurred, this, [](const QString& err) {
+			qWarning() << "[RTMP][Error]" << err;
+		});
 		
-		// 按下按钮 -> 开始 WebRTC 音频发送
+		// 按下按钮 -> 开始 RTMP 推流
 		connect(btnTalk, &QPushButton::pressed, this, [=]() {
 			pressStartMs = QDateTime::currentMSecsSinceEpoch();
 			btnTalk->setStyleSheet("background-color: red; color: white; padding: 4px 8px; font-size:14px;");
 			btnTalk->setText("录音中...松开结束");
-			qDebug() << "开始对讲（按钮按下）- 使用 WebRTC 协议";
+			qDebug() << "开始对讲（按钮按下）- 使用 RTMP 推流";
 			
 			// 注释掉原来的音频采集和发送代码（可能后面还会用到）
 			/*
@@ -996,25 +1002,72 @@ public:
 			encodeAndSend(empty, 0);
 			*/
 			
-			// 使用 WebRTC 连接到 SRS 服务器
-			// SRS 服务器地址：47.100.126.194
-			// 使用默认 WebRTC 端口 1985
-			// 流名称使用群组ID或用户ID
-			QString streamName = QString("stream_%1_%2").arg(m_unique_group_id).arg(m_userId);
-			QString webrtcUrl = QString("webrtc://47.100.126.194:1985/live/%1").arg(streamName);
-			
-			if (m_webrtcAudioSender) {
-				if (!m_webrtcAudioSender->connectToServer(webrtcUrl)) {
-					qDebug() << "WebRTC 连接失败";
-					btnTalk->setStyleSheet("background-color: green; color: white; padding: 4px 8px; font-size:14px;");
-					btnTalk->setText("按住开始对讲");
-				} else {
-					qDebug() << "WebRTC 连接成功，开始发送音频";
-				}
+			#if 0
+			// 使用 WebRTC 连接到 SRS 服务器（已暂时停用）
+			// ...
+			#else
+			// 使用 RTMP 协议推流到 SRS，仅采集本地音频
+			if (m_unique_group_id.isEmpty() || m_userId.isEmpty()) {
+				qWarning() << "RTMP 推流失败：群组ID或用户ID为空";
+				btnTalk->setStyleSheet("background-color: green; color: white; padding: 4px 8px; font-size:14px;");
+				btnTalk->setText("按住开始对讲");
+				return;
 			}
+
+			if (!m_rtmpStreamer) {
+				qWarning() << "RTMP 推流失败：推流器未初始化";
+				btnTalk->setStyleSheet("background-color: green; color: white; padding: 4px 8px; font-size:14px;");
+				btnTalk->setText("按住开始对讲");
+				return;
+			}
+
+			QAudioDeviceInfo audioInfo = QAudioDeviceInfo::defaultInputDevice();
+			if (audioInfo.isNull()) {
+				qWarning() << "RTMP 推流失败：未检测到可用麦克风";
+				btnTalk->setStyleSheet("background-color: green; color: white; padding: 4px 8px; font-size:14px;");
+				btnTalk->setText("按住开始对讲");
+				return;
+			}
+
+			auto sanitizeId = [](const QString& src) -> QString {
+				QString safe = src;
+				static const QRegularExpression invalidPattern(QStringLiteral("[^A-Za-z0-9_\\-]"));
+				return safe.replace(invalidPattern, QStringLiteral("_"));
+			};
+
+			QString streamName = QStringLiteral("stream_%1_%2")
+				.arg(sanitizeId(m_unique_group_id), sanitizeId(m_userId));
+			m_rtmpStreamer->setStreamKey(streamName);
+			
+			QAudioFormat preferredFormat;
+			preferredFormat.setSampleRate(44100);
+			preferredFormat.setChannelCount(1);
+			preferredFormat.setSampleSize(16);
+			preferredFormat.setCodec("audio/pcm");
+			preferredFormat.setByteOrder(QAudioFormat::LittleEndian);
+			preferredFormat.setSampleType(QAudioFormat::SignedInt);
+
+			if (!startAudioCapture(preferredFormat)) {
+				qWarning() << "音频采集启动失败";
+				btnTalk->setStyleSheet("background-color: green; color: white; padding: 4px 8px; font-size:14px;");
+				btnTalk->setText("按住开始对讲");
+				return;
+			}
+
+			m_rtmpStreamer->setAudioFormat(m_audioFormat.sampleRate(), m_audioFormat.channelCount());
+
+			if (!m_rtmpStreamer->start()) {
+				stopAudioCapture();
+				qWarning() << "RTMP 推流启动失败";
+				btnTalk->setStyleSheet("background-color: green; color: white; padding: 4px 8px; font-size:14px;");
+				btnTalk->setText("按住开始对讲");
+				return;
+			}
+			qDebug() << "RTMP 推流已启动，流名称:" << streamName;
+			#endif
 		});
 
-		// 松开按钮 -> 断开 WebRTC 连接并停止发送
+		// 松开按钮 -> 停止 RTMP 推流
 		connect(btnTalk, &QPushButton::released, this, [=]() {
 			qint64 releaseMs = QDateTime::currentMSecsSinceEpoch();
 			qint64 duration = releaseMs - pressStartMs;
@@ -1024,20 +1077,28 @@ public:
 			// 发送结束包（flag=2）
 			QByteArray empty;
 			encodeAndSend(empty, 2);
-			stop();  // 停止采集
+			stopAudioCapture();  // 停止采集
 			*/
 
-			// 断开 WebRTC 连接
+			#if 0
+			// 断开 WebRTC 连接（已停用）
 			if (m_webrtcAudioSender) {
 				m_webrtcAudioSender->disconnectFromServer();
 				qDebug() << "WebRTC 连接已断开";
 			}
+			#else
+			stopAudioCapture();
+			if (m_rtmpStreamer && m_rtmpStreamer->isRunning()) {
+				m_rtmpStreamer->stop();
+				qDebug() << "RTMP 推流已停止";
+			}
+			#endif
 
 			if (duration < 500) {
 				qDebug() << "录音时间过短(" << duration << "ms)，丢弃";
 			}
 			else {
-				qDebug() << "录音完成，时长:" << duration << "ms，已通过 WebRTC 发送音频";
+				qDebug() << "录音完成，时长:" << duration << "ms，音视频已通过 RTMP 推送";
 			}
 
 			btnTalk->setStyleSheet("background-color: green; color: white; padding: 4px 8px; font-size:14px;");
@@ -1199,309 +1260,62 @@ public:
 		}
 	}
 
-	void start() {
-		// 枚举可用输入设备
-		QList<QAudioDeviceInfo> devices = QAudioDeviceInfo::availableDevices(QAudio::AudioInput);
-		qDebug() << "===== 可用麦克风设备列表 =====";
-		for (auto& dev : devices) {
-			qDebug() << "设备:" << dev.deviceName();
+	bool startAudioCapture(const QAudioFormat& preferredFormat) {
+		QAudioDeviceInfo info = QAudioDeviceInfo::defaultInputDevice();
+		if (!info.isNull()) {
+			qDebug() << "当前输入设备:" << info.deviceName();
 		}
 
-		// 准备采样格式
-		QAudioFormat fmt;
-		fmt.setSampleRate(44100);
-		fmt.setChannelCount(2);
-		fmt.setSampleSize(16);
-		fmt.setCodec("audio/pcm");
-		fmt.setByteOrder(QAudioFormat::LittleEndian);
-		fmt.setSampleType(QAudioFormat::SignedInt);
-
-		// 检查当前默认设备
-		QAudioDeviceInfo info = QAudioDeviceInfo::defaultInputDevice();
-		qDebug() << "默认输入设备:" << info.deviceName();
-
-		// 如果不支持，回退到最近格式
+		QAudioFormat fmt = preferredFormat;
 		if (!info.isFormatSupported(fmt)) {
-			qWarning() << "当前设备不支持 44100Hz 立体声 S16 格式, 使用 nearestFormat";
+			qWarning() << "输入设备不支持请求的格式，使用 nearestFormat";
 			fmt = info.nearestFormat(fmt);
 		}
 
-		// 打印最终使用的格式
-		qDebug() << "使用格式:"
-			<< fmt.sampleRate() << "Hz"
-			<< fmt.channelCount() << "声道"
-			<< fmt.sampleSize() << "bit"
-			<< fmt.codec();
+		stopAudioCapture();
 
-		// 创建输入实例
 		audioInput = new QAudioInput(info, fmt, this);
-
-		// 让 readyRead 提前触发
 		audioInput->setBufferSize(4096);
 
-		// 初始化编码器
-		initEncoder();
-
-		// 启动采集
 		inputDevice = audioInput->start();
 		if (!inputDevice) {
-			qCritical() << "❌ AudioInput start() 失败，可能是系统权限或设备问题";
-			return;
-		}
-		else {
-			qDebug() << "✅ AudioInput 已启动，等待 readyRead 事件...";
+			qCritical() << "AudioInput start() 失败";
+			delete audioInput;
+			audioInput = nullptr;
+			return false;
 		}
 
-		// 绑定 readyRead
+		m_audioFormat = fmt;
+
 		connect(inputDevice, &QIODevice::readyRead, this, &ScheduleDialog::onReadyRead);
-
-		// 额外定时器监控（可选）
-		QTimer::singleShot(3000, this, [=]() {
-			if (audioInput && audioInput->state() != QAudio::ActiveState) {
-				qWarning() << "⚠️ AudioInput 未处于 ActiveState, 当前状态:" << audioInput->state();
-			}
-			});
-
-		//// 打开本地存储文件
-		//localRecordFile.setFileName("test_local.aac"); // 也可以改成带时间戳
-		//if (localRecordFile.open(QIODevice::WriteOnly)) {
-		//	isLocalRecording = true;
-		//	qDebug() << "✅ 本地录音文件已打开: test_local.aac";
-		//}
-		//else {
-		//	qWarning() << "❌ 无法打开本地录音文件用于写入";
-		//	isLocalRecording = false;
-		//}
+		qDebug() << "AudioInput 已启动，采样率:" << fmt.sampleRate() << "声道:" << fmt.channelCount();
+		return true;
 	}
 
-	void stop() {
-		if (audioInput) { audioInput->stop(); delete audioInput; audioInput = nullptr; }
-		if (codecCtx) avcodec_free_context(&codecCtx);
-		if (frame) av_frame_free(&frame);
-		if (pkt) av_packet_free(&pkt);
-		if (swrCtx) swr_free(&swrCtx);
-
-		//if (isLocalRecording) {
-		//	localRecordFile.close();
-		//	isLocalRecording = false;
-		//	qDebug() << "📁 本地录音文件已关闭";
-		//}
-	}
-
-	void addADTSHeader(char* buf, int packetLen, int profile, int sampleRate, int channels)
-	{
-		int freqIdx;
-		switch (sampleRate) {
-		case 96000: freqIdx = 0; break;
-		case 88200: freqIdx = 1; break;
-		case 64000: freqIdx = 2; break;
-		case 48000: freqIdx = 3; break;
-		case 44100: freqIdx = 4; break;
-		case 32000: freqIdx = 5; break;
-		case 24000: freqIdx = 6; break;
-		case 22050: freqIdx = 7; break;
-		case 16000: freqIdx = 8; break;
-		case 12000: freqIdx = 9; break;
-		case 11025: freqIdx = 10; break;
-		case 8000:  freqIdx = 11; break;
-		case 7350:  freqIdx = 12; break;
-		default:    freqIdx = 4; break;
+	void stopAudioCapture() {
+		if (inputDevice) {
+			inputDevice->disconnect(this);
+			inputDevice = nullptr;
 		}
-
-		int fullLen = packetLen + 7;
-		buf[0] = 0xFF;
-		buf[1] = 0xF1;
-		buf[2] = ((profile - 1) << 6) | (freqIdx << 2) | (channels >> 2);
-		buf[3] = ((channels & 3) << 6) | ((fullLen >> 11) & 0x03);
-		buf[4] = (fullLen >> 3) & 0xFF;
-		buf[5] = ((fullLen & 7) << 5) | 0x1F;
-		buf[6] = 0xFC;
-	}
-
-	void encodeAndSend(const QByteArray& pcm, quint8 flag) {
-		if (flag == 0 || flag == 2)
-		{
-			QByteArray packet;
-			QDataStream ds(&packet, QIODevice::WriteOnly);
-			ds.setByteOrder(QDataStream::LittleEndian);
-
-			// ===== 打包帧 =====
-			quint8 frameType = 6; // 音频帧
-			ds << frameType;
-
-			// 加flag
-			ds << flag;
-
-			QByteArray groupIdBytes = m_unique_group_id.toUtf8();
-			quint32 groupIdLen = groupIdBytes.size();
-			ds << groupIdLen;
-			ds.writeRawData(groupIdBytes.constData(), groupIdLen);
-
-			QByteArray senderIdBytes = m_userId.toUtf8();
-			quint32 senderIdLen = senderIdBytes.size();
-			ds << senderIdLen;
-			ds.writeRawData(senderIdBytes.constData(), senderIdLen);
-
-			QByteArray senderNameBytes = m_userName.toUtf8();
-			quint32 senderNameLen = senderNameBytes.size();
-			ds << senderNameLen;
-			ds.writeRawData(senderNameBytes.constData(), senderNameLen);
-
-			quint64 ts = QDateTime::currentMSecsSinceEpoch();
-			ds << ts;
-
-			quint32 aacLen = pcm.size();
-			ds << aacLen;
-			ds.writeRawData(pcm.constData(), aacLen);
-
-			//m_ws.sendBinaryMessage(packet);
-			TaQTWebSocket::sendBinaryMessage(packet);
-			return;
+		if (audioInput) {
+			audioInput->stop();
+			delete audioInput;
+			audioInput = nullptr;
 		}
-
-		//sprintf(m_szTmp, "pcm size:%d\n", pcm.size());
-		//OutputDebugStringA(m_szTmp);
-
-		int16_t* pcmData = (int16_t*)pcm.data();
-		int numSamples = pcm.size() / (2 * codecCtx->channels);
-		const uint8_t* inData[1] = { (uint8_t*)pcmData };
-		swr_convert(swrCtx, frame->data, frame->nb_samples, inData, numSamples);
-
-		if (avcodec_send_frame(codecCtx, frame) >= 0) {
-			while (avcodec_receive_packet(codecCtx, pkt) == 0) {
-				QByteArray aacData((char*)pkt->data, pkt->size);
-
-				QByteArray packet;
-				QDataStream ds(&packet, QIODevice::WriteOnly);
-				ds.setByteOrder(QDataStream::LittleEndian);
-
-				// 构造带ADTS的包
-				QByteArray aacWithADTS;
-				aacWithADTS.resize(aacData.size() + 7);
-				addADTSHeader(aacWithADTS.data(), aacData.size(), 2, 44100, 2); // LC, 44100Hz, stereo
-				memcpy(aacWithADTS.data() + 7, aacData.constData(), aacData.size());
-
-				//// 本地保存
-				//if (isLocalRecording && localRecordFile.isOpen()) {
-				//	localRecordFile.write(aacWithADTS);
-				//}
-
-				// ===== 打包帧 =====
-				quint8 frameType = 6; // 音频帧
-				ds << frameType;
-
-				// 加flag
-				ds << flag;
-
-				QByteArray groupIdBytes = m_unique_group_id.toUtf8();
-				quint32 groupIdLen = groupIdBytes.size();
-				ds << groupIdLen;
-				ds.writeRawData(groupIdBytes.constData(), groupIdLen);
-
-				QByteArray senderIdBytes = m_userId.toUtf8();
-				quint32 senderIdLen = senderIdBytes.size();
-				ds << senderIdLen;
-				ds.writeRawData(senderIdBytes.constData(), senderIdLen);
-
-				QByteArray senderNameBytes = m_userName.toUtf8();
-				quint32 senderNameLen = senderNameBytes.size();
-				ds << senderNameLen;
-				ds.writeRawData(senderNameBytes.constData(), senderNameLen);
-
-				quint64 ts = QDateTime::currentMSecsSinceEpoch();
-				ds << ts;
-
-				quint32 aacLen = aacWithADTS.size();
-				ds << aacLen;
-				ds.writeRawData(aacWithADTS.constData(), aacWithADTS.size());
-
-				//m_ws.sendBinaryMessage(packet);
-				TaQTWebSocket::sendBinaryMessage(packet);
-				// ===== 完成 =====
-				av_packet_unref(pkt);
-			}
-		}
-	}
-
-	void initEncoder() {
-		// 不再调用 avcodec_register_all()
-		// 新版已自动注册
-		av_log_set_level(AV_LOG_INFO);
-		const AVCodec* codec = avcodec_find_encoder(AV_CODEC_ID_AAC);
-		codecCtx = avcodec_alloc_context3(codec);
-		codecCtx->bit_rate = 128000;
-		codecCtx->sample_rate = 44100;
-		codecCtx->channel_layout = AV_CH_LAYOUT_STEREO;
-		codecCtx->channels = 2;
-		codecCtx->sample_fmt = AV_SAMPLE_FMT_FLTP;
-
-		if (avcodec_open2(codecCtx, codec, NULL) < 0) qFatal("AAC encoder open fail");
-
-		frame = av_frame_alloc();
-		frame->nb_samples = codecCtx->frame_size;
-		frame->format = codecCtx->sample_fmt;
-		frame->channel_layout = codecCtx->channel_layout;
-		av_frame_get_buffer(frame, 0);
-
-		pkt = av_packet_alloc();
-
-		swrCtx = swr_alloc_set_opts(NULL,
-			codecCtx->channel_layout, codecCtx->sample_fmt, codecCtx->sample_rate,
-			codecCtx->channel_layout, AV_SAMPLE_FMT_S16, codecCtx->sample_rate,
-			0, NULL);
-		swr_init(swrCtx);
 	}
 
 private slots:
-	void onBtnTalkClicked() {
-		qDebug() << "按钮被点击了!";
-		if (false == m_isBeginTalk)
-		{
-			start();
-			btnTalk->setText("停止对讲");
-			m_isBeginTalk = true;
-		}
-		else
-		{
-			stop();
-			btnTalk->setText("开始对讲");
-			m_isBeginTalk = false;
-		}
-	}
-
 	void onReadyRead() {
-		QByteArray data = inputDevice->readAll();
-		pcmBuffer.append(data);
-
-		int bytesPerSample = 2; // S16LE 每样本2字节
-		int samplesPerFrame = frame->nb_samples; // AAC LC固定为1024
-		int bytesPerFrame = samplesPerFrame * codecCtx->channels * bytesPerSample;
-
-		while (pcmBuffer.size() >= bytesPerFrame) {
-			QByteArray oneFrame = pcmBuffer.left(bytesPerFrame);
-			pcmBuffer.remove(0, bytesPerFrame);
-			encodeAndSend(oneFrame, 1); // flag=1 表示中间帧
+		if (!inputDevice) {
+			return;
 		}
-
-		//QByteArray pcm = inputDevice->readAll();
-		//encodeAndSend(pcm, 1);
-
-		//// ===== 计算音量幅度 =====
-		//const int16_t* samples = reinterpret_cast<const int16_t*>(pcm.constData());
-		//int sampleCount = pcm.size() / 2; // 16 bit 每样本2字节
-		//double sumSquares = 0;
-		//for (int i = 0; i < sampleCount; ++i) {
-		//	sumSquares += samples[i] * samples[i];
-		//}
-		//double rms = sqrt(sumSquares / qMax(sampleCount, 1));
-		//double normalized = rms / 32768.0;  // 归一化到 0-1
-
-		//// 转百分比 (0–100)，加入限制，防止跳动过猛
-		//int volume = int(normalized * 100);
-		//volume = qBound(0, volume, 100);
-
-		//// 更新音量条
-		//m_volumeBar->setValue(volume);
+		QByteArray data = inputDevice->readAll();
+		if (data.isEmpty()) {
+			return;
+		}
+		if (m_rtmpStreamer && m_rtmpStreamer->isRunning()) {
+			m_rtmpStreamer->pushPcm(data);
+		}
 	}
 
 protected:
@@ -1566,14 +1380,10 @@ private:
 	QString m_classid;
 	QAudioInput* audioInput = nullptr;
 	QIODevice* inputDevice = nullptr;
-	AVCodecContext* codecCtx = nullptr;
-	AVFrame* frame = nullptr;
-	AVPacket* pkt = nullptr;
-	SwrContext* swrCtx = nullptr;
+	QAudioFormat m_audioFormat;
 	QString m_userId;
 	QString m_userName;
 	QPushButton* btnTalk = NULL;
-	bool m_isBeginTalk = false;
 	// 班级群功能按钮指针（普通群不显示）
 	QPushButton* m_btnSeat = nullptr;
 	QPushButton* m_btnCam = nullptr;
@@ -1587,9 +1397,8 @@ private:
 	//QProgressBar* m_volumeBar = nullptr;
 	//QFile localRecordFile;
 	//bool isLocalRecording = false;
-	QByteArray pcmBuffer;        // 缓冲未编码的PCM数据
-	// WebRTC 音频发送器
-	WebRTCAudioSender* m_webrtcAudioSender = nullptr;
+	// RTMP 推流器
+	RtmpMediaStreamer* m_rtmpStreamer = nullptr;
 	QVector<GroupMemberInfo>  m_groupMemberInfo;
 	QTableWidget* seatTable = nullptr; // 座位表格
 	ArrangeSeatDialog* arrangeSeatDlg = nullptr; // 排座对话框

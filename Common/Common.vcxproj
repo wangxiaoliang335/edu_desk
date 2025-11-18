@@ -176,6 +176,7 @@
     <QtMoc Include="ClassTeacherDelDialog.h" />
     <QtMoc Include="AudioReceiver.h" />
     <QtMoc Include="WebRTCAudioSender.h" />
+    <QtMoc Include="RtmpMediaStreamer.h" />
     <ClInclude Include="CommonInfo.h" />
     <QtMoc Include="TaQTWebSocket.h" />
     <QtMoc Include="QGroupInfo.h" />
@@ -191,6 +192,7 @@
   <ItemGroup>
     <ClCompile Include="AudioReceiver.cpp" />
     <ClCompile Include="WebRTCAudioSender.cpp" />
+    <ClCompile Include="RtmpMediaStreamer.cpp" />
     <ClCompile Include="AvatarLabel.cpp" />
     <ClCompile Include="CommonInfo.cpp" />
     <ClCompile Include="common\crashdump.cpp" />

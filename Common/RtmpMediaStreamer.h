@@ -1,0 +1,64 @@
+#pragma once
+
+#include <QObject>
+#include <QString>
+#include <QByteArray>
+
+struct AVFormatContext;
+struct AVCodecContext;
+struct AVStream;
+struct AVFrame;
+struct AVPacket;
+struct SwrContext;
+
+/**
+ * 使用 FFmpeg API 推流，将本地音频通过 RTMP 推送到 SRS。
+ */
+class RtmpMediaStreamer : public QObject
+{
+    Q_OBJECT
+public:
+    explicit RtmpMediaStreamer(QObject* parent = nullptr);
+    ~RtmpMediaStreamer() override;
+
+    void setSrsServer(const QString& host, quint16 port = 1935);
+    void setStreamKey(const QString& streamKey);
+    void setAudioFormat(int sampleRate, int channels);
+
+    bool start();
+    void stop();
+    bool isRunning() const;
+    void pushPcm(const QByteArray& pcm);
+
+signals:
+    void started();
+    void stopped();
+    void logMessage(const QString& message);
+    void errorOccurred(const QString& error);
+
+private:
+    QString buildRtmpUrl() const;
+    bool initOutputContext();
+    bool initEncoder();
+    bool initSwr();
+    void cleanup();
+    void emitLog(const QString& msg);
+    void emitError(const QString& msg);
+
+    QString m_host = QStringLiteral("47.100.126.194");
+    quint16 m_port = 1935;
+    QString m_streamKey;
+    int m_sampleRate = 48000;
+    int m_channels = 1;
+    bool m_isRunning = false;
+    int64_t m_pts = 0;
+    QByteArray m_pcmBuffer;
+
+    AVFormatContext* m_outputCtx = nullptr;
+    AVCodecContext* m_codecCtx = nullptr;
+    AVStream* m_audioStream = nullptr;
+    AVFrame* m_frame = nullptr;
+    AVPacket* m_packet = nullptr;
+    SwrContext* m_swrCtx = nullptr;
+};
+
