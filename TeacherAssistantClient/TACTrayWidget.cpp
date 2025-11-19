@@ -1,9 +1,10 @@
-#pragma execution_character_set("utf-8")
+ï»¿#pragma execution_character_set("utf-8")
 #include "TACTrayWidget.h"
 #include <QVBoxLayout>
 #include <QPushButton>
 #include <QLabel>
 #include "common.h"
+#include "../Common/CommonInfo.h"
 TACTrayWidget::TACTrayWidget(QWidget *parent)
 	: TAFloatingWidget(parent)
 {
@@ -23,28 +24,29 @@ TACTrayWidget::TACTrayWidget(QWidget *parent)
 	label->setAlignment(Qt::AlignCenter);
 	layout->addWidget(label);
 
-	QPushButton* fileManagerButton = new QPushButton("ÅäÖÃÑ§Ð£ÐÅÏ¢", this);
-	fileManagerButton->setCheckable(true);
-	layout->addWidget(fileManagerButton);
+	m_fileManagerButton = new QPushButton(QString::fromUtf8(u8"é…ç½®å­¦æ ¡ä¿¡æ¯"), this);
+	m_fileManagerButton->setCheckable(true);
+	m_fileManagerButton->setEnabled(false); // é»˜è®¤ç¦ç”¨ï¼Œç­‰å¾…ç”¨æˆ·ä¿¡æ¯åŠ è½½åŽæ›´æ–°
+	layout->addWidget(m_fileManagerButton);
 	
-	// ÄäÃûº¯Êý£¨Lambda£©×÷Îªµã»÷ÊÂ¼þ
-	connect(fileManagerButton, &QPushButton::toggled, this, [=](bool checked) {
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Lambdaï¿½ï¿½ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½Â¼ï¿½
+	connect(m_fileManagerButton, &QPushButton::toggled, this, [=](bool checked) {
 		emit navChoolInfo(checked);
 		});
 
-	QPushButton* createFolderButton = new QPushButton("×ÀÃæ×é¼þ", this);
+	QPushButton* createFolderButton = new QPushButton("æ¡Œé¢ç»„ä»¶", this);
 	layout->addWidget(createFolderButton);
 	createFolderButton->setCheckable(true);
 
-	// ÄäÃûº¯Êý£¨Lambda£©×÷Îªµã»÷ÊÂ¼þ
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Lambdaï¿½ï¿½ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½Â¼ï¿½
 	connect(createFolderButton, &QPushButton::toggled, this, [=](bool checked) {
 		emit navType(checked);
 	});
 
-	//QPushButton* countdowButton = new QPushButton("¶Ô½²", this);
+	//QPushButton* countdowButton = new QPushButton("ï¿½Ô½ï¿½", this);
 	//layout->addWidget(countdowButton);
 
-	//QPushButton* timeButton = new QPushButton("ÏûÏ¢", this);
+	//QPushButton* timeButton = new QPushButton("ï¿½ï¿½Ï¢", this);
 	//layout->addWidget(timeButton);
 
 	setLayout(layout);
@@ -67,4 +69,18 @@ void TACTrayWidget::resizeEvent(QResizeEvent* event)
 }
 void TACTrayWidget::initShow()
 {
+}
+
+void TACTrayWidget::updateAdminButtonState()
+{
+	if (!m_fileManagerButton) {
+		return;
+	}
+	
+	// æ ¹æ®ç®¡ç†å‘˜å­—æ®µæŽ§åˆ¶æŒ‰é’®å¯ç”¨çŠ¶æ€
+	UserInfo userInfo = CommonInfo::GetData();
+	bool isAdmin = (userInfo.strIsAdministrator == "1" ||
+		userInfo.strIsAdministrator.compare(QString::fromUtf8(u8"æ˜¯"), Qt::CaseInsensitive) == 0 ||
+		userInfo.strIsAdministrator.compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0);
+	m_fileManagerButton->setEnabled(isAdmin);
 }

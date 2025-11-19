@@ -185,7 +185,7 @@
     <QtMoc Include="FriendSelectDialog.h" />
     <QtMoc Include="MemberKickDialog.h" />
     <QtMoc Include="TIMRestAPI.h" />
-    <ClInclude Include="GenerateTestUserSig.h" />
+    <QtMoc Include="GenerateTestUserSig.h" />
     <ClInclude Include="UniqueNumberGenerator.h" />
     <ClInclude Include="util.h" />
   </ItemGroup>

@@ -2,10 +2,16 @@
 * Module:   GenerateTestUserSig
 *
 * Function: 用于获取 TIMLogin 接口所必须的 UserSig，腾讯云使用 UserSig 进行安全校验，保护您的 IM 功能不被盗用
+*           现在从服务器获取 UserSig，而不是在客户端计算
 */
 #include "GenerateTestUserSig.h"
 #include "CommonInfo.h"
+#include "TAHttpHandler.h"
 #include "./zlib/zlib.h"
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QTimer>
 
 #include <time.h>
 #include <stdio.h>
@@ -346,13 +352,21 @@ char GenerateTestUserSigImpl::bit6ToAscii(uint8_t a)
 }
 
 GenerateTestUserSig::GenerateTestUserSig()
+    : m_httpHandler(nullptr), m_eventLoop(nullptr), m_requestCompleted(false), m_requestSuccess(false)
 {
-
+    m_httpHandler = new TAHttpHandler(this);
+    if (m_httpHandler) {
+        connect(m_httpHandler, &TAHttpHandler::success, this, &GenerateTestUserSig::onHttpSuccess);
+        connect(m_httpHandler, &TAHttpHandler::failed, this, &GenerateTestUserSig::onHttpFailed);
+    }
 }
 
 GenerateTestUserSig::~GenerateTestUserSig()
 {
-
+    if (m_eventLoop) {
+        delete m_eventLoop;
+        m_eventLoop = nullptr;
+    }
 }
 
 GenerateTestUserSig& GenerateTestUserSig::instance()
@@ -366,12 +380,92 @@ uint32_t GenerateTestUserSig::getSDKAppID() const
     return SDKAPPID;
 }
 
+void GenerateTestUserSig::onHttpSuccess(const QString& response)
+{
+    QJsonDocument jsonDoc = QJsonDocument::fromJson(response.toUtf8());
+    if (jsonDoc.isObject()) {
+        QJsonObject obj = jsonDoc.object();
+        if (obj["data"].isObject()) {
+            QJsonObject dataObj = obj["data"].toObject();
+            if (dataObj.contains("user_sig")) {
+                m_receivedUserSig = dataObj["user_sig"].toString();
+                m_requestSuccess = true;
+            } else if (dataObj.contains("usersig")) {
+                m_receivedUserSig = dataObj["usersig"].toString();
+                m_requestSuccess = true;
+            } else if (dataObj.contains("sig")) {
+                m_receivedUserSig = dataObj["sig"].toString();
+                m_requestSuccess = true;
+            }
+        } else if (obj.contains("user_sig")) {
+            m_receivedUserSig = obj["user_sig"].toString();
+            m_requestSuccess = true;
+        } else if (obj.contains("usersig")) {
+            m_receivedUserSig = obj["usersig"].toString();
+            m_requestSuccess = true;
+        } else if (obj.contains("sig")) {
+            m_receivedUserSig = obj["sig"].toString();
+            m_requestSuccess = true;
+        }
+    }
+    m_requestCompleted = true;
+    if (m_eventLoop) {
+        m_eventLoop->quit();
+    }
+}
+
+void GenerateTestUserSig::onHttpFailed(const QString& error)
+{
+    m_requestSuccess = false;
+    m_requestCompleted = true;
+    if (m_eventLoop) {
+        m_eventLoop->quit();
+    }
+}
+
 std::string GenerateTestUserSig::genTestUserSig(const std::string& userId)
 {
-    uint32_t currTime = (uint32_t)time(NULL);
-    GenerateTestUserSigImpl impl(SDKAPPID, SECRETKEY, currTime, EXPIRETIME);
+    if (!m_httpHandler) {
+        return "";
+    }
 
-    return impl.genTestUserSig(userId);
+    // 重置状态
+    m_receivedUserSig.clear();
+    m_requestCompleted = false;
+    m_requestSuccess = false;
+
+    // 创建事件循环用于同步等待
+    QEventLoop loop;
+    m_eventLoop = &loop;
+
+    // 设置超时定时器（30秒）
+    QTimer timeoutTimer;
+    timeoutTimer.setSingleShot(true);
+    connect(&timeoutTimer, &QTimer::timeout, [&]() {
+        m_requestCompleted = true;
+        m_requestSuccess = false;
+        loop.quit();
+    });
+    timeoutTimer.start(30000);
+
+    // 发送请求到服务器
+    QMap<QString, QString> params;
+    params["user_id"] = QString::fromStdString(userId);
+    m_httpHandler->post(QString("http://47.100.126.194:5000/getUserSig"), params);
+
+    // 等待响应
+    loop.exec();
+
+    // 清理
+    m_eventLoop = nullptr;
+    timeoutTimer.stop();
+
+    if (m_requestSuccess && !m_receivedUserSig.isEmpty()) {
+        return m_receivedUserSig.toStdString();
+    }
+
+    // 如果服务器请求失败，返回空字符串
+    return "";
 }
 
 std::string GenerateTestUserSig::getAdminUserId() const

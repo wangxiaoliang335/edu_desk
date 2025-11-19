@@ -98,6 +98,14 @@ void TACMainDialog::Init(QString qPhone, int user_id)
                                 m_userInfo.teacher_unique_id = oUserInfo.at(0)["teacher_unique_id"].toString();
                                 QString avatarBase64 = oUserInfo.at(0)["avatar_base64"].toString();
 
+                                // 更新 CommonInfo 中的用户信息
+                                CommonInfo::InitData(m_userInfo);
+                                
+                                // 更新托盘组件中的管理员按钮状态（如果已创建）
+                                if (trayWidget) {
+                                    trayWidget->updateAdminButtonState();
+                                }
+
                                 if (InitSDK())
                                 {
                                     Login(m_userInfo.teacher_unique_id.toStdString());
@@ -261,6 +269,12 @@ void TACMainDialog::Init(QString qPhone, int user_id)
     desktopManagerWidget = new TACDesktopManagerWidget(this);
     schoolInfoDlg = new SchoolInfoDialog(this);
     trayWidget = new TACTrayWidget(this);
+    
+    // 用户信息已加载后，更新管理员按钮状态
+    if (CommonInfo::GetData().strIsAdministrator.isEmpty() == false) {
+        trayWidget->updateAdminButtonState();
+    }
+    
     connect(trayWidget, &TACTrayWidget::navType, this, [=](bool checked) {
         if (desktopManagerWidget)
         {
