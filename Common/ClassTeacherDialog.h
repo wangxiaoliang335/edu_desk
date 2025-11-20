@@ -27,6 +27,10 @@
 #include <QUrl>
 #include <QUrlQuery>
 #include <QMetaObject>
+#include <QEvent>
+#include <QResizeEvent>
+#include <QPainter>
+#include <QPainterPath>
 
 class ClassTeacherDialog : public QDialog
 {
@@ -35,8 +39,20 @@ public:
     ClassTeacherDialog(QWidget* parent = nullptr, TaQTWebSocket* pWs = NULL) : QDialog(parent)
     {
         setWindowTitle("班级 / 教师选择");
+        setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
         resize(420, 300);
-        setStyleSheet("background-color:#555555; font-size:14px;");
+        setStyleSheet("font-size:14px;");
+        m_cornerRadius = 16;
+        updateMask();
+
+        closeButton = new QPushButton(this);
+        closeButton->setIcon(QIcon(":/res/img/widget-close.png"));
+        closeButton->setIconSize(QSize(22, 22));
+        closeButton->setFixedSize(QSize(22, 22));
+        closeButton->setStyleSheet("background: transparent;");
+        closeButton->move(width() - 24, 4);
+        closeButton->hide();
+        connect(closeButton, &QPushButton::clicked, this, &QDialog::reject);
 
         m_pWs = pWs;
         m_httpHandler = new TAHttpHandler(this);
@@ -168,6 +184,8 @@ public:
         // m_scheduleDlg 已移至 FriendGroupDialog 中管理
 
         QVBoxLayout* mainLayout = new QVBoxLayout(this);
+        mainLayout->setContentsMargins(20, 40, 20, 20);
+        mainLayout->setSpacing(16);
 
         // 顶部黄色圆形数字标签
         //QLabel* lblNum = new QLabel("2");
@@ -180,6 +198,7 @@ public:
         QVBoxLayout* classLayout = new QVBoxLayout;
         QLabel* lblClassTitle = new QLabel("班级");
         lblClassTitle->setStyleSheet("background-color:#3b73b8; qproperty-alignment: AlignCenter; color:white; font-weight:bold; padding:6px;");
+        lblClassTitle->setFixedHeight(32);
         classLayout->addWidget(lblClassTitle);
 
         QWidget* classListWidget = new QWidget;
@@ -195,6 +214,7 @@ public:
         QVBoxLayout* teacherLayout = new QVBoxLayout;
         QLabel* lblTeacherTitle = new QLabel("教师");
         lblTeacherTitle->setStyleSheet("background-color:#3b73b8; qproperty-alignment: AlignCenter; color:white; font-weight:bold; padding:6px;");
+        lblTeacherTitle->setFixedHeight(32);
         teacherLayout->addWidget(lblTeacherTitle);
 
         QWidget* teacherListWidget = new QWidget;
@@ -231,7 +251,7 @@ public:
         });
     }
 
-    void InitData()
+    void InitData(QSet<QString> setclassId)
     {
         UserInfo userInfo = CommonInfo::GetData();
         if (m_httpHandler)
@@ -245,7 +265,7 @@ public:
         // 如已有学校ID，则拉取班级列表
         if (!userInfo.schoolId.isEmpty())
         {
-            fetchClassesByPrefix(userInfo.schoolId);
+            fetchClassesByPrefix(setclassId, userInfo.schoolId);
         }
     }
 
@@ -314,7 +334,70 @@ private:
         }
     }
 
-    void fetchClassesByPrefix(const QString& schoolId)
+protected:
+    void enterEvent(QEvent* event) override
+    {
+        QDialog::enterEvent(event);
+        if (m_visibleCloseButton && closeButton)
+            closeButton->show();
+    }
+
+    void leaveEvent(QEvent* event) override
+    {
+        QDialog::leaveEvent(event);
+        if (closeButton)
+            closeButton->hide();
+    }
+
+    void resizeEvent(QResizeEvent* event) override
+    {
+        QDialog::resizeEvent(event);
+        if (closeButton)
+            closeButton->move(this->width() - closeButton->width() - 4, 4);
+        updateMask();
+    }
+
+    void mousePressEvent(QMouseEvent* event) override
+    {
+        if (event->button() == Qt::LeftButton) {
+            m_dragging = true;
+            m_dragStartPos = event->globalPos() - frameGeometry().topLeft();
+        }
+        QDialog::mousePressEvent(event);
+    }
+
+    void mouseMoveEvent(QMouseEvent* event) override
+    {
+        if (m_dragging && (event->buttons() & Qt::LeftButton)) {
+            move(event->globalPos() - m_dragStartPos);
+        }
+        QDialog::mouseMoveEvent(event);
+    }
+
+    void mouseReleaseEvent(QMouseEvent* event) override
+    {
+        if (event->button() == Qt::LeftButton) {
+            m_dragging = false;
+        }
+        QDialog::mouseReleaseEvent(event);
+    }
+
+    void paintEvent(QPaintEvent* event) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setBrush(QColor("#555555"));
+        painter.setPen(Qt::NoPen);
+
+        QPainterPath path;
+        path.addRoundedRect(rect(), m_cornerRadius, m_cornerRadius);
+        painter.drawPath(path);
+    }
+
+
+private:
+
+    void fetchClassesByPrefix(QSet<QString> setclassId, const QString& schoolId)
     {
         if (schoolId.isEmpty()) return;
         QString prefix = schoolId;
@@ -332,7 +415,7 @@ private:
         QNetworkRequest request(QUrl("http://47.100.126.194:5000/getClassesByPrefix"));
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
         QNetworkReply* reply = manager->post(request, reqData);
-        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        connect(reply, &QNetworkReply::finished, this, [this, reply, setclassId]() {
             if (reply->error() == QNetworkReply::NoError) {
                 QByteArray response_data = reply->readAll();
                 QJsonDocument respDoc = QJsonDocument::fromJson(response_data);
@@ -355,6 +438,10 @@ private:
                         QString grade = cls.value("grade").toString();
                         QString className = cls.value("class_name").toString();
                         QString classCode = cls.value("class_code").toString();
+                        if (setclassId.find(classCode) != setclassId.end())
+                        {
+                            continue;
+                        }
 
                         // 展示名称：学段+年级+班名 或 仅班名
                         QString display = className.isEmpty() ? (grade.isEmpty() ? stage : (stage + grade)) : (stage + grade + className);
@@ -654,6 +741,9 @@ private:
         callbackData->teacher_name = teacher_name;
         callbackData->userInfo = userinfo;
         
+        // 使用班级唯一ID拼接自定义群ID（如：classUniqueId01）
+        QString customGroupId = classUniqueId + "01";
+
         // 调用REST API创建群组
         m_restAPI->createGroup(groupName, "Meeting", memberArray, 
             [=](int errorCode, const QString& errorDesc, const QJsonObject& result) {
@@ -692,7 +782,8 @@ private:
                 }
                 
                 delete callbackData;
-            });
+            },
+            customGroupId);
     }
     
     // 上传群组信息到服务器
@@ -860,4 +951,16 @@ private:
     QPushButton* btnCancel = NULL;
     QVector<QString> m_NoticeMsg;
     TaQTWebSocket* m_pWs = NULL;
+    QPushButton* closeButton = nullptr;
+    bool m_visibleCloseButton = true;
+    bool m_dragging = false;
+    QPoint m_dragStartPos;
+    int m_cornerRadius = 16;
+
+    void updateMask()
+    {
+        QPainterPath path;
+        path.addRoundedRect(rect(), m_cornerRadius, m_cornerRadius);
+        setMask(QRegion(path.toFillPolygon().toPolygon()));
+    }
 };

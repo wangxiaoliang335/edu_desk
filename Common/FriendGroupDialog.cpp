@@ -78,16 +78,23 @@ FriendGroupDialog::FriendGroupDialog(QWidget* parent, TaQTWebSocket* pWs)
                 
                 // 处理群组信息（/groups/by-teacher 接口返回）
                 if (obj["data"].isObject()) {
+                    m_setClassId.clear();
                     QJsonObject dataObj = obj["data"].toObject();
+
+                    bool isGrouplist = false;
                     
                     // 处理群主群组列表（owner_groups）
                     if (dataObj["owner_groups"].isArray()) {
                         QJsonArray ownerGroupsArray = dataObj["owner_groups"].toArray();
                         for (int i = 0; i < ownerGroupsArray.size(); i++) {
+                            QString classid;
                             QJsonObject groupObj = ownerGroupsArray[i].toObject();
                             QString groupId = groupObj["group_id"].toString();
                             QString groupName = groupObj["group_name"].toString();
-                            QString classid = groupObj["classid"].toString();
+                            if (!groupObj["classid"].isNull())
+                            {
+                                classid = groupObj["classid"].toString();
+                            }
                             
                             // 处理群组头像（如果有）
                             QString avatarPath = "";
@@ -142,17 +149,26 @@ FriendGroupDialog::FriendGroupDialog(QWidget* parent, TaQTWebSocket* pWs)
                                     gNormalAdminLayout->addLayout(pairLayout);
                                 }
                             }
+                            if (!classid.isEmpty())
+                            {
+                                m_setClassId.insert(classid);
+                            }
                         }
+                        isGrouplist = true;
                     }
                     
                     // 处理成员群组列表（member_groups）
                     if (dataObj["member_groups"].isArray()) {
                         QJsonArray memberGroupsArray = dataObj["member_groups"].toArray();
                         for (int i = 0; i < memberGroupsArray.size(); i++) {
+                            QString classid;
                             QJsonObject groupObj = memberGroupsArray[i].toObject();
                             QString groupId = groupObj["group_id"].toString();
                             QString groupName = groupObj["group_name"].toString();
-                            QString classid = groupObj["classid"].toString();
+                            if (!groupObj["classid"].isNull())
+                            {
+                                classid = groupObj["classid"].toString();
+                            }
                             
                             // 处理群组头像（如果有）
                             QString avatarPath = "";
@@ -207,8 +223,18 @@ FriendGroupDialog::FriendGroupDialog(QWidget* parent, TaQTWebSocket* pWs)
                                     gNormalJoinLayout->addLayout(pairLayout);
                                 }
                             }
+                            if (!classid.isEmpty())
+                            {
+                                m_setClassId.insert(classid);
+                            }
                         }
+                        isGrouplist = true;
                     }
+                    //init data
+					if (addGroupWidget && isGrouplist)
+					{
+						addGroupWidget->InitData(m_setClassId);
+					}
                 }
                 
                 // 处理好友信息（原有逻辑）
@@ -752,10 +778,10 @@ QHBoxLayout* FriendGroupDialog::makePairBtn(const QString& leftText, const QStri
 
 void FriendGroupDialog::InitData()
 {
-    if (addGroupWidget)
+    /*if (addGroupWidget)
     {
-        addGroupWidget->InitData();
-    }
+        addGroupWidget->InitData(m_setClassId);
+    }*/
 
     // 清空群组布局（gAdminLayout 和 gJoinLayout）
     // 使用安全的清空方法，避免崩溃

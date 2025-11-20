@@ -2,6 +2,7 @@
 #pragma execution_character_set("utf-8")
 
 #include "TAFloatingWidget.h"
+#include <QSet>
 #include "SearchDialog.h"
 #include "ClassTeacherDialog.h"
 #include "NormalGroupDialog.h"
@@ -13,7 +14,7 @@ public:
 	TACAddGroupWidget1(QWidget *parent, TaQTWebSocket* pWs);
 	~TACAddGroupWidget1();
 
-	void InitData();
+	void InitData(QSet<QString> setclassId);
 	void InitWebSocket();
 	QVector<QString> getNoticeMsg();
 signals:

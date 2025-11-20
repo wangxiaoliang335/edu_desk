@@ -39,9 +39,11 @@ public:
      * @param groupType 群组类型：Private(私有群), Public(公开群), ChatRoom(聊天室), AVChatRoom(直播群)
      * @param memberList 初始成员列表（包含群主）
      * @param callback 回调函数
+     * @param groupId 自定义群ID（可选）
      */
     void createGroup(const QString& groupName, const QString& groupType, 
-                     const QJsonArray& memberList, RestAPICallback callback);
+                     const QJsonArray& memberList, RestAPICallback callback,
+                     const QString& groupId = QString());
 
     /**
      * @brief 邀请成员加入群组

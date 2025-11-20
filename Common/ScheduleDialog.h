@@ -32,6 +32,9 @@
 #include <QUrl>
 #include <QUrlQuery>
 #include <QDate>
+#include <QPainter>
+#include <QPainterPath>
+#include <QRegion>
 #include <QGroupInfo.h>
 #include <Windows.h>
 #include <QRegularExpression>
@@ -96,8 +99,10 @@ public:
 		setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
 		// 座位区域：10列×121像素=1210像素宽，6行×50像素=300像素高
 		// 窗口大小：宽度1238（1251×0.99），高度669（676×0.99）
-		resize(1238, 669);
-		setStyleSheet("QDialog { background-color: #5C5C5C; color: white; border: 1px solid #5C5C5C; font-weight: bold; } "
+        resize(1238, 669);
+        m_cornerRadius = 16;
+        updateMask();
+        setStyleSheet("QDialog { background-color: #5C5C5C; color: white; border: 1px solid #5C5C5C; font-weight: bold; } "
 			"QPushButton { font-size:14px; color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
 			"QLabel { font-size:14px; color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
 			"QLineEdit { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
@@ -120,7 +125,7 @@ public:
 		closeButton->setIconSize(QSize(22, 22));
 		closeButton->setFixedSize(QSize(22, 22));
 		closeButton->setStyleSheet("background: transparent;");
-		closeButton->move(width() - 22, 0);
+        closeButton->move(width() - closeButton->width() - 4, 4);
 		closeButton->hide();
 		connect(closeButton, &QPushButton::clicked, this, &QDialog::reject);
 
@@ -393,7 +398,9 @@ public:
 		m_pWs = pWs;
 		m_chatDlg = new ChatDialog(this, m_pWs);
 		customListDlg = new CustomListDialog(m_classid, this);
-		QVBoxLayout* mainLayout = new QVBoxLayout(this);
+        QVBoxLayout* mainLayout = new QVBoxLayout(this);
+        mainLayout->setContentsMargins(20, 40, 20, 20);
+        mainLayout->setSpacing(12);
 		m_groupInfo = new QGroupInfo(this);
 		
 		// 连接成员退出群聊信号，当有成员退出时刷新成员列表
@@ -1336,8 +1343,9 @@ protected:
 	void resizeEvent(QResizeEvent* event) override
 	{
 		QDialog::resizeEvent(event);
-		if (closeButton)
-			closeButton->move(this->width() - 22, 0);
+        if (closeButton)
+            closeButton->move(this->width() - closeButton->width() - 4, 4);
+        updateMask();
 	}
 
 	void mousePressEvent(QMouseEvent* event) override
@@ -1365,10 +1373,30 @@ protected:
 		QDialog::mouseReleaseEvent(event);
 	}
 
+    void paintEvent(QPaintEvent* event) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setBrush(QColor("#5C5C5C"));
+        painter.setPen(Qt::NoPen);
+
+        QPainterPath path;
+        path.addRoundedRect(rect(), m_cornerRadius, m_cornerRadius);
+        painter.drawPath(path);
+    }
+
 private:
 	bool m_dragging = false; // 是否正在拖动
 	QPoint m_dragStartPos; // 拖动起始位置
 	QPushButton* closeButton = nullptr; // 关闭按钮
+    int m_cornerRadius = 16;
+
+    void updateMask()
+    {
+        QPainterPath path;
+        path.addRoundedRect(rect(), m_cornerRadius, m_cornerRadius);
+        setMask(QRegion(path.toFillPolygon().toPolygon()));
+    }
 	CustomListDialog* customListDlg = NULL;
 	QLabel* m_lblClass = NULL;
 	QString m_groupName;

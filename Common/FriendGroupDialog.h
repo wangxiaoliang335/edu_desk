@@ -115,4 +115,5 @@ private:
     TaQTWebSocket* m_pWs = NULL;
     QMap<QString, ScheduleDialog*> m_scheduleDlg;
     QList<Notification> notifications;
+    QSet<QString> m_setClassId;
 };

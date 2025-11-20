@@ -106,11 +106,11 @@ void TACAddGroupWidget1::InitWebSocket()
 	}
 }
 
-void TACAddGroupWidget1::InitData()
+void TACAddGroupWidget1::InitData(QSet<QString> setclassId)
 {
 	if (m_classTeacherDlg)
 	{
-		m_classTeacherDlg->InitData();
+		m_classTeacherDlg->InitData(setclassId);
 	}
 }
 

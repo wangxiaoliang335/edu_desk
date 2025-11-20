@@ -242,11 +242,15 @@ void TIMRestAPI::parseResponse(QNetworkReply* reply, RestAPICallback callback)
 }
 
 void TIMRestAPI::createGroup(const QString& groupName, const QString& groupType, 
-                             const QJsonArray& memberList, RestAPICallback callback)
+                             const QJsonArray& memberList, RestAPICallback callback,
+                             const QString& groupId)
 {
     QJsonObject requestBody;
     requestBody["Name"] = groupName;
     requestBody["Type"] = groupType; // Private, Public, ChatRoom, AVChatRoom
+    if (!groupId.isEmpty()) {
+        requestBody["GroupId"] = groupId;
+    }
     
     // 群组配置
     QJsonObject groupConfig;
