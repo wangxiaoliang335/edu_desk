@@ -31,6 +31,117 @@
 #include <QResizeEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QRegion>
+
+// 自定义消息对话框类
+class CustomMessageDialog : public QDialog
+{
+    Q_OBJECT
+public:
+    explicit CustomMessageDialog(QWidget* parent = nullptr, const QString& title = "", const QString& message = "")
+        : QDialog(parent), m_dragging(false), m_cornerRadius(16)
+    {
+        setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+        setAttribute(Qt::WA_TranslucentBackground);
+        resize(400, 200);
+        
+        QVBoxLayout* mainLayout = new QVBoxLayout(this);
+        mainLayout->setContentsMargins(20, 20, 20, 20);
+        mainLayout->setSpacing(16);
+        
+        // 标题
+        QLabel* titleLabel = new QLabel(title, this);
+        titleLabel->setAlignment(Qt::AlignCenter);
+        titleLabel->setStyleSheet("color: white; font-size: 16px; font-weight: bold; padding: 8px 0px;");
+        mainLayout->addWidget(titleLabel);
+        
+        // 消息内容
+        QLabel* messageLabel = new QLabel(message, this);
+        messageLabel->setAlignment(Qt::AlignCenter);
+        messageLabel->setWordWrap(true);
+        messageLabel->setStyleSheet("color: white; font-size: 14px; padding: 8px;");
+        mainLayout->addWidget(messageLabel);
+        
+        // 确定按钮
+        QPushButton* okButton = new QPushButton(QString::fromUtf8(u8"确定"), this);
+        okButton->setStyleSheet("background-color: #1976d2; color: white; padding: 8px 16px; border-radius: 4px; font-size: 14px;");
+        okButton->setFixedHeight(36);
+        connect(okButton, &QPushButton::clicked, this, &QDialog::accept);
+        
+        QHBoxLayout* buttonLayout = new QHBoxLayout;
+        buttonLayout->addStretch();
+        buttonLayout->addWidget(okButton);
+        buttonLayout->addStretch();
+        mainLayout->addLayout(buttonLayout);
+        
+        setStyleSheet("QDialog { background-color: #323232; border-radius: 16px; }");
+        updateMask();
+    }
+    
+    static int showMessage(QWidget* parent, const QString& title, const QString& message)
+    {
+        CustomMessageDialog dialog(parent, title, message);
+        return dialog.exec();
+    }
+    
+protected:
+    void paintEvent(QPaintEvent* event) override
+    {
+        Q_UNUSED(event);
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        QRect rect(0, 0, width(), height());
+        QPainterPath path;
+        path.addRoundedRect(rect, m_cornerRadius, m_cornerRadius);
+        p.fillPath(path, QBrush(QColor(50, 50, 50)));
+        QPen pen(Qt::white, 2);
+        p.strokePath(path, pen);
+    }
+    
+    void mousePressEvent(QMouseEvent* event) override
+    {
+        if (event->button() == Qt::LeftButton) {
+            m_dragging = true;
+            m_dragStartPos = event->globalPos() - frameGeometry().topLeft();
+        }
+        QDialog::mousePressEvent(event);
+    }
+    
+    void mouseMoveEvent(QMouseEvent* event) override
+    {
+        if (m_dragging && (event->buttons() & Qt::LeftButton)) {
+            move(event->globalPos() - m_dragStartPos);
+        }
+        QDialog::mouseMoveEvent(event);
+    }
+    
+    void mouseReleaseEvent(QMouseEvent* event) override
+    {
+        if (event->button() == Qt::LeftButton) {
+            m_dragging = false;
+        }
+        QDialog::mouseReleaseEvent(event);
+    }
+    
+    void resizeEvent(QResizeEvent* event) override
+    {
+        QDialog::resizeEvent(event);
+        updateMask();
+    }
+    
+private:
+    void updateMask()
+    {
+        QPainterPath path;
+        path.addRoundedRect(0, 0, width(), height(), m_cornerRadius, m_cornerRadius);
+        QRegion region(path.toFillPolygon().toPolygon());
+        setMask(region);
+    }
+    
+    bool m_dragging;
+    QPoint m_dragStartPos;
+    int m_cornerRadius;
+};
 
 class ClassTeacherDialog : public QDialog
 {
@@ -186,6 +297,12 @@ public:
         QVBoxLayout* mainLayout = new QVBoxLayout(this);
         mainLayout->setContentsMargins(20, 40, 20, 20);
         mainLayout->setSpacing(16);
+
+        // 窗口标题标签
+        QLabel* lblWindowTitle = new QLabel(QString::fromUtf8(u8"班级 / 教师选择"));
+        lblWindowTitle->setAlignment(Qt::AlignCenter);
+        lblWindowTitle->setStyleSheet("color: white; font-size: 16px; font-weight: bold; padding: 8px 0px;");
+        mainLayout->addWidget(lblWindowTitle);
 
         // 顶部黄色圆形数字标签
         //QLabel* lblNum = new QLabel("2");
@@ -402,7 +519,7 @@ private:
         if (schoolId.isEmpty()) return;
         QString prefix = schoolId;
         if (prefix.length() != 6 || !prefix.toInt()) {
-            QMessageBox::warning(this, "错误", "请输入6位数字前缀");
+            CustomMessageDialog::showMessage(this, QString::fromUtf8(u8"错误"), QString::fromUtf8(u8"请输入6位数字前缀"));
             return;
         }
 
@@ -425,7 +542,7 @@ private:
                     int code = dataObj.value("code").toInt();
                     QString message = dataObj.value("message").toString();
                     if (code != 200) {
-                        QMessageBox::warning(this, "查询失败", message);
+                        CustomMessageDialog::showMessage(this, QString::fromUtf8(u8"查询失败"), message);
                         reply->deleteLater();
                         return;
                     }
@@ -450,7 +567,7 @@ private:
                     }
                 }
             } else {
-                QMessageBox::critical(this, "网络错误", reply->errorString());
+                CustomMessageDialog::showMessage(this, QString::fromUtf8(u8"网络错误"), reply->errorString());
             }
             reply->deleteLater();
         });
@@ -687,12 +804,12 @@ private:
                                const QString& classUniqueId, const UserInfo& userinfo) {
         // 必填字段：群组名称
         if (groupName.isEmpty()) {
-            QMessageBox::critical(this, "错误", "群组名称不能为空！");
+            CustomMessageDialog::showMessage(this, QString::fromUtf8(u8"错误"), QString::fromUtf8(u8"群组名称不能为空！"));
             return;
         }
         
         if (!m_restAPI) {
-            QMessageBox::critical(this, "错误", "REST API未初始化！");
+            CustomMessageDialog::showMessage(this, QString::fromUtf8(u8"错误"), QString::fromUtf8(u8"REST API未初始化！"));
             return;
         }
         
@@ -703,7 +820,7 @@ private:
             std::string adminUserSig = GenerateTestUserSig::instance().genTestUserSig(adminUserId);
             m_restAPI->setAdminInfo(QString::fromStdString(adminUserId), QString::fromStdString(adminUserSig));
         } else {
-            QMessageBox::critical(this, "错误", "管理员账号未设置！\n请确保用户已登录且CommonInfo已初始化用户信息。");
+            CustomMessageDialog::showMessage(this, QString::fromUtf8(u8"错误"), QString::fromUtf8(u8"管理员账号未设置！\n请确保用户已登录且CommonInfo已初始化用户信息。"));
             return;
         }
         
@@ -711,16 +828,31 @@ private:
         QJsonArray memberArray;
         
         // 首先添加创建者（群主）
-        // 注意：Meeting群组在创建时，MemberList中的Role必须设置为"Admin"，不能是"Owner"
-        // 创建者会自动成为群主，或者通过Owner_Account参数指定
+        // 注意：通过Owner_Account指定群主时，MemberList中该成员的Role字段会被忽略
+        // 但Meeting群组要求MemberList中所有成员的Role都必须是"Admin"
+        // 所以创建者也需要设置为"Admin"，但通过Owner_Account指定后实际会成为群主
         QString creatorId = userinfo.teacher_unique_id;
         QJsonObject ownerMemberInfo;
         ownerMemberInfo["Member_Account"] = creatorId;
-        ownerMemberInfo["Role"] = "Admin"; // 创建Meeting群组时，Role必须为"Admin"
+        ownerMemberInfo["Role"] = "Admin"; // Meeting群组要求，但Owner_Account会使其成为群主
         memberArray.append(ownerMemberInfo);
+        
+        // 添加选中的教师（如果不是群主本人）
+        // 选中的教师角色设置为管理员（Admin）
+        if (!teacherUniqueId.isEmpty() && teacherUniqueId != creatorId) {
+            QJsonObject teacherMemberInfo;
+            teacherMemberInfo["Member_Account"] = teacherUniqueId;
+            teacherMemberInfo["Role"] = "Admin"; // 设置为管理员
+            memberArray.append(teacherMemberInfo);
+            qDebug() << "========== 创建群组 - 添加选中的教师（管理员）==========";
+            qDebug() << "选中教师ID:" << teacherUniqueId;
+            qDebug() << "选中教师名称:" << teacher_name;
+            qDebug() << "角色：管理员（Admin）";
+        }
         
         qDebug() << "========== 创建群组 - 添加创建者（群主）==========";
         qDebug() << "当前登录用户ID（创建者）:" << creatorId;
+        qDebug() << "角色：群主（通过Owner_Account指定）";
         qDebug() << "群组类型：Meeting（会议群，支持设置管理员）";
         
         // 创建回调数据结构
@@ -749,9 +881,9 @@ private:
             [=](int errorCode, const QString& errorDesc, const QJsonObject& result) {
                 if (errorCode != 0) {
                     // 创建群组失败
-                    QString errorMsg = QString("创建群组失败: %1 (错误码: %2)").arg(errorDesc).arg(errorCode);
+                    QString errorMsg = QString::fromUtf8(u8"创建群组失败: %1 (错误码: %2)").arg(errorDesc).arg(errorCode);
                     qDebug() << errorMsg;
-                    QMessageBox::critical(callbackData->dlg, "创建群组失败", errorMsg);
+                    CustomMessageDialog::showMessage(callbackData->dlg, QString::fromUtf8(u8"创建群组失败"), errorMsg);
                     delete callbackData;
                     return;
                 }
@@ -774,11 +906,11 @@ private:
                                                                    callbackData->userInfo, true); // true表示班级群
                     }
                     
-                    QMessageBox::information(callbackData->dlg, "创建群组成功", 
-                        QString("群组创建成功！\n群组ID: %1").arg(groupId));
+                    QString successMsg = QString::fromUtf8(u8"群组创建成功！\n群组ID: ") + groupId;
+                    CustomMessageDialog::showMessage(callbackData->dlg, QString::fromUtf8(u8"创建群组成功"), successMsg);
                 } else {
                     qWarning() << "创建群组成功但未获取到群组ID";
-                    QMessageBox::warning(callbackData->dlg, "警告", "创建群组成功但未获取到群组ID");
+                    CustomMessageDialog::showMessage(callbackData->dlg, QString::fromUtf8(u8"警告"), QString::fromUtf8(u8"创建群组成功但未获取到群组ID"));
                 }
                 
                 delete callbackData;
@@ -814,12 +946,11 @@ private:
         groupObj["last_info_time"] = QDateTime::currentDateTime().toSecsSinceEpoch();
         groupObj["last_msg_time"] = 0;
         groupObj["next_msg_seq"] = 0;
-        // 计算成员数量：只有群主（被邀请成员暂时不添加）
+        // 计算成员数量：群主 + 被邀请的教师（如果有）
         int memberCount = 1; // 只有群主
-        // 暂时注释掉被邀请成员
-        // if (teacherUniqueId != userinfo.teacher_unique_id && !teacherUniqueId.isEmpty()) {
-        //     memberCount = 2; // 群主 + 被邀请的教师
-        // }
+        if (teacherUniqueId != userinfo.teacher_unique_id && !teacherUniqueId.isEmpty()) {
+            memberCount = 2; // 群主 + 被邀请的教师
+        }
         groupObj["member_num"] = memberCount;
         groupObj["max_member_num"] = 2000;
         groupObj["online_member_num"] = 0;
@@ -897,8 +1028,7 @@ private:
         qDebug() << "上传JSON:" << QString::fromUtf8(jsonData);
         
         // 如果有被邀请的成员，也需要为被邀请的成员创建群组信息并上传
-        // 暂时注释掉，因为创建群组时不添加被邀请成员
-        /*
+        // 现在创建群组时会添加被邀请的教师作为管理员
         if (teacherUniqueId != userinfo.teacher_unique_id && !teacherUniqueId.isEmpty()) {
             // 为被邀请的成员创建群组信息对象
             QJsonObject invitedGroupObj = groupObj; // 复制群组基本信息
@@ -909,7 +1039,7 @@ private:
             invitedMemberInfo["readed_seq"] = 0;
             invitedMemberInfo["msg_flag"] = 0;
             invitedMemberInfo["join_time"] = QDateTime::currentDateTime().toSecsSinceEpoch(); // 加入时间（创建时间）
-            invitedMemberInfo["self_role"] = (int)kTIMMemberRole_Normal; // 普通成员角色
+            invitedMemberInfo["self_role"] = 300; // 管理员角色（Admin），群主是400，管理员是300
             invitedMemberInfo["self_msg_flag"] = 0;
             invitedMemberInfo["unread_num"] = 0;
             invitedMemberInfo["user_name"] = teacher_name;
@@ -934,7 +1064,6 @@ private:
             qDebug() << "上传被邀请成员群组信息到服务器，群组ID:" << groupId << "，成员ID:" << teacherUniqueId;
             qDebug() << "上传JSON:" << QString::fromUtf8(invitedJsonData);
         }
-        */
     }
 
 private:
