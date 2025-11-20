@@ -15,8 +15,6 @@
 #include "CommonInfo.h"
 #include "TaQTWebSocket.h"
 #include "ImSDK/includes/TIMCloud.h"
-#include "TIMRestAPI.h"
-#include "GenerateTestUserSig.h"
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -167,8 +165,6 @@ public:
 
         m_pWs = pWs;
         m_httpHandler = new TAHttpHandler(this);
-        m_restAPI = new TIMRestAPI(this);
-        // 注意：管理员账号信息在使用REST API时再设置，因为此时用户可能还未登录
         if (m_httpHandler)
         {
             connect(m_httpHandler, &TAHttpHandler::success, this, [=](const QString& responseString) {
@@ -707,37 +703,6 @@ private:
             // 使用腾讯SDK创建群组
             createGroupWithTIMSDK(groupName, teacher_unique_id, teacher_name, class_unique_id, userinfo);
             
-            // 创建群（保留原有的WebSocket消息逻辑）
-            QJsonObject createGroupMsg;
-            createGroupMsg["type"] = "3";
-            createGroupMsg["permission_level"] = 1;
-            createGroupMsg["headImage_path"] = "/images/group.png";
-            createGroupMsg["group_type"] = 0; // 0=公开群（Public），支持设置管理员
-            createGroupMsg["nickname"] = groupName;
-            createGroupMsg["owner_id"] = userinfo.teacher_unique_id;
-            createGroupMsg["owner_name"] = userinfo.strName;
-            createGroupMsg["school_id"] = userinfo.schoolId;
-            createGroupMsg["class_id"] = class_unique_id;
-            
-            // 成员数组
-            QJsonArray members;
-            QJsonObject m1;
-            m1["unique_member_id"] = teacher_unique_id;
-            m1["member_name"] = teacher_name;
-            m1["group_role"] = 0;
-            members.append(m1);
-            createGroupMsg["members"] = members;
-
-            // 用 QJsonDocument 序列化
-            QJsonDocument doc(createGroupMsg);
-            // 输出美化格式（有缩进）
-            QString prettyString = QString::fromUtf8(doc.toJson(QJsonDocument::Indented));
-            qDebug() << "美化格式:" << prettyString;
-
-            //if (!prettyString.isEmpty()) {
-            //	//socket->sendTextMessage(QString("to:%1:%2").arg(teacher_unique_id, prettyString));
-            //    TaQTWebSocket::sendPrivateMessage(QString("to:%1:%2").arg(teacher_unique_id, prettyString));
-            //}
         }
 
         //void sendPrivateMessage() {
@@ -799,123 +764,251 @@ private:
         }
     }
     
-    // 使用腾讯云IM REST API创建群组
+    // 通过业务服务器创建群组（由服务器调用腾讯IM）
     void createGroupWithTIMSDK(const QString& groupName, const QString& teacherUniqueId, const QString teacher_name,
                                const QString& classUniqueId, const UserInfo& userinfo) {
-        // 必填字段：群组名称
-        if (groupName.isEmpty()) {
+        QString normalizedName = groupName.trimmed();
+        if (normalizedName.isEmpty()) {
             CustomMessageDialog::showMessage(this, QString::fromUtf8(u8"错误"), QString::fromUtf8(u8"群组名称不能为空！"));
             return;
         }
-        
-        if (!m_restAPI) {
-            CustomMessageDialog::showMessage(this, QString::fromUtf8(u8"错误"), QString::fromUtf8(u8"REST API未初始化！"));
+
+        if (classUniqueId.isEmpty()) {
+            CustomMessageDialog::showMessage(this, QString::fromUtf8(u8"错误"), QString::fromUtf8(u8"班级唯一标识为空，无法创建群组"));
             return;
         }
-        
-        // 在使用REST API前设置管理员账号信息
-        // 注意：REST API需要使用应用管理员账号，使用当前登录用户的teacher_unique_id
-        std::string adminUserId = GenerateTestUserSig::instance().getAdminUserId();
-        if (!adminUserId.empty()) {
-            std::string adminUserSig = GenerateTestUserSig::instance().genTestUserSig(adminUserId);
-            m_restAPI->setAdminInfo(QString::fromStdString(adminUserId), QString::fromStdString(adminUserSig));
-        } else {
-            CustomMessageDialog::showMessage(this, QString::fromUtf8(u8"错误"), QString::fromUtf8(u8"管理员账号未设置！\n请确保用户已登录且CommonInfo已初始化用户信息。"));
-            return;
-        }
-        
-        // 构造初始成员数组（REST API格式）
-        QJsonArray memberArray;
-        
-        // 首先添加创建者（群主）
-        // 注意：通过Owner_Account指定群主时，MemberList中该成员的Role字段会被忽略
-        // 但Meeting群组要求MemberList中所有成员的Role都必须是"Admin"
-        // 所以创建者也需要设置为"Admin"，但通过Owner_Account指定后实际会成为群主
-        QString creatorId = userinfo.teacher_unique_id;
-        QJsonObject ownerMemberInfo;
-        ownerMemberInfo["Member_Account"] = creatorId;
-        ownerMemberInfo["Role"] = "Admin"; // Meeting群组要求，但Owner_Account会使其成为群主
-        memberArray.append(ownerMemberInfo);
-        
-        // 添加选中的教师（如果不是群主本人）
-        // 选中的教师角色设置为管理员（Admin）
-        if (!teacherUniqueId.isEmpty() && teacherUniqueId != creatorId) {
-            QJsonObject teacherMemberInfo;
-            teacherMemberInfo["Member_Account"] = teacherUniqueId;
-            teacherMemberInfo["Role"] = "Admin"; // 设置为管理员
-            memberArray.append(teacherMemberInfo);
-            qDebug() << "========== 创建群组 - 添加选中的教师（管理员）==========";
-            qDebug() << "选中教师ID:" << teacherUniqueId;
-            qDebug() << "选中教师名称:" << teacher_name;
-            qDebug() << "角色：管理员（Admin）";
-        }
-        
-        qDebug() << "========== 创建群组 - 添加创建者（群主）==========";
-        qDebug() << "当前登录用户ID（创建者）:" << creatorId;
-        qDebug() << "角色：群主（通过Owner_Account指定）";
-        qDebug() << "群组类型：Meeting（会议群，支持设置管理员）";
-        
-        // 创建回调数据结构
-        struct CreateGroupCallbackData {
-            ClassTeacherDialog* dlg;
-            QString groupName;
-            QString teacherUniqueId;
-            QString teacher_name;
-            QString classUniqueId;
-            UserInfo userInfo;
-        };
-        
-        CreateGroupCallbackData* callbackData = new CreateGroupCallbackData;
-        callbackData->dlg = this;
-        callbackData->groupName = groupName;
-        callbackData->teacherUniqueId = teacherUniqueId;
-        callbackData->classUniqueId = classUniqueId;
-        callbackData->teacher_name = teacher_name;
-        callbackData->userInfo = userinfo;
-        
-        // 使用班级唯一ID拼接自定义群ID（如：classUniqueId01）
+
         QString customGroupId = classUniqueId + "01";
 
-        // 调用REST API创建群组
-        m_restAPI->createGroup(groupName, "Meeting", memberArray, 
-            [=](int errorCode, const QString& errorDesc, const QJsonObject& result) {
-                if (errorCode != 0) {
-                    // 创建群组失败
-                    QString errorMsg = QString::fromUtf8(u8"创建群组失败: %1 (错误码: %2)").arg(errorDesc).arg(errorCode);
-                    qDebug() << errorMsg;
-                    CustomMessageDialog::showMessage(callbackData->dlg, QString::fromUtf8(u8"创建群组失败"), errorMsg);
-                    delete callbackData;
-                    return;
+        QJsonObject groupObj;
+        groupObj["group_id"] = customGroupId;
+        groupObj["detail_group_id"] = customGroupId;
+        groupObj["group_name"] = normalizedName;
+        groupObj["detail_group_name"] = normalizedName;
+        groupObj["group_type"] = kTIMGroup_Public;
+        groupObj["detail_group_type"] = kTIMGroup_Private;
+        groupObj["headImage_path"] = "/images/img_group.png";
+        groupObj["detail_face_url"] = "";
+        groupObj["intro"] = QString::fromUtf8(u8"班级群：%1").arg(normalizedName);
+        groupObj["introduction"] = QString::fromUtf8(u8"班级群：%1").arg(normalizedName);
+        groupObj["notification"] = QString::fromUtf8(u8"欢迎加入%1").arg(normalizedName);
+        groupObj["type"] = "3";
+        groupObj["permission_level"] = 1;
+        groupObj["owner_id"] = userinfo.teacher_unique_id;
+        groupObj["owner_name"] = userinfo.strName;
+        groupObj["school_id"] = userinfo.schoolId;
+        groupObj["class_id"] = classUniqueId;
+        groupObj["classid"] = classUniqueId;
+        groupObj["schoolid"] = userinfo.schoolId;
+        groupObj["custom_group_id"] = customGroupId;
+        groupObj["is_class_group"] = 1;
+        groupObj["add_option"] = kTIMGroupAddOpt_Any;
+        groupObj["detail_is_shutup_all"] = false;
+        groupObj["is_shutup_all"] = false;
+        groupObj["visible"] = 2;
+        groupObj["searchable"] = 2;
+        groupObj["max_member_num"] = 2000;
+        groupObj["member_num"] = teacherUniqueId.isEmpty() || teacherUniqueId == userinfo.teacher_unique_id ? 1 : 2;
+        groupObj["online_member_num"] = 0;
+        qint64 nowTs = QDateTime::currentDateTime().toSecsSinceEpoch();
+        groupObj["create_time"] = nowTs;
+        groupObj["detail_info_seq"] = 0;
+        groupObj["info_seq"] = 0;
+        groupObj["latest_seq"] = 0;
+        groupObj["last_info_time"] = nowTs;
+        groupObj["last_msg_time"] = 0;
+        groupObj["next_msg_seq"] = 0;
+
+        QJsonArray members;
+        QJsonObject ownerMember;
+        ownerMember["unique_member_id"] = userinfo.teacher_unique_id;
+        ownerMember["member_name"] = userinfo.strName;
+        ownerMember["group_role"] = 400; // 群主
+        members.append(ownerMember);
+
+        if (!teacherUniqueId.isEmpty() && teacherUniqueId != userinfo.teacher_unique_id) {
+            QJsonObject teacherMember;
+            teacherMember["unique_member_id"] = teacherUniqueId;
+            teacherMember["member_name"] = teacher_name;
+            teacherMember["group_role"] = 300; // 管理员
+            members.append(teacherMember);
+        }
+        groupObj["members"] = members;
+
+        QJsonObject memberInfo;
+        memberInfo["user_id"] = userinfo.teacher_unique_id;
+        memberInfo["user_name"] = userinfo.strName;
+        memberInfo["self_role"] = 400;
+        memberInfo["readed_seq"] = 0;
+        memberInfo["msg_flag"] = 0;
+        memberInfo["self_msg_flag"] = 0;
+        memberInfo["unread_num"] = 0;
+        memberInfo["join_time"] = nowTs;
+        groupObj["member_info"] = memberInfo;
+
+        QJsonArray groupsArray;
+        groupsArray.append(groupObj);
+
+        QJsonObject requestObj;
+        requestObj["user_id"] = userinfo.teacher_unique_id;
+        requestObj["class_id"] = classUniqueId;
+        requestObj["classid"] = classUniqueId;
+        requestObj["school_id"] = userinfo.schoolId;
+        requestObj["schoolid"] = userinfo.schoolId;
+        requestObj["groups"] = groupsArray;
+
+        QJsonDocument requestDoc(requestObj);
+        QByteArray jsonData = requestDoc.toJson(QJsonDocument::Compact);
+
+        const QString url = QStringLiteral("http://47.100.126.194:5000/groups/sync");
+        qDebug() << "========== 创建群组 - 请求服务器 ==========";
+        qDebug() << "URL:" << url;
+        qDebug() << "Payload:" << QString::fromUtf8(jsonData);
+
+        TAHttpHandler* createHandler = new TAHttpHandler(this);
+        QPointer<ClassTeacherDialog> self = this;
+        auto cleanup = [createHandler]() {
+            if (createHandler) {
+                createHandler->deleteLater();
+            }
+        };
+
+        auto parseGroupId = [](const QJsonObject& obj) -> QString {
+            auto extractFromObject = [](const QJsonObject& source) -> QString {
+                if (source.contains("group_id")) {
+                    return source.value("group_id").toString();
                 }
-                
-                // 创建群组成功，解析返回的群组ID
-                QString groupId = result["GroupId"].toString();
-                if (groupId.isEmpty()) {
-                    // 尝试从其他字段获取
-                    QJsonObject groupInfo = result["GroupInfo"].toObject();
-                    groupId = groupInfo["GroupId"].toString();
+                if (source.contains("groupId")) {
+                    return source.value("groupId").toString();
                 }
-                
-                qDebug() << "创建群组成功，群组ID:" << groupId;
-                
-                if (!groupId.isEmpty()) {
-                    // 上传群组信息到服务器（班级群，is_class_group=1）
-                    if (callbackData->dlg && callbackData->dlg->m_httpHandler) {
-                        callbackData->dlg->uploadGroupInfoToServer(groupId, callbackData->groupName, callbackData->teacher_name, 
-                                                                   callbackData->teacherUniqueId, callbackData->classUniqueId, 
-                                                                   callbackData->userInfo, true); // true表示班级群
+                if (source.contains("GroupId")) {
+                    return source.value("GroupId").toString();
+                }
+                return QString();
+            };
+
+            QString id = extractFromObject(obj);
+            if (!id.isEmpty()) {
+                return id;
+            }
+            if (obj.contains("data") && obj.value("data").isObject()) {
+                QJsonObject dataObj = obj.value("data").toObject();
+                id = extractFromObject(dataObj);
+                if (!id.isEmpty()) {
+                    return id;
+                }
+                if (dataObj.contains("tencent_sync") && dataObj.value("tencent_sync").isObject()) {
+                    QJsonObject syncObj = dataObj.value("tencent_sync").toObject();
+                    if (syncObj.contains("results") && syncObj.value("results").isArray()) {
+                        QJsonArray results = syncObj.value("results").toArray();
+                        for (const QJsonValue& val : results) {
+                            if (!val.isObject()) continue;
+                            QJsonObject resultObj = val.toObject();
+                            id = extractFromObject(resultObj);
+                            if (!id.isEmpty()) {
+                                return id;
+                            }
+                            if (resultObj.contains("response") && resultObj.value("response").isObject()) {
+                                id = extractFromObject(resultObj.value("response").toObject());
+                                if (!id.isEmpty()) {
+                                    return id;
+                                }
+                            }
+                        }
                     }
-                    
-                    QString successMsg = QString::fromUtf8(u8"群组创建成功！\n群组ID: ") + groupId;
-                    CustomMessageDialog::showMessage(callbackData->dlg, QString::fromUtf8(u8"创建群组成功"), successMsg);
-                } else {
-                    qWarning() << "创建群组成功但未获取到群组ID";
-                    CustomMessageDialog::showMessage(callbackData->dlg, QString::fromUtf8(u8"警告"), QString::fromUtf8(u8"创建群组成功但未获取到群组ID"));
                 }
-                
-                delete callbackData;
-            },
-            customGroupId);
+            }
+            if (obj.contains("result") && obj.value("result").isObject()) {
+                QJsonObject resultObj = obj.value("result").toObject();
+                id = extractFromObject(resultObj);
+                if (!id.isEmpty()) {
+                    return id;
+                }
+            }
+            return QString();
+        };
+
+        connect(createHandler, &TAHttpHandler::success, this, [=](const QString& responseString) {
+            qDebug() << "创建群组服务器响应:" << responseString;
+            QString serverMessage = QString::fromUtf8(u8"群组创建成功！");
+            QString groupIdFromServer;
+            bool businessSuccess = false;
+
+            QJsonDocument respDoc = QJsonDocument::fromJson(responseString.toUtf8());
+            if (respDoc.isObject()) {
+                QJsonObject obj = respDoc.object();
+                QJsonObject dataObj;
+                if (obj.contains("data") && obj.value("data").isObject()) {
+                    dataObj = obj.value("data").toObject();
+                }
+
+                auto tryReadMessage = [&](const QJsonObject& source) {
+                    if (source.contains("message") && source.value("message").isString()) {
+                        serverMessage = source.value("message").toString();
+                    }
+                };
+                tryReadMessage(obj);
+                if (!dataObj.isEmpty()) {
+                    tryReadMessage(dataObj);
+                }
+
+                auto tryReadCode = [&](const QJsonObject& source) {
+                    if (source.contains("code")) {
+                        int code = source.value("code").toInt(-1);
+                        if (code != -1) {
+                            businessSuccess = businessSuccess || (code == 0 || code == 200);
+                        }
+                    }
+                };
+                tryReadCode(obj);
+                if (!dataObj.isEmpty()) {
+                    tryReadCode(dataObj);
+                }
+
+                if (obj.contains("success") && obj.value("success").isBool()) {
+                    businessSuccess = businessSuccess || obj.value("success").toBool();
+                }
+                if (!dataObj.isEmpty() && dataObj.contains("success_count")) {
+                    int successCount = dataObj.value("success_count").toInt(0);
+                    int errorCount = dataObj.value("error_count").toInt(0);
+                    businessSuccess = businessSuccess || (successCount > 0 && errorCount == 0);
+                }
+                if (!businessSuccess && obj.contains("status") && obj.value("status").isBool()) {
+                    businessSuccess = obj.value("status").toBool();
+                }
+
+                groupIdFromServer = parseGroupId(obj);
+            } else {
+                businessSuccess = true; // 非JSON响应但HTTP成功，视为成功
+            }
+
+            if (!businessSuccess) {
+                CustomMessageDialog::showMessage(self, QString::fromUtf8(u8"创建群组失败"), serverMessage);
+                cleanup();
+                return;
+            }
+
+            if (groupIdFromServer.isEmpty()) {
+                groupIdFromServer = customGroupId;
+            }
+
+            QString finalMessage = serverMessage;
+            if (!groupIdFromServer.isEmpty()) {
+                finalMessage = QString("%1\n群组ID: %2").arg(serverMessage, groupIdFromServer);
+            }
+            CustomMessageDialog::showMessage(self, QString::fromUtf8(u8"创建群组成功"), finalMessage);
+
+            // 再次同步群组信息，确保本地与服务器保持一致（可根据需要保留/移除）
+            cleanup();
+        });
+
+        connect(createHandler, &TAHttpHandler::failed, this, [=](const QString& error) {
+            QString errorText = error.isEmpty() ? QString::fromUtf8(u8"创建群组请求失败") : error;
+            CustomMessageDialog::showMessage(self, QString::fromUtf8(u8"创建群组失败"), errorText);
+            cleanup();
+        });
+
+        createHandler->post(url, jsonData);
     }
     
     // 上传群组信息到服务器
@@ -1068,7 +1161,6 @@ private:
 
 private:
     TAHttpHandler* m_httpHandler = NULL;
-    TIMRestAPI* m_restAPI = NULL;
     QVBoxLayout* teacherListLayout = NULL;
     QVBoxLayout* classListLayout = NULL;
     QButtonGroup* sexGroup = new QButtonGroup(this);
