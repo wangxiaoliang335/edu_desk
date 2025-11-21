@@ -112,7 +112,7 @@ public:
     ~QGroupInfo();
 
 public:
-    void initData(QString groupName, QString groupNumberId);
+    void initData(QString groupName, QString groupNumberId, QString classid = "");
     void InitGroupMember(QString group_id, QVector<GroupMemberInfo> groupMemberInfo);
     void InitGroupMember();
     QVector<GroupMemberInfo> getGroupMemberInfo() const { return m_groupMemberInfo; } // 获取当前成员列表

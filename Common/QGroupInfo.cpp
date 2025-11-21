@@ -18,7 +18,7 @@ QGroupInfo::QGroupInfo(QWidget* parent)
     
 }
 
-void QGroupInfo::initData(QString groupName, QString groupNumberId)
+void QGroupInfo::initData(QString groupName, QString groupNumberId, QString classid)
 {
     setWindowTitle("班级管理");
     // 设置无边框窗口
@@ -80,6 +80,9 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId)
     m_courseDlg = new CourseDialog();
     m_courseDlg->setWindowTitle("课程表");
     m_courseDlg->resize(800, 600);
+    // 设置群组ID和班级ID
+    m_courseDlg->setGroupId(groupNumberId);
+    m_courseDlg->setClassId(classid);
 
     // 设置一些课程
     //m_courseDlg->setCourse(1, 0, "数学");

@@ -16,7 +16,7 @@ class CourseTableWidget : public QTableWidget
 public:
     CourseTableWidget(QWidget* parent = nullptr)
         : QTableWidget(parent),
-        m_times(QStringList() << "6:00" << "8:10" << "8:50" << "9:45"
+        m_times(QStringList() << "8:10" << "8:50" << "9:45"
             << "10:40" << "11:35" << "14:10"
             << "15:05" << "15:50" << "19:00" << "20:00"),
         m_days(QStringList() << "周一" << "周二" << "周三"

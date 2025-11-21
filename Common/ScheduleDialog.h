@@ -1193,7 +1193,7 @@ public:
 
 		if (m_groupInfo)
 		{
-			m_groupInfo->initData(groupName, unique_group_id);
+			m_groupInfo->initData(groupName, unique_group_id, classid);
 			
 			// 优先使用REST API获取群成员列表（从腾讯云IM直接获取，数据更准确）
 			// 如果REST API失败，可以回退到使用自己的服务器接口
