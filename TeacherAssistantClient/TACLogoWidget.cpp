@@ -63,7 +63,7 @@ TACSchoolLabelWidget::TACSchoolLabelWidget(QWidget* parent) : TAFloatingWidget(p
     layout->addWidget(label);
     this->setLayout(layout);
 
-    this->setBackgroundColor(WIDGET_BACKGROUND_COLOR);
+    this->setBackgroundColor(QColor(61, 64, 64));
     this->setBorderColor(WIDGET_BORDER_COLOR);
     this->setBorderWidth(WIDGET_BORDER_WIDTH);
     this->setRadius(30);
@@ -105,7 +105,7 @@ TACClassLabelWidget::TACClassLabelWidget(QWidget* parent) : TAFloatingWidget(par
     layout->addWidget(label);
     this->setLayout(layout);
 
-    this->setBackgroundColor(WIDGET_BACKGROUND_COLOR);
+    this->setBackgroundColor(QColor(61, 64, 64));
     this->setBorderColor(WIDGET_BORDER_COLOR);
     this->setBorderWidth(WIDGET_BORDER_WIDTH);
     this->setRadius(30);
@@ -149,8 +149,8 @@ TACTrayLabelWidget::TACTrayLabelWidget(QWidget* parent) : TAFloatingWidget(paren
     this->setBackgroundColor(WIDGET_BACKGROUND_COLOR);
     this->setBorderColor(WIDGET_BORDER_COLOR);
     this->setBorderWidth(WIDGET_BORDER_WIDTH);
-    this->setRadius(30);
-    this->resize(140, 70);
+    this->setRadius(15);
+    this->resize(50, 50);
 
     setWindowFlags(windowFlags() | Qt::WindowStaysOnTopHint);
     //setWindowFlags(
@@ -183,18 +183,19 @@ void TACTrayLabelWidget::mouseReleaseEvent(QMouseEvent* event)
 
 void TACTrayLabelWidget::paintEvent(QPaintEvent* event)
 {
-    Q_UNUSED(event);
+    TAFloatingWidget::paintEvent(event);
+
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
     if (!m_fileName.isEmpty())
     {
         QPixmap m_backgroundPixmap = QPixmap(m_fileName);
+        const double scaleFactor = 0.4; // 缩放到窗口的 40%
+        QSize targetSize(qRound(width() * scaleFactor), qRound(height() * scaleFactor));
         QPixmap scaled = m_backgroundPixmap.scaled(
-            size(),
+            targetSize,
             Qt::KeepAspectRatio,
-            Qt::SmoothTransformation
-        );
-
+            Qt::SmoothTransformation);
         QRect r = scaled.rect();
         r.moveCenter(rect().center());
         painter.drawPixmap(r, scaled);
@@ -212,7 +213,7 @@ void TACTrayLabelWidget::initShow()
     QRect rect = this->getScreenGeometryWithTaskbar();
     if (rect.isEmpty())
         return;
-    int x = 1400;
-    int y = 780;
+    int x = 1700;
+    int y = 980;
     this->move(x, y);
 }

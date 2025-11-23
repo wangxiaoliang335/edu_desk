@@ -29,7 +29,7 @@ TACNavigationBarWidget::TACNavigationBarWidget(QWidget *parent)
     //buttonGroup->addButton(folderButton);
     layout->addWidget(folderButton);
 
-    QPushButton* messageButton = new QPushButton(this);
+    /*QPushButton* messageButton = new QPushButton(this);
     messageButton->setFixedSize(BUTTON_SIZE);
     messageButton->setIcon(QIcon(":/res/img/message.png"));
     messageButton->setIconSize(ICON_SIZE);
@@ -57,18 +57,38 @@ TACNavigationBarWidget::TACNavigationBarWidget(QWidget *parent)
         emit navType(TACNavigationBarWidgetType::HOMEWORK);
         });
     buttonGroup->addButton(homeworkButton);
-    layout->addWidget(homeworkButton);
+    layout->addWidget(homeworkButton);*/
 
 
-    QPushButton* editButton = new QPushButton(this);
-    editButton->setFixedSize(BUTTON_SIZE);
-    editButton->setIcon(QIcon(":/res/img/edit.png"));
-    editButton->setIconSize(ICON_SIZE);
-    connect(editButton, &QPushButton::clicked, this, [=]() {
-        emit navType(TACNavigationBarWidgetType::PREPARE_CLASS);
+    //QPushButton* editButton = new QPushButton(this);
+    //editButton->setFixedSize(BUTTON_SIZE);
+    //editButton->setIcon(QIcon(":/res/img/edit.png"));
+    //editButton->setIconSize(ICON_SIZE);
+    //connect(editButton, &QPushButton::clicked, this, [=]() {
+    //    emit navType(TACNavigationBarWidgetType::PREPARE_CLASS);
+    //    });
+    //buttonGroup->addButton(editButton);
+    //layout->addWidget(editButton);
+
+	QPushButton* classButton = new QPushButton(this);
+    classButton->setFixedSize(BUTTON_SIZE);
+    classButton->setIcon(QIcon(":/res/img/home_bottom_ic_class@2x.png"));
+    classButton->setIconSize(ICON_SIZE);
+	connect(classButton, &QPushButton::clicked, this, [=]() {
+		emit navType(TACNavigationBarWidgetType::CLASS_GROUP);
+		});
+	buttonGroup->addButton(classButton);
+	layout->addWidget(classButton);
+
+    QPushButton* scheduleButton = new QPushButton(this);
+    scheduleButton->setFixedSize(BUTTON_SIZE);
+    scheduleButton->setIcon(QIcon(":/res/img/home_bottom_ic_crowd@2x.png"));
+    scheduleButton->setIconSize(ICON_SIZE);
+    connect(scheduleButton, &QPushButton::clicked, this, [=]() {
+        emit navType(TACNavigationBarWidgetType::CLASS_SCHEDULE);
         });
-    buttonGroup->addButton(editButton);
-    layout->addWidget(editButton);
+    buttonGroup->addButton(scheduleButton);
+    layout->addWidget(scheduleButton);
 
     QPushButton* userButton = new QPushButton(this);
     userButton->setFixedSize(BUTTON_SIZE);
@@ -85,7 +105,7 @@ TACNavigationBarWidget::TACNavigationBarWidget(QWidget *parent)
     separatorLineLabel0->setFixedSize(QSize(1, 30));
     layout->addWidget(separatorLineLabel0);
 
-    QPushButton* wallpaperButton = new QPushButton(this);
+    /*QPushButton* wallpaperButton = new QPushButton(this);
     wallpaperButton->setFixedSize(BUTTON_SIZE);
     wallpaperButton->setIcon(QIcon(":/res/img/palette.png"));
     connect(wallpaperButton, &QPushButton::clicked, this, [=]() {
@@ -113,7 +133,7 @@ TACNavigationBarWidget::TACNavigationBarWidget(QWidget *parent)
         emit navType(TACNavigationBarWidgetType::TIMER);
     });
     buttonGroup->addButton(timerButton);
-    layout->addWidget(timerButton);
+    layout->addWidget(timerButton);*/
 
     QPushButton* classNameButton = new QPushButton(this);
     classNameButton->setText(m_className);

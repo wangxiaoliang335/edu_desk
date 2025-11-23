@@ -18,11 +18,16 @@
 RowItem::RowItem(const QString& text, QWidget* parent) : QFrame(parent)
 {
     setObjectName("RowItem");
-    setFixedHeight(24);
+    setFixedHeight(28);
     setStyleSheet(
-        "QFrame#RowItem { background:#ffffff; border-bottom:1px solid #eaeaea; }\n"
-        "QLabel { color:#222; font-size:15px; }\n"
-        "QToolButton { border:none; color:#888; }"
+        "QFrame#RowItem {"
+        " background-color: rgb(50,50,50);"
+        " border: 1px solid rgba(255,255,255,0.08);"
+        " border-radius: 6px;"
+        "}"
+        "QFrame#RowItem:hover { background-color: rgb(60,60,60); }"
+        "QLabel { color:#ffffff; font-size:15px; font-weight:bold; }"
+        "QToolButton { border:none; color:#e0e0e0; }"
     );
     auto h = new QHBoxLayout(this);
     h->setContentsMargins(16, 0, 16, 0);
@@ -603,14 +608,60 @@ FriendGroupDialog::FriendGroupDialog(QWidget* parent, TaQTWebSocket* pWs)
 
     // 中间切换按钮
     QHBoxLayout* switchLayout = new QHBoxLayout;
-    QPushButton* btnGroup = new QPushButton("群聊");
-    QPushButton* btnFriend = new QPushButton("好友");
+    switchLayout->setSpacing(0);
+    switchLayout->setContentsMargins(0, 0, 0, 0);
+    QPushButton* btnGroup = new QPushButton(QStringLiteral("群聊"));
+    QPushButton* btnFriend = new QPushButton(QStringLiteral("好友"));
     btnFriend->setCheckable(true);
     btnGroup->setCheckable(true);
-    btnFriend->setStyleSheet("QPushButton {background-color: green; color: white; padding:6px;} QPushButton:checked { background-color: green;}");
-    btnGroup->setStyleSheet("QPushButton {background-color: lightgray; color: white; padding:6px;} QPushButton:checked { background-color: green;}");
+
+    QButtonGroup* switchGroup = new QButtonGroup(this);
+    switchGroup->setExclusive(true);
+    switchGroup->addButton(btnFriend);
+    switchGroup->addButton(btnGroup);
+
+    const QString leftStyle = QStringLiteral(
+        "QPushButton {"
+        " background-color: rgb(50,50,50);"
+        " color: #f7f7f7;"
+        " padding: 8px 28px;"
+        " font-size: 16px;"
+        " font-weight: bold;"
+        " border: none;"
+        " border-top-left-radius: 26px;"
+        " border-bottom-left-radius: 26px;"
+        " border-top-right-radius: 0px;"
+        " border-bottom-right-radius: 0px;"
+        "}"
+        "QPushButton:hover { background-color: rgb(60,60,60); }"
+        "QPushButton:checked { background-color: #ffffff; color: #3569ff; }"
+    );
+
+    const QString rightStyle = QStringLiteral(
+        "QPushButton {"
+        " background-color: rgb(50,50,50);"
+        " color: #f7f7f7;"
+        " padding: 8px 28px;"
+        " font-size: 16px;"
+        " font-weight: bold;"
+        " border: none;"
+        " border-top-right-radius: 26px;"
+        " border-bottom-right-radius: 26px;"
+        " border-top-left-radius: 0px;"
+        " border-bottom-left-radius: 0px;"
+        "}"
+        "QPushButton:hover { background-color: rgb(60,60,60); }"
+        "QPushButton:checked { background-color: #ffffff; color: #3569ff; }"
+    );
+
+    btnFriend->setStyleSheet(leftStyle);
+    btnGroup->setStyleSheet(rightStyle);
+
+    btnFriend->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    btnGroup->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
     switchLayout->addWidget(btnFriend);
+    switchLayout->addSpacing(1);
     switchLayout->addWidget(btnGroup);
 
     // 内容切换区域

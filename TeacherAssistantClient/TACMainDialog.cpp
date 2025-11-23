@@ -221,6 +221,11 @@ void TACMainDialog::Init(QString qPhone, int user_id)
                     desktopManagerWidget->hide();
             }
         }
+        else if (type == TACNavigationBarWidgetType::CLASS_GROUP)
+        {
+            if (friendGrpDlg)
+                friendGrpDlg->show();
+        }
         else if (type == TACNavigationBarWidgetType::USER)
         {
             if (friendGrpDlg)
@@ -352,7 +357,7 @@ void TACMainDialog::Init(QString qPhone, int user_id)
     classLabelWidget->show();
 
     trayLabelWidget = new TACTrayLabelWidget(this);
-    trayLabelWidget->updateLogo(".\\res\\img\\com_bottom_ic_component@3x.png");
+    trayLabelWidget->updateLogo(".\\res\\img\\com_bottom_ic_component@2x.png");
     //connect(trayLabelWidget, &TACTrayLabelWidget::doubleClicked, this, [=]() {
     //    logoDialog->show();
     //    });

@@ -29,5 +29,24 @@
         <file>res/img/font-underline.png</file>
         <file>res/img/font-decrease.png</file>
         <file>res/img/font-increase.png</file>
+        <file>res/img/home_bottom_ic_2_hover.png</file>
+        <file>res/img/home_bottom_ic_3_hover.png</file>
+        <file>res/img/home_bottom_ic_5_hover.png</file>
+        <file>res/img/home_bottom_ic_6_hover.png</file>
+        <file>res/img/home_bottom_ic_7_hover.png</file>
+        <file>res/img/home_bottom_ic_8_hover.png</file>
+        <file>res/img/home_bottom_ic_9_hover.png</file>
+        <file>res/img/home_bottom_ic_class.png</file>
+        <file>res/img/home_bottom_ic_class@2x.png</file>
+        <file>res/img/home_bottom_ic_class@3x.png</file>
+        <file>res/img/home_bottom_ic_crowd.png</file>
+        <file>res/img/home_bottom_ic_crowd@2x.png</file>
+        <file>res/img/home_bottom_ic_crowd@3x.png</file>
+        <file>res/img/home_bottom_ic_friend.png</file>
+        <file>res/img/home_bottom_ic_friend@2x.png</file>
+        <file>res/img/home_bottom_ic_friend@3x.png</file>
+        <file>res/img/home_bottom_ic_me_hover.png</file>
+        <file>res/img/home_file_add_hover.png</file>
+        <file>res/img/home_file_add_nor.png</file>
     </qresource>
 </RCC>
