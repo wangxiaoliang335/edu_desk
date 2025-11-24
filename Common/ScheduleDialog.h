@@ -12,6 +12,8 @@
 #include <QFrame>
 #include <qfiledialog.h>
 #include <QDir>
+#include <QFile>
+#include <QTextStream>
 #include <qdebug.h>
 #include <qlineedit.h>
 #include <QWidget>
@@ -47,6 +49,15 @@
 #include "TAHttpHandler.h"
 #include "ArrangeSeatDialog.h"
 #include "GroupNotifyDialog.h"
+#include "QXlsx/header/xlsxdocument.h"
+#include "QXlsx/header/xlsxworksheet.h"
+#include "QXlsx/header/xlsxcell.h"
+#include "QXlsx/header/xlsxglobal.h"
+QT_BEGIN_NAMESPACE_XLSX
+QT_END_NAMESPACE_XLSX
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QJsonDocument>
 // 前向声明，避免循环依赖
 class HeatmapSegmentDialog;
 class HeatmapViewDialog;
@@ -640,6 +651,7 @@ public:
 		QPushButton* btnAnalyse = new QPushButton("分断");
 		QPushButton* btnHeatmap = new QPushButton("热力图");
 		QPushButton* btnArrange = new QPushButton("排座");
+		QPushButton* btnImportSeat = new QPushButton("导入学生信息");
 		QPushButton* btnMoreBottom = new QPushButton("...");
 		btnMoreBottom->setFixedSize(48, 24);
 		btnMoreBottom->setText("...");
@@ -672,6 +684,7 @@ public:
 		btnAnalyse->setStyleSheet(greenStyle);
 		btnHeatmap->setStyleSheet(greenStyle);
 		btnArrange->setStyleSheet(greenStyle);
+		btnImportSeat->setStyleSheet(greenStyle);
 
 		// 作业展示按钮（班级端快捷按钮）
 		QPushButton* btnHomeworkView = new QPushButton("作业");
@@ -685,6 +698,7 @@ public:
 		middleBtnLayout->addWidget(btnAnalyse);
 		middleBtnLayout->addWidget(btnHeatmap);
 		middleBtnLayout->addWidget(btnArrange);
+		middleBtnLayout->addWidget(btnImportSeat);
 		middleBtnLayout->addWidget(btnHomeworkView); // 添加快捷按钮
 		middleBtnLayout->addStretch();
 		middleBtnLayout->addWidget(btnMoreBottom);
@@ -708,6 +722,11 @@ public:
 		
 		// 连接随机点名按钮点击事件
 		connectRandomCallButton(btnRandom, seatTable);
+		
+		// 连接导入学生信息按钮点击事件
+		connect(btnImportSeat, &QPushButton::clicked, this, [=]() {
+			importSeatTable();
+		});
 		
 		// 连接热力图按钮点击事件
 		connect(btnHeatmap, &QPushButton::clicked, this, [=]() {
@@ -765,9 +784,9 @@ public:
 
 		// 座位表格区域 - 重新设计座位布局
 		// 第1行：4个座位（过道两侧各2个）
-		// 第2-6行：每行8个座位（左列3个 + 中列3个 + 右列2个，中间有两条过道）
-		// 总共44个座位
-		seatTable = new QTableWidget(6, 10); // 6行，10列（包含过道列）
+		// 第2-8行：每行8个座位（左列3个 + 中列3个 + 右列2个，中间有两条过道）
+		// 总共60个座位
+		seatTable = new QTableWidget(8, 10); // 8行，10列（包含过道列）
 		seatTable->horizontalHeader()->setVisible(false);
 		seatTable->verticalHeader()->setVisible(false);
 		seatTable->setStyleSheet(
@@ -782,16 +801,16 @@ public:
 			"}"
 		);
 		
-		// 设置列宽和行高（列宽再扩大1.1倍：从110改为121）
+		// 设置列宽和行高（宽度扩大15%，高度扩大7%）
 		for (int col = 0; col < 10; ++col) {
-			seatTable->setColumnWidth(col, 121);
+			seatTable->setColumnWidth(col, 115); // 列宽：100 × 1.15 = 115
 		}
-		for (int row = 0; row < 6; ++row) {
-			seatTable->setRowHeight(row, 50);
+		for (int row = 0; row < 8; ++row) {
+			seatTable->setRowHeight(row, 59); // 行高：55 × 1.07 = 59
 		}
 		
 		// 初始化所有单元格，为每个单元格创建按钮
-		for (int row = 0; row < 6; ++row) {
+		for (int row = 0; row < 8; ++row) {
 			for (int col = 0; col < 10; ++col) {
 				QPushButton* btn = new QPushButton("");
 				btn->setStyleSheet(
@@ -836,9 +855,9 @@ public:
 			);
 		}
 		
-		// 第2-6行布局：每行8个座位
+		// 第2-8行布局：每行8个座位
 		// 左列3个：列0-2，过道列3，中列3个：列4-6，过道列7，右列2个：列8-9
-		for (int row = 1; row < 6; ++row) {
+		for (int row = 1; row < 8; ++row) {
 			// 左列座位：列0-2
 			for (int col = 0; col < 3; ++col) {
 				QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
@@ -914,7 +933,22 @@ public:
 		seatTable->setSelectionMode(QAbstractItemView::SingleSelection);
 		seatTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
 		
-		mainLayout->addWidget(seatTable);
+		// 设置固定高度，确保能容纳所有行而不出现滚动条
+		// 8行 × 59像素 = 472像素，加上边框等额外空间，设置为503像素（扩大7%）
+		seatTable->setFixedHeight(503);
+		seatTable->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff); // 禁用垂直滚动条
+		
+		// 设置固定宽度，确保能容纳所有列而不出现水平滚动条
+		// 10列 × 115像素 = 1150像素，加上边框等额外空间，设置为1173像素（扩大15%）
+		seatTable->setFixedWidth(1173);
+		seatTable->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); // 禁用水平滚动条
+		
+		// 创建水平布局使seatTable居中
+		QHBoxLayout* seatTableLayout = new QHBoxLayout;
+		seatTableLayout->addStretch();
+		seatTableLayout->addWidget(seatTable);
+		seatTableLayout->addStretch();
+		mainLayout->addLayout(seatTableLayout);
 
 		// 红框消息输入栏
 		QHBoxLayout* inputLayout = new QHBoxLayout;
@@ -1160,6 +1194,11 @@ public:
 	// 排座功能：根据学生数据自动排座
 	// method: "随机排座", "正序", "倒序", "2人组排座", "4人组排座", "6人组排座"
 	void arrangeSeats(const QList<StudentInfo>& students, const QString& method = "随机排座");
+	void importSeatTable(); // 导入座位表格
+	void importSeatFromExcel(const QString& filePath); // 从Excel导入座位表
+	void importSeatFromCsv(const QString& filePath); // 从CSV导入座位表
+	void fillSeatTableFromData(const QList<QStringList>& dataRows); // 将数据填充到座位表
+	void uploadSeatTableToServer(); // 上传座位表到服务器
 	
 	// 热力图相关方法
 	void showSegmentDialog(); // 显示分段区间设置对话框
@@ -1468,7 +1507,7 @@ inline void ScheduleDialog::arrangeSeats(const QList<StudentInfo>& students, con
 	
 	// 获取所有座位按钮（标记为 isSeat 的按钮），按行列顺序排列
 	QList<QPushButton*> seatButtons;
-	for (int row = 0; row < 6; ++row) {
+	for (int row = 0; row < 8; ++row) {
 		for (int col = 0; col < 10; ++col) {
 			QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
 			if (btn && btn->property("isSeat").toBool()) {
@@ -1632,6 +1671,480 @@ inline void ScheduleDialog::arrangeSeats(const QList<StudentInfo>& students, con
 	}
 	
 	qDebug() << "排座完成，共分配" << studentIndex << "个学生";
+}
+
+// 导入座位表格
+inline void ScheduleDialog::importSeatTable()
+{
+	QString fileName = QFileDialog::getOpenFileName(
+		this,
+		QString::fromUtf8(u8"选择座位表文件"),
+		QString(),
+		QString::fromUtf8(u8"Excel 文件 (*.xlsx *.xls);;CSV 文件 (*.csv);;所有文件 (*.*)")
+	);
+	
+	if (fileName.isEmpty()) {
+		return;
+	}
+	
+	// 判断文件类型
+	if (fileName.endsWith(".xlsx", Qt::CaseInsensitive) || fileName.endsWith(".xls", Qt::CaseInsensitive)) {
+		importSeatFromExcel(fileName);
+	} else if (fileName.endsWith(".csv", Qt::CaseInsensitive)) {
+		importSeatFromCsv(fileName);
+	} else {
+		QMessageBox::warning(this, QString::fromUtf8(u8"提示"), 
+			QString::fromUtf8(u8"不支持的文件格式，请选择 .xlsx、.xls 或 .csv 文件"));
+	}
+}
+
+// 从Excel导入座位表
+inline void ScheduleDialog::importSeatFromExcel(const QString& filePath)
+{
+	using namespace QXlsx;
+	
+	Document xlsx(filePath, this);
+	if (!xlsx.isLoadPackage()) {
+		QMessageBox::critical(this, QString::fromUtf8(u8"错误"), 
+			QString::fromUtf8(u8"无法打开 Excel 文件：") + filePath);
+		return;
+	}
+	
+	// 获取第一个工作表
+	QStringList sheetNames = xlsx.sheetNames();
+	if (sheetNames.isEmpty()) {
+		QMessageBox::warning(this, QString::fromUtf8(u8"提示"), 
+			QString::fromUtf8(u8"Excel 文件中没有工作表"));
+		return;
+	}
+	
+	// 读取数据范围：从第4行、第2列开始，最多16行、12列
+	// 如果一行或一列都是空格，就忽略
+	QList<QStringList> dataRows;
+	int startRow = 4; // 从第4行开始
+	int startCol = 2; // 从第2列开始
+	int maxRows = 16; // 最多16行
+	int maxCols = 12; // 最多12列
+	
+	// 先读取所有数据
+	QList<QStringList> allDataRows;
+	for (int row = startRow; row < startRow + maxRows; ++row) {
+		QStringList rowData;
+		bool rowHasData = false;
+		for (int col = startCol; col < startCol + maxCols; ++col) {
+			QVariant cellValue = xlsx.read(row, col);
+			QString cellText = cellValue.toString().trimmed();
+			rowData.append(cellText);
+			if (!cellText.isEmpty()) {
+				rowHasData = true;
+			}
+		}
+		// 如果这一行有数据，才添加到结果中
+		if (rowHasData) {
+			allDataRows.append(rowData);
+		}
+	}
+	
+	// 过滤掉全空的列
+	if (!allDataRows.isEmpty()) {
+		QList<int> validCols; // 有效列的索引
+		for (int col = 0; col < allDataRows[0].size(); ++col) {
+			bool colHasData = false;
+			for (int row = 0; row < allDataRows.size(); ++row) {
+				if (!allDataRows[row][col].isEmpty()) {
+					colHasData = true;
+					break;
+				}
+			}
+			if (colHasData) {
+				validCols.append(col);
+			}
+		}
+		
+		// 只保留有效列的数据
+		for (int row = 0; row < allDataRows.size(); ++row) {
+			QStringList validRowData;
+			for (int colIdx : validCols) {
+				validRowData.append(allDataRows[row][colIdx]);
+			}
+			dataRows.append(validRowData);
+		}
+	}
+	
+	fillSeatTableFromData(dataRows);
+	QMessageBox::information(this, QString::fromUtf8(u8"导入成功"), 
+		QString::fromUtf8(u8"座位表导入成功！"));
+	
+	// 导入成功后自动上传到服务器
+	uploadSeatTableToServer();
+}
+
+// 从CSV导入座位表
+inline void ScheduleDialog::importSeatFromCsv(const QString& filePath)
+{
+	QFile file(filePath);
+	if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+		QMessageBox::critical(this, QString::fromUtf8(u8"错误"), 
+			QString::fromUtf8(u8"无法打开 CSV 文件：") + filePath);
+		return;
+	}
+	
+	QTextStream in(&file);
+	in.setCodec("UTF-8");
+	
+	// 读取所有行（跳过前3行，从第4行开始）
+	QList<QStringList> allLines;
+	int lineNumber = 0;
+	while (!in.atEnd() && lineNumber < 20) { // 读取足够多的行
+		QString line = in.readLine();
+		lineNumber++;
+		
+		// 跳过前3行（行号1-3）
+		if (lineNumber < 4) {
+			continue;
+		}
+		
+		QStringList rowData;
+		
+		// 简单的CSV解析（按逗号分割，处理引号）
+		QString current;
+		bool inQuotes = false;
+		for (int i = 0; i < line.length(); ++i) {
+			QChar ch = line[i];
+			if (ch == '"') {
+				inQuotes = !inQuotes;
+			} else if (ch == ',' && !inQuotes) {
+				rowData.append(current.trimmed());
+				current.clear();
+			} else {
+				current += ch;
+			}
+		}
+		rowData.append(current.trimmed());
+		
+		// 跳过第1列（索引0），从第2列开始（索引1）
+		if (rowData.size() > 1) {
+			rowData = rowData.mid(1); // 从第2列开始
+		} else {
+			rowData.clear();
+		}
+		
+		// 最多取12列
+		if (rowData.size() > 12) {
+			rowData = rowData.mid(0, 12);
+		}
+		
+		allLines.append(rowData);
+		
+		// 最多读取16行数据（加上前3行，总共不超过20行）
+		if (lineNumber - 3 >= 16) {
+			break;
+		}
+	}
+	
+	file.close();
+	
+	// 过滤掉全空的行
+	QList<QStringList> allDataRows;
+	for (const QStringList& rowData : allLines) {
+		bool rowHasData = false;
+		for (const QString& cell : rowData) {
+			if (!cell.isEmpty()) {
+				rowHasData = true;
+				break;
+			}
+		}
+		if (rowHasData) {
+			allDataRows.append(rowData);
+		}
+	}
+	
+	// 过滤掉全空的列
+	QList<QStringList> dataRows;
+	if (!allDataRows.isEmpty()) {
+		QList<int> validCols; // 有效列的索引
+		int maxColCount = 0;
+		for (const QStringList& row : allDataRows) {
+			if (row.size() > maxColCount) {
+				maxColCount = row.size();
+			}
+		}
+		
+		for (int col = 0; col < maxColCount; ++col) {
+			bool colHasData = false;
+			for (int row = 0; row < allDataRows.size(); ++row) {
+				if (col < allDataRows[row].size() && !allDataRows[row][col].isEmpty()) {
+					colHasData = true;
+					break;
+				}
+			}
+			if (colHasData) {
+				validCols.append(col);
+			}
+		}
+		
+		// 只保留有效列的数据
+		for (int row = 0; row < allDataRows.size(); ++row) {
+			QStringList validRowData;
+			for (int colIdx : validCols) {
+				if (colIdx < allDataRows[row].size()) {
+					validRowData.append(allDataRows[row][colIdx]);
+				} else {
+					validRowData.append("");
+				}
+			}
+			dataRows.append(validRowData);
+		}
+	}
+	
+	fillSeatTableFromData(dataRows);
+	QMessageBox::information(this, QString::fromUtf8(u8"导入成功"), 
+		QString::fromUtf8(u8"座位表导入成功！"));
+	
+	// 导入成功后自动上传到服务器
+	uploadSeatTableToServer();
+}
+
+// 将数据填充到座位表
+inline void ScheduleDialog::fillSeatTableFromData(const QList<QStringList>& dataRows)
+{
+	if (!seatTable) {
+		QMessageBox::warning(this, QString::fromUtf8(u8"错误"), 
+			QString::fromUtf8(u8"座位表未初始化"));
+		return;
+	}
+	
+	// 清空所有座位
+	for (int row = 0; row < 8; ++row) {
+		for (int col = 0; col < 10; ++col) {
+			QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
+			if (btn && btn->property("isSeat").toBool()) {
+				btn->setText("");
+				btn->setProperty("studentId", QVariant());
+				btn->setProperty("studentName", QVariant());
+			}
+		}
+	}
+	
+	if (dataRows.isEmpty()) {
+		qDebug() << "导入的数据为空";
+		return;
+	}
+	
+	// 映射关系：导入的数据映射到seatTable的实际座位位置
+	// Excel的讲台在下面，所以Excel的最后一行（离讲台最近）应该映射到seatTable的第一行（窗口上面的第一排）
+	// 行顺序反转：最后一行 -> seatTable第1行，第一行 -> seatTable最后一行
+	// 最多处理8行数据（seatTable只有8行）
+	int maxRows = qMin(dataRows.size(), 8);
+	
+	for (int importRow = 0; importRow < maxRows; ++importRow) {
+		const QStringList& rowData = dataRows[importRow];
+		// 反转行顺序：最后一行（importRow=dataRows.size()-1）-> seatTable第1行（seatTableRow=0）
+		// 计算实际在数据中的位置（从后往前）
+		int actualDataRow = dataRows.size() - 1 - importRow;
+		const QStringList& actualRowData = dataRows[actualDataRow];
+		// seatTable的行号（0-7）
+		int seatTableRow = importRow;
+		
+		if (seatTableRow == 0) {
+			// 第1行：左侧2个座位（列0-1），右侧2个座位（列8-9）
+			// Excel原始布局：左座位 | 左走道 | 中走道 | 右座位 | 右走道
+			// Excel过滤走道后，数据按"左-右"顺序：列0-1是左座位，列2-3是右座位
+			// 左座位：Excel列0-1 -> seatTable列0-1
+			for (int i = 0; i < 2 && i < actualRowData.size(); ++i) {
+				if (!actualRowData[i].isEmpty()) {
+					QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(0, i));
+					if (btn && btn->property("isSeat").toBool()) {
+						btn->setText(actualRowData[i]);
+						btn->setProperty("studentName", actualRowData[i]);
+						QStringList parts = actualRowData[i].split(QRegExp("[\\s-]+"));
+						if (parts.size() >= 2) {
+							btn->setProperty("studentId", parts[1]);
+						}
+						btn->update();
+					}
+				}
+			}
+			// 右座位：Excel列2-3 -> seatTable列8-9
+			for (int i = 2; i < 4 && i < actualRowData.size(); ++i) {
+				if (!actualRowData[i].isEmpty()) {
+					int seatTableCol = i + 6; // 2->8, 3->9
+					QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(0, seatTableCol));
+					if (btn && btn->property("isSeat").toBool()) {
+						btn->setText(actualRowData[i]);
+						btn->setProperty("studentName", actualRowData[i]);
+						QStringList parts = actualRowData[i].split(QRegExp("[\\s-]+"));
+						if (parts.size() >= 2) {
+							btn->setProperty("studentId", parts[1]);
+						}
+						btn->update();
+					}
+				}
+			}
+		} else {
+			// 第2-8行：左列3个（列0-2），中列3个（列4-6），右列2个（列8-9）
+			// Excel原始布局：左座位 | 左走道 | 中左座位 | 中走道 | 中右座位 | 右走道 | 右座位
+			// Excel过滤走道后，数据按"左-中左-中右-右"顺序
+			// 假设：左座位3个，中左座位2个，中右座位1个，右座位2个（共8个座位）
+			// 左座位：Excel列0-2 -> seatTable列0-2
+			for (int i = 0; i < 3 && i < actualRowData.size(); ++i) {
+				if (!actualRowData[i].isEmpty()) {
+					QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(seatTableRow, i));
+					if (btn && btn->property("isSeat").toBool()) {
+						btn->setText(actualRowData[i]);
+						btn->setProperty("studentName", actualRowData[i]);
+						QStringList parts = actualRowData[i].split(QRegExp("[\\s-]+"));
+						if (parts.size() >= 2) {
+							btn->setProperty("studentId", parts[1]);
+						}
+						btn->update();
+					}
+				}
+			}
+			// 中左座位：Excel列3-4 -> seatTable列4-5（中座位的前两个）
+			for (int i = 3; i < 5 && i < actualRowData.size(); ++i) {
+				if (!actualRowData[i].isEmpty()) {
+					int seatTableCol = i + 1; // 3->4, 4->5
+					QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(seatTableRow, seatTableCol));
+					if (btn && btn->property("isSeat").toBool()) {
+						btn->setText(actualRowData[i]);
+						btn->setProperty("studentName", actualRowData[i]);
+						QStringList parts = actualRowData[i].split(QRegExp("[\\s-]+"));
+						if (parts.size() >= 2) {
+							btn->setProperty("studentId", parts[1]);
+						}
+						btn->update();
+					}
+				}
+			}
+			// 中右座位：Excel列5 -> seatTable列6（中座位的最后一个）
+			if (actualRowData.size() > 5 && !actualRowData[5].isEmpty()) {
+				QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(seatTableRow, 6));
+				if (btn && btn->property("isSeat").toBool()) {
+					btn->setText(actualRowData[5]);
+					btn->setProperty("studentName", actualRowData[5]);
+					QStringList parts = actualRowData[5].split(QRegExp("[\\s-]+"));
+					if (parts.size() >= 2) {
+						btn->setProperty("studentId", parts[1]);
+					}
+					btn->update();
+				}
+			}
+			// 右座位：Excel列6-7 -> seatTable列8-9
+			for (int i = 6; i < 8 && i < actualRowData.size(); ++i) {
+				if (!actualRowData[i].isEmpty()) {
+					int seatTableCol = i + 2; // 6->8, 7->9
+					QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(seatTableRow, seatTableCol));
+					if (btn && btn->property("isSeat").toBool()) {
+						btn->setText(actualRowData[i]);
+						btn->setProperty("studentName", actualRowData[i]);
+						QStringList parts = actualRowData[i].split(QRegExp("[\\s-]+"));
+						if (parts.size() >= 2) {
+							btn->setProperty("studentId", parts[1]);
+						}
+						btn->update();
+					}
+				}
+			}
+		}
+	}
+	
+	// 刷新整个表格以确保界面更新
+	seatTable->update();
+	seatTable->repaint();
+	qDebug() << "座位表数据已刷新，共导入" << dataRows.size() << "行数据";
+}
+
+// 上传座位表到服务器
+inline void ScheduleDialog::uploadSeatTableToServer()
+{
+	if (!seatTable || m_classid.isEmpty()) {
+		QMessageBox::warning(this, QString::fromUtf8(u8"错误"), 
+			QString::fromUtf8(u8"座位表未初始化或班级ID为空"));
+		return;
+	}
+	
+	if (!m_httpHandler) {
+		QMessageBox::warning(this, QString::fromUtf8(u8"错误"), 
+			QString::fromUtf8(u8"HTTP处理器未初始化"));
+		return;
+	}
+	
+	// 从seatTable提取座位数据
+	QJsonArray seatsArray;
+	for (int row = 0; row < 8; ++row) {
+		for (int col = 0; col < 10; ++col) {
+			QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
+			if (btn && btn->property("isSeat").toBool()) {
+				QString studentName = btn->text().trimmed();
+				if (!studentName.isEmpty()) {
+					QJsonObject seatObj;
+					seatObj["row"] = row + 1; // 行号从1开始
+					seatObj["col"] = col + 1; // 列号从1开始
+					seatObj["student_name"] = studentName;
+					
+					// 解析学生姓名和编号（如"刘峻源8-4"）
+					QStringList parts = studentName.split(QRegExp("[\\s-]+"));
+					if (parts.size() >= 1) {
+						seatObj["name"] = parts[0]; // 姓名
+						if (parts.size() >= 2) {
+							seatObj["student_id"] = parts[1]; // 编号
+						}
+					}
+					
+					seatsArray.append(seatObj);
+				}
+			}
+		}
+	}
+	
+	if (seatsArray.isEmpty()) {
+		QMessageBox::warning(this, QString::fromUtf8(u8"提示"), 
+			QString::fromUtf8(u8"座位表中没有学生数据"));
+		return;
+	}
+	
+	// 构造请求JSON
+	QJsonObject requestObj;
+	requestObj["class_id"] = m_classid;
+	requestObj["seats"] = seatsArray;
+	
+	QJsonDocument doc(requestObj);
+	QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+	
+	// 发送POST请求
+	QString url = "http://47.100.126.194:5000/seat-arrangement/save";
+	
+	// 使用TAHttpHandler发送请求
+	connect(m_httpHandler, &TAHttpHandler::success, this, [=](const QString& responseString) {
+		m_httpHandler->disconnect(this);
+		
+		QJsonDocument respDoc = QJsonDocument::fromJson(responseString.toUtf8());
+		if (respDoc.isObject()) {
+			QJsonObject obj = respDoc.object();
+			int code = obj.value("code").toInt(-1);
+			if (code == 200 || code == 0) {
+				QMessageBox::information(this, QString::fromUtf8(u8"上传成功"), 
+					QString::fromUtf8(u8"座位表已成功上传到服务器！"));
+			} else {
+				QString errorMsg = obj.value("message").toString();
+				QMessageBox::warning(this, QString::fromUtf8(u8"上传失败"), 
+					QString::fromUtf8(u8"服务器返回错误：%1").arg(errorMsg));
+			}
+		} else {
+			QMessageBox::information(this, QString::fromUtf8(u8"上传成功"), 
+				QString::fromUtf8(u8"座位表已成功上传到服务器！"));
+		}
+	});
+	
+	connect(m_httpHandler, &TAHttpHandler::failed, this, [=](const QString& error) {
+		m_httpHandler->disconnect(this);
+		QMessageBox::critical(this, QString::fromUtf8(u8"上传失败"), 
+			QString::fromUtf8(u8"网络错误：%1").arg(error));
+	});
+	
+	m_httpHandler->post(url, jsonData);
+	qDebug() << "开始上传座位表到服务器，班级ID:" << m_classid << "，座位数量:" << seatsArray.size();
 }
 
 // 热力图相关方法的实现在 ScheduleDialog_Heatmap.cpp 中
