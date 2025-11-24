@@ -6,10 +6,6 @@
 #include <QDebug>
 #include <QScrollArea>
 #include <QWidget>
-#include <QNetworkAccessManager>
-#include <QNetworkRequest>
-#include <QNetworkReply>
-#include <QDateTime>
 
 MemberKickDialog::MemberKickDialog(QWidget* parent)
     : QDialog(parent)
@@ -18,8 +14,7 @@ MemberKickDialog::MemberKickDialog(QWidget* parent)
     resize(400, 500);
     setStyleSheet("background-color:#555555; font-size:14px;");
     
-    m_restAPI = new TIMRestAPI(this);
-    // 注意：管理员账号信息在使用REST API时再设置，因为此时用户可能还未登录
+    m_httpHandler = new TAHttpHandler(this);
 
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(10, 10, 10, 10);
@@ -118,28 +113,6 @@ QVector<QString> MemberKickDialog::getSelectedMemberIds()
     return selectedIds;
 }
 
-// 将TIMResult错误码转换为错误描述字符串
-static QString getTIMResultErrorString(int errorCode) {
-    switch (errorCode) {
-        case TIM_SUCC:
-            return "成功";
-        case TIM_ERR_SDKUNINIT:
-            return "ImSDK未初始化";
-        case TIM_ERR_NOTLOGIN:
-            return "用户未登录";
-        case TIM_ERR_JSON:
-            return "错误的Json格式或Json Key - 请检查JSON参数格式是否正确，特别是字段名称和数据类型";
-        case TIM_ERR_PARAM:
-            return "参数错误 - 请检查传入的参数是否有效";
-        case TIM_ERR_CONV:
-            return "无效的会话";
-        case TIM_ERR_GROUP:
-            return "无效的群组";
-        default:
-            return QString("未知错误码: %1").arg(errorCode);
-    }
-}
-
 void MemberKickDialog::onOkClicked()
 {
     // 获取选中的成员
@@ -181,151 +154,88 @@ void MemberKickDialog::onOkClicked()
         return;
     }
     
-    if (!m_restAPI) {
-        QMessageBox::critical(this, "错误", "REST API未初始化！");
+    if (!m_httpHandler) {
+        QMessageBox::critical(this, "错误", "HTTP处理器未初始化！");
         return;
     }
     
-    // 在使用REST API前设置管理员账号信息
-    // 注意：REST API需要使用应用管理员账号，使用当前登录用户的teacher_unique_id
-    std::string adminUserId = GenerateTestUserSig::instance().getAdminUserId();
-    if (!adminUserId.empty()) {
-        std::string adminUserSig = GenerateTestUserSig::instance().genTestUserSig(adminUserId);
-        m_restAPI->setAdminInfo(QString::fromStdString(adminUserId), QString::fromStdString(adminUserSig));
-    }
-    
-    // 构造成员ID数组（REST API格式）
-    QJsonArray memberArray;
-    for (const QString& memberId : selectedMemberIds)
-    {
-        memberArray.append(memberId);
-    }
-    
-    // 创建回调数据结构
-    struct KickCallbackData {
-        MemberKickDialog* dlg;
-        QVector<QString> memberIds;
-        QVector<QString> memberNames;
-        QString groupId;
-    };
-    
-    KickCallbackData* callbackData = new KickCallbackData;
-    callbackData->dlg = this;
-    callbackData->memberIds = selectedMemberIds;
-    callbackData->memberNames = selectedMemberNames;
-    callbackData->groupId = m_groupId;
-    
-    qDebug() << "========== 踢出成员 - REST API ==========";
-    qDebug() << "群组ID:" << m_groupId;
-    qDebug() << "成员数量:" << memberArray.size();
-    
-    // 调用REST API踢出成员
-    m_restAPI->deleteGroupMember(m_groupId, memberArray, "",
-        [=](int errorCode, const QString& errorDesc, const QJsonObject& result) {
-            if (errorCode != 0) {
-                QString errorMsg;
-                
-                // 特殊处理常见的错误码
-                if (errorCode == 10007) {
-                    errorMsg = QString("踢出成员失败\n错误码: %1\n错误描述: %2\n\n操作权限不足，只有群主或管理员可以踢出成员。").arg(errorCode).arg(errorDesc);
-                } else {
-                    errorMsg = QString("踢出成员失败\n错误码: %1\n错误描述: %2").arg(errorCode).arg(errorDesc);
-                }
-                
-                qDebug() << errorMsg;
-                QMessageBox::critical(callbackData->dlg, "踢出失败", errorMsg);
-                delete callbackData;
-                return;
-            }
-            
-            // 踢出成功
-            qDebug() << "踢出成员成功";
-            
-            // 调用服务器API移除成员
-            callbackData->dlg->kickMembersFromServer(callbackData->memberIds, callbackData->memberNames);
-            
-            QMessageBox::information(callbackData->dlg, "踢出成功", "成员已成功踢出群组");
-            callbackData->dlg->accept(); // 关闭对话框
-            
-            delete callbackData;
-        });
-}
-
-void MemberKickDialog::kickMembersFromServer(const QVector<QString>& memberIds, const QVector<QString>& memberNames)
-{
-    if (memberIds.size() != memberNames.size()) {
-        qWarning() << "成员ID和名称数量不匹配";
-        return;
-    }
-    
-    if (memberIds.isEmpty()) {
-        // 如果没有成员需要移除，直接发出信号
-        emit membersKickedSuccess(m_groupId);
-        return;
-    }
-    
+    // 直接调用服务器接口踢出成员
     QString url = "http://47.100.126.194:5000/groups/remove-member";
     
-    // 使用共享指针来跟踪所有请求的状态
-    struct RemoveState {
-        int totalCount;
-        int successCount;
-        int failCount;
-        MemberKickDialog* dlg;
-        QString groupId;
-    };
-    
-    RemoveState* state = new RemoveState;
-    state->totalCount = memberIds.size();
-    state->successCount = 0;
-    state->failCount = 0;
-    state->dlg = this;
-    state->groupId = m_groupId;
-    
-    // 为每个被踢出的成员发送移除请求
-    for (int i = 0; i < memberIds.size(); i++) {
-        QString memberId = memberIds[i];
-        QString memberName = memberNames[i];
-        
-        // 构造请求JSON
-        QJsonObject requestData;
-        requestData["group_id"] = m_groupId;
-        requestData["user_id"] = memberId;
-        
-        // 转换为JSON字符串
-        QJsonDocument doc(requestData);
-        QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
-        
-        // 发送POST请求到服务器
-        QNetworkAccessManager* manager = new QNetworkAccessManager(this);
-        QNetworkRequest request;
-        request.setUrl(QUrl(url));
-        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-        QNetworkReply* reply = manager->post(request, jsonData);
-        
-        connect(reply, &QNetworkReply::finished, [=]() {
-            if (reply->error() == QNetworkReply::NoError) {
-                qDebug() << "从服务器移除成员成功，成员ID:" << memberId;
-                state->successCount++;
-            } else {
-                qWarning() << "从服务器移除成员失败，成员ID:" << memberId << "错误:" << reply->errorString();
-                state->failCount++;
-            }
-            
-            // 检查是否所有请求都已完成
-            if (state->successCount + state->failCount >= state->totalCount) {
-                // 所有请求都已完成，发出信号通知刷新成员列表
-                if (state->successCount > 0) {
-                    qDebug() << "所有成员移除完成，成功:" << state->successCount << "失败:" << state->failCount;
-                    emit state->dlg->membersKickedSuccess(state->groupId);
-                }
-                delete state;
-            }
-            
-            reply->deleteLater();
-            manager->deleteLater();
-        });
+    // 构造成员ID数组
+    QJsonArray membersArray;
+    for (const QString& memberId : selectedMemberIds)
+    {
+        membersArray.append(memberId);
     }
+    
+    // 构造请求JSON
+    QJsonObject payload;
+    payload["group_id"] = m_groupId;
+    payload["members"] = membersArray;
+    
+    // 转换为JSON字符串
+    QJsonDocument doc(payload);
+    QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+    
+    qDebug() << "========== 踢出成员 - 服务器接口 ==========";
+    qDebug() << "群组ID:" << m_groupId;
+    qDebug() << "成员数量:" << membersArray.size();
+    qDebug() << "请求JSON:" << QString::fromUtf8(jsonData);
+    
+    // 创建HTTP处理器用于接收响应
+    TAHttpHandler* kickHandler = new TAHttpHandler(this);
+    connect(kickHandler, &TAHttpHandler::success, this, [=](const QString& responseString) {
+        qDebug() << "踢出成员服务器响应:" << responseString;
+        
+        // 解析响应
+        QJsonDocument respDoc = QJsonDocument::fromJson(responseString.toUtf8());
+        bool success = false;
+        QString message = QString::fromUtf8(u8"成员已成功踢出群组");
+        
+        if (respDoc.isObject()) {
+            QJsonObject obj = respDoc.object();
+            if (obj.contains("code")) {
+                int code = obj.value("code").toInt(-1);
+                success = (code == 0 || code == 200);
+            }
+            if (obj.contains("message") && obj.value("message").isString()) {
+                message = obj.value("message").toString();
+            }
+        } else {
+            // 非JSON响应但HTTP成功，视为成功
+            success = true;
+        }
+        
+        if (success) {
+            QMessageBox::information(this, QString::fromUtf8(u8"踢出成功"), message);
+            emit membersKickedSuccess(m_groupId); // 发出信号通知刷新成员列表
+            accept(); // 关闭对话框
+        } else {
+            QMessageBox::critical(this, QString::fromUtf8(u8"踢出失败"), message);
+        }
+        
+        kickHandler->deleteLater();
+    });
+    
+    connect(kickHandler, &TAHttpHandler::failed, this, [=](const QString& errResponseString) {
+        qDebug() << "踢出成员服务器错误:" << errResponseString;
+        
+        QString errorMsg = QString::fromUtf8(u8"踢出成员失败");
+        QJsonDocument errDoc = QJsonDocument::fromJson(errResponseString.toUtf8());
+        if (errDoc.isObject()) {
+            QJsonObject errObj = errDoc.object();
+            if (errObj.contains("message") && errObj.value("message").isString()) {
+                errorMsg = errObj.value("message").toString();
+            }
+        }
+        
+        QMessageBox::critical(this, QString::fromUtf8(u8"踢出失败"), errorMsg);
+        kickHandler->deleteLater();
+    });
+    
+    // 发送POST请求
+    kickHandler->post(url, jsonData);
 }
 
 void MemberKickDialog::clearLayout(QVBoxLayout* layout)

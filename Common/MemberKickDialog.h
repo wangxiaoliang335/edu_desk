@@ -11,17 +11,14 @@
 #include <QMessageBox>
 #include <QMap>
 #include "CommonInfo.h"
-#include "ImSDK/includes/TIMCloud.h"
-#include "ImSDK/includes/TIMCloudDef.h"
-#include "TIMRestAPI.h"
-#include "GenerateTestUserSig.h"
+#include "TAHttpHandler.h"
 
 class MemberKickDialog : public QDialog
 {
     Q_OBJECT
 
 signals:
-    void membersKickedSuccess(const QString& groupId); // 成员踢出成功并上传到服务器成功信号，通知刷新成员列表
+    void membersKickedSuccess(const QString& groupId); // 成员踢出成功信号，通知刷新成员列表
 
 public:
     MemberKickDialog(QWidget* parent = nullptr);
@@ -37,7 +34,7 @@ private slots:
 
 private:
     void clearLayout(QVBoxLayout* layout);
-    TIMRestAPI* m_restAPI = NULL;
+    TAHttpHandler* m_httpHandler = NULL;
     QVBoxLayout* m_membersLayout = NULL;
     QScrollArea* m_scrollArea = NULL;
     QWidget* m_scrollWidget = NULL;
@@ -45,6 +42,5 @@ private:
     QString m_groupId; // 当前群组ID
     QString m_groupName; // 当前群组名称
     QMap<QString, QString> m_memberInfoMap; // 存储成员信息：key为member_id，value为member_name
-    void kickMembersFromServer(const QVector<QString>& memberIds, const QVector<QString>& memberNames); // 从服务器移除成员
 };
 
