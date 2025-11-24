@@ -12,10 +12,6 @@
 #include <QMap>
 #include "TAHttpHandler.h"
 #include "CommonInfo.h"
-#include "ImSDK/includes/TIMCloud.h"
-#include "ImSDK/includes/TIMCloudDef.h"
-#include "TIMRestAPI.h"
-#include "GenerateTestUserSig.h"
 
 class FriendSelectDialog : public QDialog
 {
@@ -42,7 +38,6 @@ private slots:
 private:
     void clearLayout(QVBoxLayout* layout);
     TAHttpHandler* m_httpHandler = NULL;
-    TIMRestAPI* m_restAPI = NULL;
     QVBoxLayout* m_friendsLayout = NULL;
     QScrollArea* m_scrollArea = NULL;
     QWidget* m_scrollWidget = NULL;
@@ -51,6 +46,5 @@ private:
     QString m_groupId; // 当前群组ID
     QString m_groupName; // 当前群组名称
     QMap<QString, QString> m_friendInfoMap; // 存储好友信息：key为teacher_unique_id，value为name
-    void inviteMembersToServer(const QVector<QString>& memberIds, const QVector<QString>& memberNames); // 邀请成员到服务器
 };
 
