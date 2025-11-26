@@ -105,7 +105,7 @@ public:
                 handleScheduleResponse(resp);
             });
             connect(m_fetchHandler, &TAHttpHandler::failed, this, [this](const QString& err){
-                QMessageBox::warning(this, QStringLiteral("提示"), QStringLiteral("获取课程表失败：") + err);
+                //QMessageBox::warning(this, QStringLiteral("提示"), QStringLiteral("获取课程表失败：") + err);
             });
         }
     }

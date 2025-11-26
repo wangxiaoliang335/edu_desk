@@ -44,6 +44,7 @@
 #include "ImSDK/includes/TIMCloud.h"
 #include "ImSDK/includes/TIMCloudDef.h"
 #include "ImSDK/includes/TIMCloudCallback.h"
+#include "GroupNotifyDialog.h"
 
 struct ChatMessage {
     QString avatarPath;
@@ -1665,6 +1666,22 @@ private:
             if (!value.isObject()) continue;
             
             QJsonObject msgObj = value.toObject();
+
+            // 1. 将 QJsonObject 包装成 QJsonDocument
+            QJsonDocument doc(msgObj);
+
+            // 2. 转换为 QString（紧凑格式）
+            QString jsonString = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+
+            qDebug() << jsonString;
+            /*
+                输出：
+                "{\"age\":25,\"name\":\"Tom\",\"score\":88.5}"
+            */
+
+            // 3. 如果想美化打印（带缩进）
+            QString prettyString = QString::fromUtf8(doc.toJson(QJsonDocument::Indented));
+            qDebug().noquote() << prettyString;
             
             // 检查是否是当前群组的消息
             QString convId = msgObj[kTIMMsgConvId].toString();
@@ -1842,15 +1859,65 @@ private:
         static QList<ChatDialog*> s_instances;
         return s_instances;
     }
+
+    static QList<QByteArray>& getPendingMessages()
+    {
+        static QList<QByteArray> s_pendingMessages;
+        return s_pendingMessages;
+    }
     
     // 静态函数：接收新消息回调（用于分发消息到所有实例）
     static void staticRecvNewMsgCallback(const char* json_msg_array, const void* user_data)
     {
-        // 分发消息到所有实例
+        QJsonParseError parseError;
+        QJsonDocument doc = QJsonDocument::fromJson(QByteArray(json_msg_array), &parseError);
+        if (parseError.error != QJsonParseError::NoError) {
+            qDebug() << "ChatDialog::staticRecvNewMsgCallback 解析失败:" << parseError.errorString();
+            return;
+        }
+        if (!doc.isArray()) {
+            qDebug() << "ChatDialog::staticRecvNewMsgCallback 数据不是数组";
+            return;
+        }
+
+        QJsonArray msgArray = doc.array();
+        QJsonArray forwardArray;
+
+        for (const QJsonValue& value : msgArray) {
+            if (!value.isObject()) continue;
+            QJsonObject msgObj = value.toObject();
+            QJsonArray elemArray = msgObj.value("message_elem_array").toArray();
+            QJsonArray groupTips;
+            for (const QJsonValue& elemValue : elemArray) {
+                if (!elemValue.isObject()) continue;
+                QJsonObject elemObj = elemValue.toObject();
+                int elemType = elemObj.value("elem_type").toInt();
+                if (elemType == kTIMElem_GroupTips) {
+                    groupTips.append(elemObj);
+                }
+            }
+            if (!groupTips.isEmpty()) {
+                GroupNotifyDialog::processIncomingGroupTips(groupTips);
+            } else {
+                forwardArray.append(msgObj);
+            }
+        }
+
+        if (forwardArray.isEmpty())
+            return;
+
+        QJsonDocument forwardDoc(forwardArray);
+        QByteArray forwardBytes = forwardDoc.toJson(QJsonDocument::Compact);
+
         QList<ChatDialog*>& instances = getInstanceList();
+        if (instances.isEmpty()) {
+            getPendingMessages().append(forwardBytes);
+            return;
+        }
+
         for (ChatDialog* dlg : instances) {
             if (dlg) {
-                dlg->onRecvNewMsg(json_msg_array);
+                dlg->onRecvNewMsg(forwardBytes.constData());
             }
         }
     }
@@ -1865,6 +1932,13 @@ private:
         
         if (!instances.contains(this)) {
             instances.append(this);
+            QList<QByteArray>& pending = getPendingMessages();
+            if (!pending.isEmpty()) {
+                for (const QByteArray& bytes : pending) {
+                    onRecvNewMsg(bytes.constData());
+                }
+                pending.clear();
+            }
         }
     }
     

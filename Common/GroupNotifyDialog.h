@@ -13,6 +13,7 @@
 #include <QJsonParseError>
 #include <qjsondocument.h>
 #include <QJsonObject>
+#include <QList>
 #include <QDateTime>
 #include <QDebug>
 #include "ImSDK/includes/TIMCloud.h"
@@ -84,7 +85,7 @@ public:
         mainLayout->addWidget(scroll);
         
         // 连接全局信号，接收群组系统消息
-        connect(this, &GroupNotifyDialog::groupTipReceived, this, &GroupNotifyDialog::onGroupTipReceived);
+        deliverPendingTips();
     }
 
 signals:
@@ -123,145 +124,17 @@ private:
             return;
         }
         
-        QJsonArray tipArray = doc.array();
-        qDebug() << "群组系统消息数量:" << tipArray.size();
-        
-        for (const QJsonValue& value : tipArray) {
-            if (!value.isObject()) continue;
-            
-            QJsonObject tipObj = value.toObject();
-            
-            // 获取消息类型
-            int tipType = tipObj[kTIMGroupTipsElemTipType].toInt();
-            QString groupId = tipObj[kTIMGroupTipsElemGroupId].toString();
-            QString groupName = tipObj[kTIMGroupTipsElemGroupName].toString();
-            QString opUser = tipObj[kTIMGroupTipsElemOpUser].toString();
-            uint time = tipObj[kTIMGroupTipsElemTime].toInt();
-            
-            qDebug() << "消息类型:" << tipType << "(kTIMGroupTip_Invite=" << kTIMGroupTip_Invite << ")";
-            qDebug() << "群组ID:" << groupId;
-            qDebug() << "群组名称:" << groupName;
-            qDebug() << "操作者:" << opUser;
-            
-            // 获取操作者信息
-            QString opUserName = opUser;
-            if (tipObj.contains(kTIMGroupTipsElemOpUserInfo)) {
-                QJsonObject opUserInfo = tipObj[kTIMGroupTipsElemOpUserInfo].toObject();
-                if (opUserInfo.contains("user_profile_nick_name")) {
-                    opUserName = opUserInfo["user_profile_nick_name"].toString();
-                }
-            }
-            
-            // 获取被操作的用户列表
-            QJsonArray userArray = tipObj[kTIMGroupTipsElemUserArray].toArray();
-            QStringList userList;
-            for (const QJsonValue& userValue : userArray) {
-                userList.append(userValue.toString());
-            }
-            
-            // 根据消息类型生成显示文本
-            QString actionText;
-            QString remark;
-            
-            switch (tipType) {
-                case kTIMGroupTip_Invite:  // 邀请加入（新成员入群）
-                    if (userList.size() > 0) {
-                        actionText = QString("邀请 %1 加入").arg(userList.join(", "));
-                        
-                        // 发出新成员入群信号，用于自动刷新成员列表
-                        if (s_instance()) {
-                            qDebug() << "检测到新成员入群，群组ID:" << groupId << "，新成员:" << userList.join(", ");
-                            QMetaObject::invokeMethod(s_instance(), "onNewMemberJoined", Qt::QueuedConnection,
-                                Q_ARG(QString, groupId),
-                                Q_ARG(QStringList, userList));
-                        }
-                    } else {
-                        actionText = "邀请加入";
-                    }
-                    break;
-                case kTIMGroupTip_Quit:  // 退群
-                    actionText = "退出群聊";
-                    break;
-                case kTIMGroupTip_Kick:  // 踢人
-                    if (userList.size() > 0) {
-                        actionText = QString("将 %1 移出群聊").arg(userList.join(", "));
-                    } else {
-                        actionText = "移出群成员";
-                    }
-                    break;
-                case kTIMGroupTip_SetAdmin:  // 设置管理员
-                    if (userList.size() > 0) {
-                        actionText = QString("将 %1 设为管理员").arg(userList.join(", "));
-                    } else {
-                        actionText = "设置管理员";
-                    }
-                    break;
-                case kTIMGroupTip_CancelAdmin:  // 取消管理员
-                    if (userList.size() > 0) {
-                        actionText = QString("取消 %1 的管理员身份").arg(userList.join(", "));
-                    } else {
-                        actionText = "取消管理员";
-                    }
-                    break;
-                case kTIMGroupTip_GroupInfoChange:  // 群信息修改
-                    actionText = "修改了群信息";
-                    // 可以解析群资料变更信息
-                    if (tipObj.contains(kTIMGroupTipsElemGroupChangeInfoArray)) {
-                        QJsonArray changeArray = tipObj[kTIMGroupTipsElemGroupChangeInfoArray].toArray();
-                        QStringList changeList;
-                        for (const QJsonValue& changeValue : changeArray) {
-                            if (changeValue.isObject()) {
-                                QJsonObject changeObj = changeValue.toObject();
-                                QString changeType = changeObj["group_tip_group_change_info_type"].toString();
-                                QString changeValueStr = changeObj["group_tip_group_change_info_value"].toString();
-                                if (changeType == "group_name") {
-                                    changeList.append(QString("群名称: %1").arg(changeValueStr));
-                                } else if (changeType == "introduction") {
-                                    changeList.append("群简介");
-                                } else if (changeType == "notification") {
-                                    changeList.append("群公告");
-                                }
-                            }
-                        }
-                        if (!changeList.isEmpty()) {
-                            remark = changeList.join(", ");
-                        }
-                    }
-                    break;
-                case kTIMGroupTip_MemberInfoChange:  // 群成员信息修改
-                    actionText = "修改了群成员信息";
-                    break;
-                default:
-                    actionText = "群组通知";
-                    break;
-            }
-            
-            // 转换时间戳为可读格式
-            QDateTime dateTime = QDateTime::fromSecsSinceEpoch(time);
-            QString timeStr = dateTime.toString("yyyy-MM-dd hh:mm:ss");
-            
-            qDebug() << "操作文本:" << actionText;
-            qDebug() << "备注:" << remark;
-            qDebug() << "GroupNotifyDialog实例是否存在:" << (s_instance() != nullptr);
-            
-            // 发出全局信号，通知所有GroupNotifyDialog实例（使用QMetaObject::invokeMethod确保线程安全）
-            if (s_instance()) {
-                qDebug() << "正在发送信号到GroupNotifyDialog实例";
-                QMetaObject::invokeMethod(s_instance(), "onGroupTipReceived", Qt::QueuedConnection,
-                    Q_ARG(QString, opUserName),
-                    Q_ARG(QString, timeStr),
-                    Q_ARG(QString, actionText),
-                    Q_ARG(QString, groupName),
-                    Q_ARG(QString, remark));
-            } else {
-                qWarning() << "警告：GroupNotifyDialog实例不存在，无法显示群组通知！";
-                qWarning() << "请确保在收到通知之前创建了GroupNotifyDialog实例";
-            }
-        }
-        
+        handleGroupTipsArray(doc.array());
         qDebug() << "==========================================";
     }
+
+public:
+    static void processIncomingGroupTips(const QJsonArray& tipArray)
+    {
+        handleGroupTipsArray(tipArray);
+    }
     
+public slots:
     // 信号槽处理函数
     void onGroupTipReceived(const QString& name, const QString& time, 
                            const QString& action, const QString& groupName, 
@@ -275,7 +148,13 @@ private:
         qDebug() << "备注:" << remark;
         qDebug() << "正在添加通知项到列表";
         
-        addItem(listLayout, name, time, action, groupName, remark);
+        if (!listLayout) {
+            return;
+        }
+        QFrame* itemFrame = createItem(name, time, action, groupName, remark);
+        int insertIndex = listLayout->count() - 1;
+        if (insertIndex < 0) insertIndex = 0;
+        listLayout->insertWidget(insertIndex, itemFrame);
         
         qDebug() << "通知项已添加";
         qDebug() << "==========================================";
@@ -339,8 +218,12 @@ public:
                                 QString GroupName = obj["group_name"].toString();
                                 if (3 == iContent_text || 4 == iContent_text)
                                 {
-                                    addItem(listLayout, SenderName, updated_at, content,
-                                        GroupName, "");
+                                    if (listLayout) {
+                                        QFrame* itemFrame = createItem(SenderName, updated_at, content, GroupName, "");
+                                        int insertIndex = listLayout->count() - 1;
+                                        if (insertIndex < 0) insertIndex = 0;
+                                        listLayout->insertWidget(insertIndex, itemFrame);
+                                    }
                                 }
                             }
                         }
@@ -351,18 +234,8 @@ public:
         m_bInit = true;
     }
 
-private slots:
-    // 添加群组系统消息项（在主线程中调用）
-    void addGroupTipItem(const QString& name, const QString& time, 
-                        const QString& action, const QString& groupName, 
-                        const QString& remark)
-    {
-        addItem(listLayout, name, time, action, groupName, remark);
-    }
-
 private:
-    void addItem(QVBoxLayout* parent,
-        const QString& name,
+    QFrame* createItem(const QString& name,
         const QString& time,
         const QString& action,
         const QString& groupName,
@@ -406,9 +279,162 @@ private:
         //btnLayout->addWidget(dropDown);
         //outerLayout->addLayout(btnLayout);
 
-        parent->addWidget(itemFrame);
+        return itemFrame;
     }
     bool m_bInit = false;
     QVBoxLayout* listLayout = NULL;
+
+    static void handleGroupTipsArray(const QJsonArray& tipArray)
+    {
+        qDebug() << "群组系统消息数量:" << tipArray.size();
+        for (const QJsonValue& value : tipArray) {
+            if (!value.isObject()) continue;
+            QJsonObject tipObj = value.toObject();
+            int tipType = tipObj[kTIMGroupTipsElemTipType].toInt();
+            QString groupId = tipObj[kTIMGroupTipsElemGroupId].toString();
+            QString groupName = tipObj[kTIMGroupTipsElemGroupName].toString();
+            QString opUser = tipObj[kTIMGroupTipsElemOpUser].toString();
+            uint time = tipObj[kTIMGroupTipsElemTime].toInt();
+
+            qDebug() << "消息类型:" << tipType << "(kTIMGroupTip_Invite=" << kTIMGroupTip_Invite << ")";
+            qDebug() << "群组ID:" << groupId;
+            qDebug() << "群组名称:" << groupName;
+            qDebug() << "操作者:" << opUser;
+
+            QString opUserName = opUser;
+            if (tipObj.contains(kTIMGroupTipsElemOpUserInfo)) {
+                QJsonObject opUserInfo = tipObj[kTIMGroupTipsElemOpUserInfo].toObject();
+                if (opUserInfo.contains("user_profile_nick_name")) {
+                    opUserName = opUserInfo["user_profile_nick_name"].toString();
+                }
+            }
+
+            QJsonArray userArray = tipObj[kTIMGroupTipsElemUserArray].toArray();
+            QStringList userList;
+            for (const QJsonValue& userValue : userArray) {
+                userList.append(userValue.toString());
+            }
+
+            QString actionText;
+            QString remark;
+
+            switch (tipType) {
+                case kTIMGroupTip_Invite:
+                    if (!userList.isEmpty()) {
+                        actionText = QString("邀请 %1 加入").arg(userList.join(", "));
+                        if (s_instance()) {
+                            qDebug() << "检测到新成员入群，群组ID:" << groupId << "，新成员:" << userList.join(", ");
+                            QMetaObject::invokeMethod(s_instance(), "onNewMemberJoined", Qt::QueuedConnection,
+                                Q_ARG(QString, groupId),
+                                Q_ARG(QStringList, userList));
+                        }
+                    } else {
+                        actionText = "邀请加入";
+                    }
+                    break;
+                case kTIMGroupTip_Quit:
+                    actionText = "退出群聊";
+                    break;
+                case kTIMGroupTip_Kick:
+                    actionText = userList.isEmpty()
+                        ? "移出群成员"
+                        : QString("将 %1 移出群聊").arg(userList.join(", "));
+                    break;
+                case kTIMGroupTip_SetAdmin:
+                    actionText = userList.isEmpty()
+                        ? "设置管理员"
+                        : QString("将 %1 设为管理员").arg(userList.join(", "));
+                    break;
+                case kTIMGroupTip_CancelAdmin:
+                    actionText = userList.isEmpty()
+                        ? "取消管理员"
+                        : QString("取消 %1 的管理员身份").arg(userList.join(", "));
+                    break;
+                case kTIMGroupTip_GroupInfoChange:
+                    actionText = "修改了群信息";
+                    if (tipObj.contains(kTIMGroupTipsElemGroupChangeInfoArray)) {
+                        QJsonArray changeArray = tipObj[kTIMGroupTipsElemGroupChangeInfoArray].toArray();
+                        QStringList changeList;
+                        for (const QJsonValue& changeValue : changeArray) {
+                            if (!changeValue.isObject()) continue;
+                            QJsonObject changeObj = changeValue.toObject();
+                            QString changeType = changeObj["group_tip_group_change_info_type"].toString();
+                            QString changeValueStr = changeObj["group_tip_group_change_info_value"].toString();
+                            if (changeType == "group_name") {
+                                changeList.append(QString("群名称: %1").arg(changeValueStr));
+                            } else if (changeType == "introduction") {
+                                changeList.append("群简介");
+                            } else if (changeType == "notification") {
+                                changeList.append("群公告");
+                            }
+                        }
+                        if (!changeList.isEmpty()) {
+                            remark = changeList.join(", ");
+                        }
+                    }
+                    break;
+                case kTIMGroupTip_MemberInfoChange:
+                    actionText = "修改了群成员信息";
+                    break;
+                default:
+                    actionText = "群组通知";
+                    break;
+            }
+
+            QDateTime dateTime = QDateTime::fromSecsSinceEpoch(time);
+            QString timeStr = dateTime.toString("yyyy-MM-dd hh:mm:ss");
+
+            qDebug() << "操作文本:" << actionText;
+            qDebug() << "备注:" << remark;
+            qDebug() << "GroupNotifyDialog实例是否存在:" << (s_instance() != nullptr);
+
+            GroupTipCache cacheItem{ opUserName, timeStr, actionText, groupName, remark, groupId, tipType, userList };
+            if (s_instance()) {
+                qDebug() << "正在发送信号到GroupNotifyDialog实例";
+                QMetaObject::invokeMethod(s_instance(), "onGroupTipReceived", Qt::QueuedConnection,
+                    Q_ARG(QString, cacheItem.opUserName),
+                    Q_ARG(QString, cacheItem.timeStr),
+                    Q_ARG(QString, cacheItem.actionText),
+                    Q_ARG(QString, cacheItem.groupName),
+                    Q_ARG(QString, cacheItem.remark));
+                if (tipType == kTIMGroupTip_Invite && !userList.isEmpty()) {
+                    QMetaObject::invokeMethod(s_instance(), "onNewMemberJoined", Qt::QueuedConnection,
+                        Q_ARG(QString, groupId),
+                        Q_ARG(QStringList, userList));
+                }
+            } else {
+                pendingGroupTips().append(cacheItem);
+            }
+        }
+    }
+
+    struct GroupTipCache {
+        QString opUserName;
+        QString timeStr;
+        QString actionText;
+        QString groupName;
+        QString remark;
+        QString groupId;
+        int tipType = 0;
+        QStringList memberList;
+    };
+
+    static QList<GroupTipCache>& pendingGroupTips()
+    {
+        static QList<GroupTipCache> cache;
+        return cache;
+    }
+
+    void deliverPendingTips()
+    {
+        auto& cache = pendingGroupTips();
+        for (const auto& tip : cache) {
+            onGroupTipReceived(tip.opUserName, tip.timeStr, tip.actionText, tip.groupName, tip.remark);
+            if (tip.tipType == kTIMGroupTip_Invite && !tip.memberList.isEmpty()) {
+                onNewMemberJoined(tip.groupId, tip.memberList);
+            }
+        }
+        cache.clear();
+    }
 };
 

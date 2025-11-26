@@ -133,58 +133,96 @@ private slots:
             return;
         }
 
+        // 清空之前的搜索结果
+        clearSearchResults();
+        // 重置搜索结果计数
+        m_groupCount = 0;
+        m_teacherCount = 0;
+
         // 判断搜索类型：如果搜索键是纯数字或包含@TGS，可能是group_id；否则可能是group_name
         QString searchType = "group_name"; // 默认按名称搜索
         if (searchKey.contains("@TGS") || (searchKey.length() <= 10 && searchKey.toInt() > 0)) {
             searchType = "group_id";
         }
 
-        // 构建URL
-        QUrl url("http://47.100.126.194:5000/groups/search");
-        QUrlQuery query;
-        query.addQueryItem("schoolid", userInfo.schoolId);
+        // 构建群组搜索URL
+        QUrl groupUrl("http://47.100.126.194:5000/groups/search");
+        QUrlQuery groupQuery;
+        groupQuery.addQueryItem("schoolid", userInfo.schoolId);
         if (searchType == "group_id") {
-            query.addQueryItem("group_id", searchKey);
+            groupQuery.addQueryItem("group_id", searchKey);
         } else {
-            query.addQueryItem("group_name", searchKey);
+            groupQuery.addQueryItem("group_name", searchKey);
         }
-        url.setQuery(query);
+        groupUrl.setQuery(groupQuery);
 
-        // 发送搜索请求
+        // 发送群组搜索请求
         if (m_httpHandler) {
-            m_httpHandler->get(url.toString());
-            qDebug() << "搜索请求:" << url.toString();
+            m_httpHandler->get(groupUrl.toString());
+            qDebug() << "群组搜索请求:" << groupUrl.toString();
         }
+
+        // 构建教师搜索URL
+        QUrl teacherUrl("http://47.100.126.194:5000/teachers/search");
+        QUrlQuery teacherQuery;
+        teacherQuery.addQueryItem("schoolid", userInfo.schoolId);
+        
+        // 判断教师搜索类型：如果搜索键是纯数字，可能是teacher_unique_id；否则按name搜索
+        bool isNumeric = false;
+        searchKey.toInt(&isNumeric);
+        if (isNumeric && searchKey.length() <= 20) {
+            // 可能是teacher_unique_id，尝试按teacher_unique_id搜索
+            teacherQuery.addQueryItem("teacher_unique_id", searchKey);
+        } else {
+            // 按name模糊搜索
+            teacherQuery.addQueryItem("name", searchKey);
+        }
+        teacherUrl.setQuery(teacherQuery);
+
+        // 使用独立的QNetworkAccessManager发送教师搜索请求，避免与群组搜索响应冲突
+        QNetworkAccessManager* teacherManager = new QNetworkAccessManager(this);
+        QNetworkRequest teacherRequest(teacherUrl);
+        QNetworkReply* teacherReply = teacherManager->get(teacherRequest);
+        
+        connect(teacherReply, &QNetworkReply::finished, this, [=]() {
+            if (teacherReply->error() == QNetworkReply::NoError) {
+                QByteArray data = teacherReply->readAll();
+                handleTeacherSearchResponse(QString::fromUtf8(data));
+            } else {
+                qDebug() << "教师搜索失败:" << teacherReply->errorString();
+            }
+            teacherReply->deleteLater();
+            teacherManager->deleteLater();
+        });
+        
+        qDebug() << "教师搜索请求:" << teacherUrl.toString();
     }
 
     void handleSearchResponse(const QString& responseString)
     {
-        // 清空之前的搜索结果
-        clearSearchResults();
-
         QJsonParseError parseError;
         QJsonDocument jsonDoc = QJsonDocument::fromJson(responseString.toUtf8(), &parseError);
         if (parseError.error != QJsonParseError::NoError) {
-            qDebug() << "JSON解析错误:" << parseError.errorString();
+            qDebug() << "群组搜索JSON解析错误:" << parseError.errorString();
             return;
         }
 
         if (!jsonDoc.isObject()) {
-            qDebug() << "返回的不是JSON对象";
+            qDebug() << "群组搜索返回的不是JSON对象";
             return;
         }
 
         QJsonObject obj = jsonDoc.object();
         if (!obj["data"].isObject()) {
-            qDebug() << "返回数据中没有data字段";
+            qDebug() << "群组搜索返回数据中没有data字段";
             return;
         }
 
         QJsonObject dataObj = obj["data"].toObject();
         
-        // 更新搜索结果数量
-        int count = dataObj["count"].toInt();
-        m_lblNum->setText(QString::number(count));
+        // 更新群组搜索结果数量
+        m_groupCount = dataObj["count"].toInt();
+        updateTotalCount();
 
         // 处理群组列表
         if (dataObj["groups"].isArray()) {
@@ -213,6 +251,61 @@ private slots:
                            classid.isEmpty() ? "群组" : "班级群", desc, groupId, isMember);
             }
         }
+    }
+
+    void handleTeacherSearchResponse(const QString& responseString)
+    {
+        QJsonParseError parseError;
+        QJsonDocument jsonDoc = QJsonDocument::fromJson(responseString.toUtf8(), &parseError);
+        if (parseError.error != QJsonParseError::NoError) {
+            qDebug() << "教师搜索JSON解析错误:" << parseError.errorString();
+            return;
+        }
+
+        if (!jsonDoc.isObject()) {
+            qDebug() << "教师搜索返回的不是JSON对象";
+            return;
+        }
+
+        QJsonObject obj = jsonDoc.object();
+        if (!obj["data"].isObject()) {
+            qDebug() << "教师搜索返回数据中没有data字段";
+            return;
+        }
+
+        QJsonObject dataObj = obj["data"].toObject();
+        
+        // 更新教师搜索结果数量
+        m_teacherCount = dataObj["count"].toInt();
+        updateTotalCount();
+
+        // 处理教师列表
+        if (dataObj["teachers"].isArray()) {
+            QJsonArray teachersArray = dataObj["teachers"].toArray();
+            for (int i = 0; i < teachersArray.size(); i++) {
+                QJsonObject teacherObj = teachersArray[i].toObject();
+                QString teacherId = teacherObj["id"].toString();
+                QString teacherName = teacherObj["name"].toString();
+                QString teacherUniqueId = teacherObj["teacher_unique_id"].toString();
+                QString schoolId = teacherObj["schoolId"].toString();
+
+                // 构建描述信息
+                QString desc = "教师唯一ID: " + teacherUniqueId;
+                if (teacherId.toInt() > 0) {
+                    desc += " | ID: " + teacherId;
+                }
+
+                // 添加教师搜索结果项（教师不需要加入按钮，所以groupId为空，isMember为false）
+                addListItem(m_listLayout, "", teacherName, "1", "教师", desc, "", false);
+            }
+        }
+    }
+
+    void updateTotalCount()
+    {
+        // 更新总搜索结果数量
+        int totalCount = m_groupCount + m_teacherCount;
+        m_lblNum->setText(QString::number(totalCount));
     }
 
     void loadJoinedGroups()
@@ -442,31 +535,34 @@ private:
         infoLayout->addWidget(lblName);
         infoLayout->addWidget(lblDesc);
 
-        QPushButton* btnJoin = new QPushButton(isMember ? "已加入" : "加入");
-        
-        // 根据是否已加入设置按钮样式和状态
-        if (isMember) {
-            // 已加入：灰化按钮，禁用
-            btnJoin->setEnabled(false);
-            btnJoin->setStyleSheet("background-color: gray; color: white; padding: 4px 8px;");
-        } else {
-            // 未加入：可点击
-            btnJoin->setEnabled(true);
-        btnJoin->setStyleSheet("background-color: lightblue; padding: 4px 8px;");
-            
-            // 连接加入按钮点击事件
-            connect(btnJoin, &QPushButton::clicked, this, [=]() {
-                onJoinGroupClicked(groupId, name);
-            });
-        }
-        
-        btnJoin->setProperty("group_id", groupId);
-        btnJoin->setProperty("group_name", name);
-
         itemLayout->addWidget(avatar);
         itemLayout->addLayout(infoLayout);
         itemLayout->addStretch();
-        itemLayout->addWidget(btnJoin);
+        
+        // 只有当groupId不为空时才显示"加入"按钮（用于群组搜索结果）
+        if (!groupId.isEmpty()) {
+            QPushButton* btnJoin = new QPushButton(isMember ? "已加入" : "加入");
+            
+            // 根据是否已加入设置按钮样式和状态
+            if (isMember) {
+                // 已加入：灰化按钮，禁用
+                btnJoin->setEnabled(false);
+                btnJoin->setStyleSheet("background-color: gray; color: white; padding: 4px 8px;");
+            } else {
+                // 未加入：可点击
+                btnJoin->setEnabled(true);
+                btnJoin->setStyleSheet("background-color: lightblue; padding: 4px 8px;");
+                
+                // 连接加入按钮点击事件
+                connect(btnJoin, &QPushButton::clicked, this, [=]() {
+                    onJoinGroupClicked(groupId, name);
+                });
+            }
+            
+            btnJoin->setProperty("group_id", groupId);
+            btnJoin->setProperty("group_name", name);
+            itemLayout->addWidget(btnJoin);
+        }
 
         QFrame* frame = new QFrame;
         frame->setLayout(itemLayout);
@@ -483,4 +579,6 @@ private:
     QVBoxLayout* m_listLayout = nullptr;
     QString m_currentUserId; // 当前用户ID
     QSet<QString> m_joinedGroupIds; // 已加入的群组ID集合
+    int m_groupCount = 0; // 群组搜索结果数量
+    int m_teacherCount = 0; // 教师搜索结果数量
 };

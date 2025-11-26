@@ -12,10 +12,15 @@
 #include <QMouseEvent>
 #include <QStyle>
 #include <QDir>
+#include <QPixmap>
 #include <qpainterpath.h>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QVector>
+#include <QSet>
+#include <QTreeWidget>
+#include <QHash>
 #include "FriendNotifyDialog.h"
 #include "TACAddGroupWidget.h"
 #include "GroupNotifyDialog.h"
@@ -44,14 +49,8 @@ class FriendGroupDialog : public QDialog
 public:
     FriendGroupDialog(QWidget* parent, TaQTWebSocket* pWs);
 
-    // 帮助函数：生成一行左右两个按钮布局（相同颜色）
-    static QHBoxLayout* makeRowBtn(const QString& leftText, const QString& rightText, const QString& bgColor, const QString& fgColor);
-
     // 辅助函数：为 ScheduleDialog 建立群聊退出信号连接
     void connectGroupLeftSignal(ScheduleDialog* scheduleDlg, const QString& groupId);
-
-    // 帮助函数：生成一行两个不同用途的按钮（如头像+昵称）
-    QHBoxLayout* makePairBtn(const QString& leftText, const QString& rightText, const QString& bgColor, const QString& fgColor, QString unique_group_id, QString classid, bool iGroupOwner, bool isClassGroup = true);
 
     void InitData();
 
@@ -108,12 +107,36 @@ private:
     TAHttpHandler* m_httpHandler = NULL;
     QVBoxLayout* fLayout = NULL;
     QVBoxLayout* gLayout = NULL;
-    QVBoxLayout* gAdminLayout = NULL; // 班级群-管理布局
-    QVBoxLayout* gJoinLayout = NULL; // 班级群-加入布局
-    QVBoxLayout* gNormalAdminLayout = NULL; // 普通群-管理布局
-    QVBoxLayout* gNormalJoinLayout = NULL; // 普通群-加入布局
     TaQTWebSocket* m_pWs = NULL;
     QMap<QString, ScheduleDialog*> m_scheduleDlg;
     QList<Notification> notifications;
     QSet<QString> m_setClassId;
+
+    QTreeWidget* m_friendTree = nullptr;
+    QTreeWidgetItem* m_classRootItem = nullptr;
+    QTreeWidgetItem* m_teacherRootItem = nullptr;
+    QHash<QString, QTreeWidgetItem*> m_classItemMap;
+    QHash<QString, QTreeWidgetItem*> m_teacherItemMap;
+
+    QTreeWidget* m_groupTree = nullptr;
+    QTreeWidgetItem* m_classGroupRoot = nullptr;
+    QTreeWidgetItem* m_classManagedRoot = nullptr;
+    QTreeWidgetItem* m_classJoinedRoot = nullptr;
+    QTreeWidgetItem* m_normalGroupRoot = nullptr;
+    QTreeWidgetItem* m_normalManagedRoot = nullptr;
+    QTreeWidgetItem* m_normalJoinedRoot = nullptr;
+    QHash<QString, QTreeWidgetItem*> m_groupItemMap;
+
+    void setupFriendTree();
+    void clearFriendTree();
+    void updateFriendCounts();
+    void addClassNode(const QString& displayName, const QString& groupId, const QString& classid, bool iGroupOwner, bool isClassGroup);
+    void addTeacherNode(const QString& displayName, const QString& subtitle, const QString& avatarPath, const QString& teacherId);
+    void handleFriendItemActivated(QTreeWidgetItem* item);
+    void setupGroupTree();
+    void clearGroupTree();
+    void updateGroupCounts();
+    void addGroupTreeNode(const QString& displayName, const QString& groupId, const QString& classid, bool iGroupOwner, bool isClassGroup);
+    void handleGroupItemActivated(QTreeWidgetItem* item);
+    void openScheduleForGroup(const QString& groupName, const QString& unique_group_id, const QString& classid, bool iGroupOwner, bool isClassGroup);
 };

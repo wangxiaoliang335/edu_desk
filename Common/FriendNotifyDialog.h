@@ -11,6 +11,7 @@
 #include <QJsonParseError>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QList>
 #include <QDateTime>
 #include <QDebug>
 #include <QMetaObject>
@@ -59,6 +60,7 @@ public:
         
         // 设置静态实例指针（用于全局回调发出信号）
         s_instance() = this;
+        deliverPendingRequests();
         
         // 连接全局信号，接收好友添加请求
         connect(this, &FriendNotifyDialog::friendAddRequestReceived, this, &FriendNotifyDialog::onFriendAddRequestReceived);
@@ -109,13 +111,17 @@ private:
             QDateTime currentTime = QDateTime::currentDateTime();
             QString timeStr = currentTime.toString("yyyy/MM/dd");
             
+            FriendRequest req{ nickName, addWording, timeStr, identifier };
+            
             // 发出全局信号，通知所有FriendNotifyDialog实例（使用QMetaObject::invokeMethod确保线程安全）
             if (s_instance()) {
                 QMetaObject::invokeMethod(s_instance(), "onFriendAddRequestReceived", Qt::QueuedConnection,
-                    Q_ARG(QString, nickName),
-                    Q_ARG(QString, addWording),
-                    Q_ARG(QString, timeStr),
-                    Q_ARG(QString, identifier));
+                    Q_ARG(QString, req.nickName),
+                    Q_ARG(QString, req.addWording),
+                    Q_ARG(QString, req.timeStr),
+                    Q_ARG(QString, req.identifier));
+            } else {
+                pendingFriendRequests().append(req);
             }
         }
     }
@@ -387,5 +393,27 @@ private:
     QWidget* container = NULL;
     QVBoxLayout* listLayout = NULL;
     bool m_bInit = false;
+
+    struct FriendRequest {
+        QString nickName;
+        QString addWording;
+        QString timeStr;
+        QString identifier;
+    };
+
+    static QList<FriendRequest>& pendingFriendRequests()
+    {
+        static QList<FriendRequest> cache;
+        return cache;
+    }
+
+    void deliverPendingRequests()
+    {
+        auto& cache = pendingFriendRequests();
+        for (const auto& req : cache) {
+            onFriendAddRequestReceived(req.nickName, req.addWording, req.timeStr, req.identifier);
+        }
+        cache.clear();
+    }
 };
 
