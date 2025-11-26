@@ -2,6 +2,12 @@
 #include <QScreen>
 #include <QJsonObject>
 #include <QJsonDocument>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QSslSocket>
+#include <QDir>
+#include <QFile>
+#include <QDateTime>
 #include <windows.h>
 #include <tchar.h>
 #include "TACMainDialog.h"
@@ -20,6 +26,7 @@ TACMainDialog::TACMainDialog(QWidget *parent)
 	this->setWindowState(Qt::WindowFullScreen);
 	this->setWindowFlags(Qt::FramelessWindowHint);
     setAttribute(Qt::WA_TranslucentBackground);
+	m_networkManager = new QNetworkAccessManager(this);
 }
 
 TACMainDialog::~TACMainDialog()
@@ -111,36 +118,70 @@ void TACMainDialog::Init(QString qPhone, int user_id)
                                     Login(m_userInfo.teacher_unique_id.toStdString());
                                 }
 
-                                // 没有文件名就用手机号或ID代替
-                                if (m_userInfo.avatar.isEmpty())
-                                    m_userInfo.avatar = oUserInfo.at(0)["id_number"].toString() + "_" + ".png";
-
-                                // 从最后一个 "/" 之后开始截取
-                                QString fileName = m_userInfo.avatar.section('/', -1);  // "320506197910016493_.png"
-
-                                QString saveDir = QCoreApplication::applicationDirPath() + "/avatars/" + m_userInfo.strIdNumber; // 保存图片目录
+                                // 确定保存路径
+                                QString fileName;
+                                QString saveDir = QCoreApplication::applicationDirPath() + "/avatars/" + m_userInfo.strIdNumber;
                                 QDir().mkpath(saveDir);
                                 
-                                QString filePath = saveDir + "/" + fileName;
+                                QString filePath;
+                                
+                                // 如果 avatarBase64 不为空，使用 Base64 数据
+                                if (!avatarBase64.isEmpty()) {
+                                    // 没有文件名就用手机号或ID代替
+                                    if (m_userInfo.avatar.isEmpty())
+                                        m_userInfo.avatar = oUserInfo.at(0)["id_number"].toString() + "_" + ".png";
 
-                                if (avatarBase64.isEmpty()) {
-                                    qWarning() << "No avatar data for" << filePath;
-                                    //continue;
+                                    // 从最后一个 "/" 之后开始截取
+                                    fileName = m_userInfo.avatar.section('/', -1);
+                                    filePath = saveDir + "/" + fileName;
+                                    m_userInfo.strHeadImagePath = filePath;
+
+                                    // Base64 解码成图片二进制数据
+                                    QByteArray imageData = QByteArray::fromBase64(avatarBase64.toUtf8());
+
+                                    // 写入文件（覆盖旧的）
+                                    QFile file(filePath);
+                                    if (!file.open(QIODevice::WriteOnly)) {
+                                        qWarning() << "Cannot open file for writing:" << filePath;
+                                    } else {
+                                        file.write(imageData);
+                                        file.close();
+                                    }
                                 }
-
-                                m_userInfo.strHeadImagePath = filePath;
-
-                                // Base64 解码成图片二进制数据
-                                QByteArray imageData = QByteArray::fromBase64(avatarBase64.toUtf8());
-
-                                // 写入文件（覆盖旧的）
-                                QFile file(filePath);
-                                if (!file.open(QIODevice::WriteOnly)) {
-                                    qWarning() << "Cannot open file for writing:" << filePath;
-                                    //continue;
+                                // 如果 avatarBase64 为空，但 avatar 是 URL，则从 URL 下载
+                                else if (!m_userInfo.avatar.isEmpty() && 
+                                         (m_userInfo.avatar.startsWith("http://") || m_userInfo.avatar.startsWith("https://"))) {
+                                    // 从 URL 中提取文件名
+                                    QUrl url(m_userInfo.avatar);
+                                    fileName = url.fileName();
+                                    
+                                    // 如果无法从URL提取文件名，或文件名没有扩展名，使用时间戳生成文件名
+                                    if (fileName.isEmpty() || !fileName.contains('.')) {
+                                        // 尝试从路径中提取最后一部分
+                                        QString pathPart = m_userInfo.avatar.section('/', -1);
+                                        if (!pathPart.isEmpty() && pathPart.contains('.')) {
+                                            fileName = pathPart;
+                                        } else {
+                                            // 使用ID和时间戳生成文件名
+                                            fileName = m_userInfo.strIdNumber + "_" + QString::number(QDateTime::currentSecsSinceEpoch()) + ".png";
+                                        }
+                                    }
+                                    
+                                    filePath = saveDir + "/" + fileName;
+                                    m_userInfo.strHeadImagePath = filePath;
+                                    
+                                    qDebug() << "Downloading avatar from URL:" << m_userInfo.avatar << "to:" << filePath;
+                                    
+                                    // 从 URL 下载头像
+                                    downloadAvatarFromUrl(m_userInfo.avatar, filePath);
                                 }
-                                file.write(imageData);
-                                file.close();
+                                // 如果都没有，使用默认文件名
+                                else {
+                                    fileName = m_userInfo.strIdNumber + "_" + ".png";
+                                    filePath = saveDir + "/" + fileName;
+                                    m_userInfo.strHeadImagePath = filePath;
+                                    qWarning() << "No avatar data (neither base64 nor URL) for" << filePath;
+                                }
 
                                 /*if (userMenuDlg)
                                 {
@@ -567,4 +608,77 @@ void TACMainDialog::Login(std::string userid) { //登入
 
     //Logf("Login", kTIMLog_Info, "User Id:%s Sig:%s", userid.c_str(), usersig.c_str());
     //SetControlText(_T("cur_loginid_lbl"), UTF82Wide(userid).c_str());
+}
+
+void TACMainDialog::downloadAvatarFromUrl(const QString& avatarUrl, const QString& savePath)
+{
+    if (!m_networkManager) {
+        qWarning() << "Network manager is not initialized";
+        return;
+    }
+
+    QUrl url(avatarUrl);
+    if (!url.isValid()) {
+        qWarning() << "Invalid avatar URL:" << avatarUrl;
+        return;
+    }
+
+    QNetworkRequest networkRequest;
+    networkRequest.setUrl(url);
+    
+    // 如果是 HTTPS，设置 SSL 配置
+    if (url.scheme().toLower() == "https") {
+        QSslConfiguration sslConfig = QSslConfiguration::defaultConfiguration();
+        sslConfig.setPeerVerifyMode(QSslSocket::VerifyNone);
+        sslConfig.setProtocol(QSsl::TlsV1_2OrLater);
+        networkRequest.setSslConfiguration(sslConfig);
+    }
+
+    QNetworkReply* reply = m_networkManager->get(networkRequest);
+    
+    // 忽略 SSL 错误（开发环境常用做法）
+    connect(reply, &QNetworkReply::sslErrors, this, [=](const QList<QSslError>& errors) {
+        qDebug() << "SSL errors ignored for avatar download, URL:" << avatarUrl;
+        reply->ignoreSslErrors();
+    });
+
+    // 处理下载完成
+    connect(reply, &QNetworkReply::finished, this, [=]() {
+        if (reply->error() == QNetworkReply::NoError) {
+            QByteArray imageData = reply->readAll();
+            if (imageData.isEmpty()) {
+                qWarning() << "Avatar image data is empty from URL:" << avatarUrl;
+            } else {
+                // 保存图片到本地
+                QFile file(savePath);
+                if (file.open(QIODevice::WriteOnly)) {
+                    file.write(imageData);
+                    file.close();
+                    qDebug() << "Avatar downloaded successfully:" << savePath;
+                    
+                    // 更新用户信息中的头像路径
+                    m_userInfo.strHeadImagePath = savePath;
+                    
+                    // 更新 CommonInfo 中的用户信息
+                    CommonInfo::InitData(m_userInfo);
+                    
+                    // 如果 userMenuDlg 已创建，更新其头像显示
+                    if (userMenuDlg) {
+                        userMenuDlg->updateAvatar(savePath);
+                    }
+                    
+                    // 如果 schoolInfoDlg 已创建，也更新其显示
+                    if (schoolInfoDlg) {
+                        schoolInfoDlg->InitData(m_userInfo);
+                    }
+                } else {
+                    qWarning() << "Cannot open file for writing:" << savePath;
+                }
+            }
+        } else {
+            qWarning() << "Failed to download avatar from URL:" << avatarUrl 
+                       << ", error:" << reply->errorString();
+        }
+        reply->deleteLater();
+    });
 }

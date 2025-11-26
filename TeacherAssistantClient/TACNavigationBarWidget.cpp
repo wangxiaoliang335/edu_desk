@@ -160,7 +160,7 @@ TACNavigationBarWidget::TACNavigationBarWidget(QWidget *parent)
     layout->setSpacing(20);
     layout->setAlignment(Qt::AlignLeft);
     setLayout(layout);
-    resize(1088, 88);
+    resize(668, 88);
     this->setBackgroundColor(WIDGET_BACKGROUND_COLOR);
     this->setBorderColor(WIDGET_BORDER_COLOR);
     this->setBorderWidth(WIDGET_BORDER_WIDTH);

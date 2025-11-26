@@ -40,6 +40,27 @@ public:
         m_userInfo = userInfo;
     }
 
+    void updateAvatar(const QString& avatarPath)
+    {
+        // 更新用户信息中的头像路径
+        m_userInfo.strHeadImagePath = avatarPath;
+        
+        // 如果头像标签已创建，立即更新显示
+        if (m_avatarLabel) {
+            QPixmap pixmap(avatarPath);
+            if (!pixmap.isNull()) {
+                m_avatarLabel->setAvatar(pixmap);
+                qDebug() << "TAUserMenuDialog avatar updated:" << avatarPath;
+            } else {
+                qWarning() << "Failed to load avatar pixmap from:" << avatarPath;
+            }
+        } else {
+            // 如果头像标签尚未创建，只更新数据
+            // 当 InitUI() 被调用时，会使用新的头像路径
+            qDebug() << "TAUserMenuDialog avatar path updated (UI not initialized yet):" << avatarPath;
+        }
+    }
+
     void InitUI()
     {
         // 隐藏标题栏（图片里没有标题栏）

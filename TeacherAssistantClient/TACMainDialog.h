@@ -35,6 +35,9 @@
 #include "TaQTWebSocket.h"
 #include "TIMCloud.h"
 #include "GenerateTestUserSig.h"
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QSslConfiguration>
 
 class TACMainDialog : public QDialog
 {
@@ -52,6 +55,7 @@ protected:
 
 private:
 	void updateBackground(const QString& fileName);
+	void downloadAvatarFromUrl(const QString& avatarUrl, const QString& savePath);
 
 //private slots:
 //    void onConnected() {
@@ -131,6 +135,7 @@ private:
 	QPointer<SchoolInfoDialog> schoolInfoDlg;
 	TAHttpHandler* m_httpHandler = NULL;
 	UserInfo m_userInfo;
+	QNetworkAccessManager* m_networkManager = NULL;
 
 	static TaQTWebSocket* m_ws;
 

@@ -13,6 +13,7 @@
 #include <qfiledialog.h>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QTextStream>
 #include <qdebug.h>
 #include <qlineedit.h>
@@ -38,8 +39,17 @@
 #include <QPainterPath>
 #include <QRegion>
 #include <QGroupInfo.h>
+#include <QDesktopServices>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QStandardPaths>
 #include <Windows.h>
+#include <shellapi.h>
 #include <QRegularExpression>
+#include <string>
+#include <QProcess>
+#include <QThread>
 #include "CustomListDialog.h"
 #include "ClickableLabel.h"
 #include "TAHttpHandler.h"
@@ -1028,7 +1038,9 @@ public:
 			qWarning() << "[RTMP][Error]" << err;
 		});
 		
-		// 按下按钮 -> 开始 RTMP 推流
+		// ========== 原有功能已注释 ==========
+		// 按下按钮 -> 开始 RTMP 推流（已注释）
+		#if 0
 		connect(btnTalk, &QPushButton::pressed, this, [=]() {
 			pressStartMs = QDateTime::currentMSecsSinceEpoch();
 			btnTalk->setStyleSheet("background-color: red; color: white; padding: 4px 8px; font-size:14px;");
@@ -1036,17 +1048,11 @@ public:
 			qDebug() << "开始对讲（按钮按下）- 使用 RTMP 推流";
 			
 			// 注释掉原来的音频采集和发送代码（可能后面还会用到）
-			/*
-			start();
+			// start();
 			// 发送开始包（flag=0）
-			QByteArray empty;
-			encodeAndSend(empty, 0);
-			*/
+			// QByteArray empty;
+			// encodeAndSend(empty, 0);
 			
-			#if 0
-			// 使用 WebRTC 连接到 SRS 服务器（已暂时停用）
-			// ...
-			#else
 			// 使用 RTMP 协议推流到 SRS，仅采集本地音频
 			if (m_unique_group_id.isEmpty() || m_userId.isEmpty()) {
 				qWarning() << "RTMP 推流失败：群组ID或用户ID为空";
@@ -1105,35 +1111,24 @@ public:
 				return;
 			}
 			qDebug() << "RTMP 推流已启动，流名称:" << streamName;
-			#endif
 		});
 
-		// 松开按钮 -> 停止 RTMP 推流
+		// 松开按钮 -> 停止 RTMP 推流（已注释）
 		connect(btnTalk, &QPushButton::released, this, [=]() {
 			qint64 releaseMs = QDateTime::currentMSecsSinceEpoch();
 			qint64 duration = releaseMs - pressStartMs;
 
 			// 注释掉原来的音频采集和发送代码（可能后面还会用到）
-			/*
 			// 发送结束包（flag=2）
-			QByteArray empty;
-			encodeAndSend(empty, 2);
-			stopAudioCapture();  // 停止采集
-			*/
+			// QByteArray empty;
+			// encodeAndSend(empty, 2);
+			// stopAudioCapture();  // 停止采集
 
-			#if 0
-			// 断开 WebRTC 连接（已停用）
-			if (m_webrtcAudioSender) {
-				m_webrtcAudioSender->disconnectFromServer();
-				qDebug() << "WebRTC 连接已断开";
-			}
-			#else
 			stopAudioCapture();
 			if (m_rtmpStreamer && m_rtmpStreamer->isRunning()) {
 				m_rtmpStreamer->stop();
 				qDebug() << "RTMP 推流已停止";
 			}
-			#endif
 
 			if (duration < 500) {
 				qDebug() << "录音时间过短(" << duration << "ms)，丢弃";
@@ -1144,6 +1139,14 @@ public:
 
 			btnTalk->setStyleSheet("background-color: green; color: white; padding: 4px 8px; font-size:14px;");
 			btnTalk->setText("按住开始对讲");
+		});
+		#endif
+
+		// ========== 新功能：点击按钮弹出对讲网页 ==========
+		// 点击按钮 -> 弹出对讲界面网页
+		connect(btnTalk, &QPushButton::clicked, this, [=]() {
+			qDebug() << "点击对讲按钮，准备打开对讲界面";
+			openIntercomWebPage();
 		});
 	}
 
@@ -1489,6 +1492,12 @@ private:
 	
 	// 更新座位颜色（根据分段或渐变）
 	void updateSeatColors();
+	
+	// 打开对讲界面网页
+	void openIntercomWebPage();
+	
+	// 从文件加载对讲界面HTML模板并替换数据
+	QString loadIntercomHtmlTemplate(const QString& escapedMembersJson);
 };
 
 // 实现排座方法
@@ -2146,5 +2155,259 @@ inline void ScheduleDialog::uploadSeatTableToServer()
 	m_httpHandler->post(url, jsonData);
 	qDebug() << "开始上传座位表到服务器，班级ID:" << m_classid << "，座位数量:" << seatsArray.size();
 }
+
+// 打开对讲界面网页
+inline void ScheduleDialog::openIntercomWebPage()
+{
+	qDebug() << "开始创建对讲界面网页";
+	
+	// 检查群成员信息是否为空，如果为空则尝试加载
+	if (m_groupMemberInfo.isEmpty()) {
+		qDebug() << "群成员信息为空，尝试从服务器加载...";
+		
+		// 如果没有群组ID，无法加载
+		if (m_unique_group_id.isEmpty()) {
+			QMessageBox::warning(this, "错误", "群组ID为空，无法加载群成员信息！");
+			return;
+		}
+		
+		// 从服务器获取群成员列表
+		if (m_httpHandler) {
+			QUrl url("http://47.100.126.194:5000/groups/members");
+			QUrlQuery query;
+			query.addQueryItem("group_id", m_unique_group_id);
+			url.setQuery(query);
+			m_httpHandler->get(url.toString());
+			qDebug() << "已请求加载群成员列表，等待响应...";
+		}
+		
+		// 显示提示信息，等待成员列表加载完成
+		QMessageBox::information(this, "提示", "正在加载群成员信息，请稍后再试！");
+		return;
+	}
+	
+	// 获取当前用户信息
+	UserInfo userInfo = CommonInfo::GetData();
+	QString currentUserId = m_userId.isEmpty() ? userInfo.teacher_unique_id : m_userId;
+	QString currentUserName = m_userName.isEmpty() ? userInfo.strName : m_userName;
+	QString currentUserIcon = userInfo.strHeadImagePath.isEmpty() ? 
+		(userInfo.avatar.isEmpty() ? "" : userInfo.avatar) : userInfo.strHeadImagePath;
+	
+	// 如果没有头像路径，使用默认头像URL
+	if (currentUserIcon.isEmpty()) {
+		currentUserIcon = "https://via.placeholder.com/100";  // 默认头像
+	} else {
+		// 如果头像路径是本地路径，转换为file://协议
+		if (QFile::exists(currentUserIcon)) {
+			currentUserIcon = QUrl::fromLocalFile(currentUserIcon).toString();
+		}
+	}
+	
+	// 准备成员数据（JSON格式）
+	QJsonArray membersArray;
+	for (const GroupMemberInfo& member : m_groupMemberInfo) {
+		QJsonObject memberObj;
+		memberObj["id"] = member.member_id;  // 唯一编号
+		memberObj["name"] = member.member_name;  // 名字
+		memberObj["role"] = member.member_role;  // 角色（可选）
+		membersArray.append(memberObj);
+	}
+	
+	// 准备传递给HTML的数据，包含成员列表和当前用户信息
+	QJsonObject dataObj;
+	dataObj["members"] = membersArray;
+	dataObj["current_user"] = QJsonObject{
+		{"id", currentUserId},
+		{"name", currentUserName},
+		{"icon", currentUserIcon}
+	};
+	// 添加班级群的唯一编号
+	dataObj["group_id"] = m_unique_group_id;
+	
+	qDebug() << "班级群唯一编号 (m_unique_group_id):" << m_unique_group_id;
+	if (m_unique_group_id.isEmpty()) {
+		qWarning() << "警告：班级群唯一编号为空！";
+	}
+	
+	QJsonDocument doc(dataObj);
+	QString dataJson = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+	
+	// 对JSON字符串进行转义，以便安全地插入到JavaScript的单引号字符串中
+	QString escapedJson = dataJson;
+	// 注意：先转义反斜杠，再转义其他字符
+	escapedJson.replace("\\", "\\\\");  // 转义反斜杠（所有反斜杠都需要转义）
+	escapedJson.replace("'", "\\'");    // 转义单引号
+	escapedJson.replace("\n", "\\n");   // 转义换行
+	escapedJson.replace("\r", "\\r");   // 转义回车
+	
+	qDebug() << "数据JSON:" << dataJson;
+	qDebug() << "当前用户ID:" << currentUserId << "，名称:" << currentUserName;
+	qDebug() << "班级群唯一编号:" << m_unique_group_id;
+	
+	// 验证用户ID是否存在
+	if (currentUserId.isEmpty()) {
+		qWarning() << "警告：当前用户ID为空！";
+		qWarning() << "m_userId:" << m_userId;
+		qWarning() << "userInfo.teacher_unique_id:" << userInfo.teacher_unique_id;
+	}
+	
+	// 验证群组ID是否存在
+	if (m_unique_group_id.isEmpty()) {
+		qWarning() << "警告：班级群唯一编号为空，无法创建临时房间！";
+		QMessageBox::warning(this, "警告", "班级群唯一编号为空，无法创建临时房间！");
+		return;
+	}
+	
+	// 创建临时HTML文件
+	QString tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+	QDir().mkpath(tempDir);
+	QString htmlFilePath = tempDir + "/intercom_page_" + QString::number(QDateTime::currentMSecsSinceEpoch()) + ".html";
+	
+	// 读取HTML模板文件并替换成员数据
+	QString htmlContent = loadIntercomHtmlTemplate(escapedJson);
+	if (htmlContent.isEmpty()) {
+		qWarning() << "无法加载HTML模板文件";
+		QMessageBox::critical(this, "错误", "无法加载对讲界面模板文件！");
+		return;
+	}
+	
+	// 写入文件
+	QFile htmlFile(htmlFilePath);
+	if (!htmlFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+		qWarning() << "无法创建HTML文件:" << htmlFilePath;
+		QMessageBox::critical(this, "错误", "无法创建对讲界面文件！");
+		return;
+	}
+	
+	QTextStream out(&htmlFile);
+	out.setCodec("UTF-8");
+	out << htmlContent;
+	out.flush(); // 确保数据写入磁盘
+	htmlFile.close();
+	
+	// 验证文件是否成功创建
+	QFileInfo fileInfo(htmlFilePath);
+	if (!fileInfo.exists() || fileInfo.size() == 0) {
+		qWarning() << "HTML文件创建失败或文件大小为0:" << htmlFilePath;
+		QMessageBox::critical(this, "错误", QString("无法创建对讲界面文件！\n文件路径: %1").arg(htmlFilePath));
+		return;
+	}
+	
+	qDebug() << "HTML文件已创建:" << htmlFilePath << "，文件大小:" << fileInfo.size() << "字节";
+	
+	// 将路径转换为本地路径格式（Windows下使用反斜杠）
+	QString nativePath = QDir::toNativeSeparators(htmlFilePath);
+	
+	qDebug() << "准备打开HTML文件，路径:" << nativePath;
+	
+	// 方法1：优先使用QDesktopServices打开（Qt推荐的方式）
+	// 使用file://协议格式
+	QUrl fileUrl = QUrl::fromLocalFile(nativePath);
+	
+	qDebug() << "尝试使用QDesktopServices打开，URL:" << fileUrl.toString();
+	bool opened = QDesktopServices::openUrl(fileUrl);
+	
+	if (opened) {
+		qDebug() << "成功使用QDesktopServices打开HTML文件";
+		return;
+	}
+	
+	qWarning() << "QDesktopServices返回false，尝试其他方法";
+	
+	// 方法2：在Windows上使用explorer直接打开文件（最可靠）
+	#ifdef _WIN32
+		qDebug() << "尝试使用explorer打开文件:" << nativePath;
+		if (QProcess::startDetached("explorer", QStringList() << nativePath)) {
+			qDebug() << "成功使用explorer打开HTML文件";
+			return;
+		}
+		
+		qWarning() << "explorer打开失败，尝试使用cmd start命令";
+		
+		// 方法3：使用cmd start命令
+		// 注意：start后的第一个参数是窗口标题（可以为空），第二个参数是文件路径
+		QStringList cmdArgs;
+		cmdArgs << "/c" << "start" << "" << nativePath;
+		
+		qDebug() << "执行命令: cmd" << cmdArgs.join(" ");
+		qDebug() << "完整命令: cmd /c start \"\" \"" << nativePath << "\"";
+		if (QProcess::startDetached("cmd", cmdArgs)) {
+			qDebug() << "成功使用cmd start命令打开HTML文件";
+			return;
+		}
+		
+		qWarning() << "cmd start命令失败，尝试使用rundll32";
+		
+		// 方法4：使用rundll32调用shell32.dll（最后的备用方案）
+		QStringList rundllArgs;
+		rundllArgs << "shell32.dll,ShellExec_RunDLL" << nativePath;
+		if (QProcess::startDetached("rundll32.exe", rundllArgs)) {
+			qDebug() << "成功使用rundll32打开HTML文件";
+			return;
+		}
+	#endif
+	
+	// 方法4：如果都失败了，显示错误信息并显示文件路径
+	qWarning() << "所有打开方法都失败";
+	QMessageBox::critical(this, "错误", 
+		QString("无法自动打开对讲界面！\n\n文件已创建在:\n%1\n\n请手动在浏览器中打开该文件。").arg(nativePath));
+}
+
+	// 从文件加载对讲界面HTML模板并替换数据
+	inline QString ScheduleDialog::loadIntercomHtmlTemplate(const QString& escapedMembersJson)
+{
+	// HTML模板文件路径 - 优先使用应用程序目录下的文件
+	QString templatePath;
+	
+	// 1. 尝试从应用程序目录读取
+	QString appDirPath = QCoreApplication::applicationDirPath() + "/res/intercom.html";
+	if (QFile::exists(appDirPath)) {
+		templatePath = appDirPath;
+	}
+	// 2. 尝试从源码目录读取（开发环境）
+	else {
+		QString sourcePath = QCoreApplication::applicationDirPath() + "/../Common/res/intercom.html";
+		if (QFile::exists(sourcePath)) {
+			templatePath = sourcePath;
+		}
+		// 3. 尝试从当前工作目录读取
+		else {
+			QString currentPath = "./Common/res/intercom.html";
+			if (QFile::exists(currentPath)) {
+				templatePath = currentPath;
+			}
+		}
+	}
+	
+	// 如果找不到模板文件，返回错误
+	if (templatePath.isEmpty() || !QFile::exists(templatePath)) {
+		qWarning() << "HTML模板文件不存在:" << templatePath;
+		qWarning() << "请确保 intercom.html 文件存在于以下位置之一:";
+		qWarning() << "  1. " << QCoreApplication::applicationDirPath() + "/res/intercom.html";
+		qWarning() << "  2. " << QCoreApplication::applicationDirPath() + "/../Common/res/intercom.html";
+		qWarning() << "  3. ./Common/res/intercom.html";
+		return QString(); // 返回空字符串表示失败
+	}
+	
+	qDebug() << "加载HTML模板文件:" << templatePath;
+	
+	// 读取HTML模板文件
+	QFile htmlTemplateFile(templatePath);
+	if (!htmlTemplateFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+		qWarning() << "无法打开HTML模板文件:" << templatePath;
+		return QString(); // 返回空字符串表示失败
+	}
+	
+	QTextStream in(&htmlTemplateFile);
+	in.setCodec("UTF-8");
+	QString htmlTemplate = in.readAll();
+	htmlTemplateFile.close();
+	
+	// 替换占位符
+	QString html = htmlTemplate.replace("{{DATA_PLACEHOLDER}}", escapedMembersJson);
+	
+	return html;
+}
+
 
 // 热力图相关方法的实现在 ScheduleDialog_Heatmap.cpp 中
