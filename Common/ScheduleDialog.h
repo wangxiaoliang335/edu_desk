@@ -47,6 +47,7 @@
 #include <Windows.h>
 #include <shellapi.h>
 #include <QRegularExpression>
+#include <QSet>
 #include <string>
 #include <QProcess>
 #include <QThread>
@@ -794,9 +795,9 @@ public:
 
 		// 座位表格区域 - 重新设计座位布局
 		// 第1行：4个座位（过道两侧各2个）
-		// 第2-8行：每行8个座位（左列3个 + 中列3个 + 右列2个，中间有两条过道）
+		// 第2-8行：每行8个座位（4个数据块，每个2列，中间有3个过道）
 		// 总共60个座位
-		seatTable = new QTableWidget(8, 10); // 8行，10列（包含过道列）
+		seatTable = new QTableWidget(8, 11); // 8行，11列（包含过道列）
 		seatTable->horizontalHeader()->setVisible(false);
 		seatTable->verticalHeader()->setVisible(false);
 		seatTable->setStyleSheet(
@@ -812,8 +813,8 @@ public:
 		);
 		
 		// 设置列宽和行高（宽度扩大15%，高度扩大7%）
-		for (int col = 0; col < 10; ++col) {
-			seatTable->setColumnWidth(col, 115); // 列宽：100 × 1.15 = 115
+		for (int col = 0; col < 11; ++col) {
+			seatTable->setColumnWidth(col, 105); // 列宽：100 × 1.15 = 115
 		}
 		for (int row = 0; row < 8; ++row) {
 			seatTable->setRowHeight(row, 59); // 行高：55 × 1.07 = 59
@@ -821,7 +822,7 @@ public:
 		
 		// 初始化所有单元格，为每个单元格创建按钮
 		for (int row = 0; row < 8; ++row) {
-			for (int col = 0; col < 10; ++col) {
+			for (int col = 0; col < 11; ++col) {
 				QPushButton* btn = new QPushButton("");
 				btn->setStyleSheet(
 					"QPushButton { "
@@ -851,9 +852,33 @@ public:
 			}
 		}
 		
-		// 第1行布局：4个座位（过道两侧各2个）
-		// 左侧2个座位：列0-1，右侧2个座位：列8-9，中间列2-7合并为过道
-		seatTable->setSpan(0, 2, 1, 6); // 合并第1行的列2-7作为中央过道
+		// 第1行布局：6个座位（讲台两侧）
+		// 左侧2个座位：列0-1，列3（讲台左边），列7（讲台右边），右侧2个座位：列9-10
+		// 设置第1行左侧2个座位（列0-1）
+		for (int col = 0; col < 2; ++col) {
+			QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(0, col));
+			if (btn) {
+				btn->setProperty("isSeat", true);
+			}
+		}
+		// 设置第1行列3座位（讲台左边）
+		QPushButton* btnCol3 = qobject_cast<QPushButton*>(seatTable->cellWidget(0, 3));
+		if (btnCol3) {
+			btnCol3->setProperty("isSeat", true);
+		}
+		// 设置第1行列7座位（讲台右边）
+		QPushButton* btnCol7 = qobject_cast<QPushButton*>(seatTable->cellWidget(0, 7));
+		if (btnCol7) {
+			btnCol7->setProperty("isSeat", true);
+		}
+		// 设置第1行右侧2个座位（列9-10）
+		for (int col = 9; col < 11; ++col) {
+			QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(0, col));
+			if (btn) {
+				btn->setProperty("isSeat", true);
+			}
+		}
+		seatTable->setSpan(0, 4, 1, 3); // 合并第1行的列2-8作为中央过道
 		QPushButton* aisle1Btn = qobject_cast<QPushButton*>(seatTable->cellWidget(0, 2));
 		if (aisle1Btn) {
 			aisle1Btn->setEnabled(false);
@@ -864,12 +889,23 @@ public:
 				"}"
 			);
 		}
+
+	    aisle1Btn = qobject_cast<QPushButton*>(seatTable->cellWidget(0, 8));
+		if (aisle1Btn) {
+			aisle1Btn->setEnabled(false);
+			aisle1Btn->setStyleSheet(
+				"QPushButton { "
+				"background-color: #f0f0f0; "
+				"border: 1px solid #ccc; "
+				"}"
+			);
+		}
 		
-		// 第2-8行布局：每行8个座位
-		// 左列3个：列0-2，过道列3，中列3个：列4-6，过道列7，右列2个：列8-9
+		// 第2-8行布局：每行8个座位（4个数据块，每个2列，中间有3个过道）
+		// 数据块1：列0-1，过道1：列2，数据块2：列3-4，过道2：列5，数据块3：列6-7，过道3：列8，数据块4：列9-10
 		for (int row = 1; row < 8; ++row) {
-			// 左列座位：列0-2
-			for (int col = 0; col < 3; ++col) {
+			// 数据块1座位：列0-1（第一个数据块）
+			for (int col = 0; col < 2; ++col) {
 				QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
 				if (btn) {
 					btn->setText(""); // 可以显示座位号或学生姓名
@@ -877,11 +913,11 @@ public:
 				}
 			}
 			
-			// 左过道：列3
-			QPushButton* aisleLeftBtn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, 3));
-			if (aisleLeftBtn) {
-				aisleLeftBtn->setEnabled(false);
-				aisleLeftBtn->setStyleSheet(
+			// 过道1：列2（第一个走廊）
+			QPushButton* aisle1Btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, 2));
+			if (aisle1Btn) {
+				aisle1Btn->setEnabled(false);
+				aisle1Btn->setStyleSheet(
 					"QPushButton { "
 					"background-color: #f0f0f0; "
 					"border: 1px solid #ccc; "
@@ -889,8 +925,8 @@ public:
 				);
 			}
 			
-			// 中列座位：列4-6
-			for (int col = 4; col < 7; ++col) {
+			// 数据块2座位：列3-4（第二个数据块）
+			for (int col = 3; col < 5; ++col) {
 				QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
 				if (btn) {
 					btn->setText("");
@@ -898,11 +934,11 @@ public:
 				}
 			}
 			
-			// 右过道：列7
-			QPushButton* aisleRightBtn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, 7));
-			if (aisleRightBtn) {
-				aisleRightBtn->setEnabled(false);
-				aisleRightBtn->setStyleSheet(
+			// 过道2：列5（第二个走廊）
+			QPushButton* aisle2Btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, 5));
+			if (aisle2Btn) {
+				aisle2Btn->setEnabled(false);
+				aisle2Btn->setStyleSheet(
 					"QPushButton { "
 					"background-color: #f0f0f0; "
 					"border: 1px solid #ccc; "
@@ -910,8 +946,29 @@ public:
 				);
 			}
 			
-			// 右列座位：列8-9
-			for (int col = 8; col < 10; ++col) {
+			// 数据块3座位：列6-7（第三个数据块）
+			for (int col = 6; col < 8; ++col) {
+				QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
+				if (btn) {
+					btn->setText("");
+					btn->setProperty("isSeat", true);
+				}
+			}
+			
+			// 过道3：列8（第三个走廊）
+			QPushButton* aisle3Btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, 8));
+			if (aisle3Btn) {
+				aisle3Btn->setEnabled(false);
+				aisle3Btn->setStyleSheet(
+					"QPushButton { "
+					"background-color: #f0f0f0; "
+					"border: 1px solid #ccc; "
+					"}"
+				);
+			}
+			
+			// 数据块4座位：列9-10（第四个数据块）
+			for (int col = 9; col < 11; ++col) {
 				QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
 				if (btn) {
 					btn->setText("");
@@ -929,8 +986,8 @@ public:
 				btn->setProperty("isSeat", true);
 			}
 		}
-		// 右侧2个座位：列8-9
-		for (int col = 8; col < 10; ++col) {
+		// 右侧2个座位：列9-10
+		for (int col = 9; col < 11; ++col) {
 			QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(0, col));
 			if (btn) {
 				btn->setText("");
@@ -1202,6 +1259,7 @@ public:
 	void importSeatFromCsv(const QString& filePath); // 从CSV导入座位表
 	void fillSeatTableFromData(const QList<QStringList>& dataRows); // 将数据填充到座位表
 	void uploadSeatTableToServer(); // 上传座位表到服务器
+	void fetchSeatArrangementFromServer(); // 从服务器获取座位表
 	
 	// 热力图相关方法
 	void showSegmentDialog(); // 显示分段区间设置对话框
@@ -1255,6 +1313,8 @@ public:
 		}
 		
 		// 从服务器获取成绩表数据（如果是班级群）
+		// 初始化窗口时先不调用此接口
+		/*
 		if (m_httpHandler && isClassGroup && !classid.isEmpty())
 		{
 			// 根据当前日期计算学期
@@ -1282,6 +1342,12 @@ public:
 			query.addQueryItem("term", term);
 			url.setQuery(query);
 			m_httpHandler->get(url.toString());
+		}
+		*/
+
+		// 班级群初始化时自动从服务器拉取座位表
+		if (isClassGroup) {
+			fetchSeatArrangementFromServer();
 		}
 	}
 
@@ -1517,7 +1583,7 @@ inline void ScheduleDialog::arrangeSeats(const QList<StudentInfo>& students, con
 	// 获取所有座位按钮（标记为 isSeat 的按钮），按行列顺序排列
 	QList<QPushButton*> seatButtons;
 	for (int row = 0; row < 8; ++row) {
-		for (int col = 0; col < 10; ++col) {
+		for (int col = 0; col < 11; ++col) {
 			QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
 			if (btn && btn->property("isSeat").toBool()) {
 				seatButtons.append(btn);
@@ -1712,10 +1778,22 @@ inline void ScheduleDialog::importSeatFromExcel(const QString& filePath)
 {
 	using namespace QXlsx;
 	
+	// 检查文件格式
+	bool isXls = filePath.endsWith(".xls", Qt::CaseInsensitive) && 
+	             !filePath.endsWith(".xlsx", Qt::CaseInsensitive);
+	
 	Document xlsx(filePath, this);
 	if (!xlsx.isLoadPackage()) {
-		QMessageBox::critical(this, QString::fromUtf8(u8"错误"), 
-			QString::fromUtf8(u8"无法打开 Excel 文件：") + filePath);
+		QString errorMsg;
+		if (isXls) {
+			errorMsg = QString::fromUtf8(u8"无法打开 .xls 格式文件。\n\n")
+			          + QString::fromUtf8(u8"QXlsx 库主要支持 .xlsx 格式（新版 Excel 格式）。\n")
+			          + QString::fromUtf8(u8"请将文件另存为 .xlsx 格式后重试，或使用 Excel 打开文件后另存为 .xlsx 格式。");
+		} else {
+			errorMsg = QString::fromUtf8(u8"无法打开 Excel 文件：\n") + filePath 
+			          + QString::fromUtf8(u8"\n\n请确认文件格式是否正确，或文件是否已损坏。");
+		}
+		QMessageBox::critical(this, QString::fromUtf8(u8"错误"), errorMsg);
 		return;
 	}
 	
@@ -1727,62 +1805,221 @@ inline void ScheduleDialog::importSeatFromExcel(const QString& filePath)
 		return;
 	}
 	
-	// 读取数据范围：从第4行、第2列开始，最多16行、12列
-	// 如果一行或一列都是空格，就忽略
-	QList<QStringList> dataRows;
-	int startRow = 4; // 从第4行开始
-	int startCol = 2; // 从第2列开始
-	int maxRows = 16; // 最多16行
-	int maxCols = 12; // 最多12列
+	// 读取数据范围：从第1行、第1列开始，最多20行、15列（扩大范围以包含讲台和所有座位）
+	QList<QStringList> allDataRows;
+	int startRow = 1; // 从第1行开始
+	int startCol = 1; // 从第1列开始
+	int maxRows = 20; // 最多20行
+	int maxCols = 15; // 最多15列
 	
 	// 先读取所有数据
-	QList<QStringList> allDataRows;
 	for (int row = startRow; row < startRow + maxRows; ++row) {
 		QStringList rowData;
-		bool rowHasData = false;
 		for (int col = startCol; col < startCol + maxCols; ++col) {
 			QVariant cellValue = xlsx.read(row, col);
 			QString cellText = cellValue.toString().trimmed();
 			rowData.append(cellText);
-			if (!cellText.isEmpty()) {
-				rowHasData = true;
+		}
+		allDataRows.append(rowData);
+	}
+	
+	// 查找"讲台"位置（通常在顶部中间）
+	// 辅助函数：检查文本是否包含"讲台"（忽略空格）
+	auto containsPodium = [](const QString& text) -> bool {
+		QString normalizedText = text;
+		normalizedText.remove(QRegExp("\\s+")); // 移除所有空格
+		return normalizedText.contains(QString::fromUtf8(u8"讲台"));
+	};
+	
+	int podiumRow = -1;
+	int podiumStartCol = -1;
+	int podiumEndCol = -1;
+	QString podiumText = QString::fromUtf8(u8"讲台");
+	
+	for (int row = 0; row < qMin(5, allDataRows.size()); ++row) {
+		for (int col = 0; col < allDataRows[row].size(); ++col) {
+			if (containsPodium(allDataRows[row][col])) {
+				podiumRow = row;
+				// 找到讲台开始的列
+				if (podiumStartCol < 0) {
+					podiumStartCol = col;
+				}
+				// 找到讲台结束的列（讲台可能跨越多个单元格）
+				podiumEndCol = col;
 			}
 		}
-		// 如果这一行有数据，才添加到结果中
-		if (rowHasData) {
-			allDataRows.append(rowData);
+		if (podiumRow >= 0) break;
+	}
+	
+	qDebug() << "讲台位置: 行" << podiumRow << ", 开始列" << podiumStartCol << ", 结束列" << podiumEndCol;
+	
+	// 处理数据：过滤掉"讲台"、"走廊"等非学生信息，提取学生数据
+	QList<QStringList> dataRows;
+	QString corridorText = QString::fromUtf8(u8"走廊");
+	
+	// 注意：走廊列会在提取完所有数据后统一处理
+	
+	// 处理讲台行：提取讲台左边和右边的所有单元格（包括空格），但跳过讲台（走廊列稍后统一处理）
+	if (podiumRow >= 0 && podiumStartCol >= 0) {
+		QStringList podiumRowData;
+		// 提取讲台左边的所有单元格（从列0到讲台开始列之前），包括空格
+		for (int col = 0; col < podiumStartCol && col < allDataRows[podiumRow].size(); ++col) {
+			// 只跳过讲台列，走廊列稍后统一处理
+			if (containsPodium(allDataRows[podiumRow][col])) {
+				continue; // 跳过讲台
+			}
+			// 其他都提取（包括空格和走廊），保留位置信息
+			QString cellText = allDataRows[podiumRow][col];
+			podiumRowData.append(cellText);
+		}
+		// 提取讲台右边的所有单元格（从讲台结束列之后到行尾），包括空格
+		if (podiumEndCol >= 0) {
+			for (int col = podiumEndCol + 1; col < allDataRows[podiumRow].size(); ++col) {
+				// 只跳过讲台列，走廊列稍后统一处理
+				if (containsPodium(allDataRows[podiumRow][col])) {
+					continue; // 跳过讲台
+				}
+				// 其他都提取（包括空格和走廊），保留位置信息
+				QString cellText = allDataRows[podiumRow][col];
+				podiumRowData.append(cellText);
+			}
+		}
+		// 即使只有空格也添加，这样位置信息就保留了
+		if (!podiumRowData.isEmpty()) {
+			qDebug() << "讲台行提取到的数据（包括空格和走廊）:" << podiumRowData;
+			dataRows.append(podiumRowData);
 		}
 	}
 	
-	// 过滤掉全空的列
-	if (!allDataRows.isEmpty()) {
-		QList<int> validCols; // 有效列的索引
-		for (int col = 0; col < allDataRows[0].size(); ++col) {
-			bool colHasData = false;
-			for (int row = 0; row < allDataRows.size(); ++row) {
-				if (!allDataRows[row][col].isEmpty()) {
-					colHasData = true;
-					break;
-				}
+	// 处理讲台下面的行：提取学生信息（走廊列稍后统一处理）
+	for (int row = (podiumRow >= 0 ? podiumRow + 1 : 0); row < allDataRows.size(); ++row) {
+		QStringList studentRowData;
+		bool rowHasData = false;
+		for (int col = 0; col < allDataRows[row].size(); ++col) {
+			// 只跳过讲台列，走廊列稍后统一处理
+			if (containsPodium(allDataRows[row][col])) {
+				continue;
 			}
-			if (colHasData) {
-				validCols.append(col);
+			QString cellText = allDataRows[row][col];
+			// 检查是否是学生信息格式（包含中文姓名和编号，如"任崇庆13-3"）
+			if (!cellText.isEmpty() && cellText.contains(QRegExp("\\d+-\\d+"))) {
+				rowHasData = true;
+			} else if (cellText.contains(corridorText)) {
+				rowHasData = true;
+			}
+			// 无论是否为空，都添加到列表中，保留列位置信息
+			studentRowData.append(cellText);
+		}
+		// 如果这一行有数据（学生或走廊），才添加到结果中
+		if (rowHasData) {
+			dataRows.append(studentRowData);
+		}
+	}
+	
+	// 统一处理：找出所有行中走廊列的位置，然后去掉这些列
+	if (dataRows.size() > 0) {
+		// 找出所有包含"走廊"的列索引（检查所有行）
+		QSet<int> corridorColIndices;
+		for (int row = 0; row < dataRows.size(); ++row) {
+			for (int col = 0; col < dataRows[row].size(); ++col) {
+				if (dataRows[row][col].contains(corridorText)) {
+					corridorColIndices.insert(col);
+				}
 			}
 		}
 		
-		// 只保留有效列的数据
-		for (int row = 0; row < allDataRows.size(); ++row) {
-			QStringList validRowData;
-			for (int colIdx : validCols) {
-				validRowData.append(allDataRows[row][colIdx]);
+		// 如果有走廊列，从后往前删除（避免索引变化）
+		if (!corridorColIndices.isEmpty()) {
+			QList<int> sortedCols = corridorColIndices.toList();
+			std::sort(sortedCols.begin(), sortedCols.end(), std::greater<int>()); // 降序排列
+			
+			for (int colIdx : sortedCols) {
+				for (int row = 0; row < dataRows.size(); ++row) {
+					// 如果某一行当前没有这一列，先补上空字符串保持列对齐
+					while (dataRows[row].size() <= colIdx) {
+						dataRows[row].append("");
+					}
+					dataRows[row].removeAt(colIdx);
+				}
 			}
-			dataRows.append(validRowData);
+			qDebug() << "统一去掉走廊列:" << sortedCols;
 		}
 	}
 	
+	// 去掉所有行全空格的前几列（从第一列开始，连续去掉所有全空格的列）
+	// 只有当所有行的某一列都是空格时，才去掉该列
+	if (dataRows.size() > 0) {
+		bool removedAny = false;
+		while (true) {
+			// 检查所有行的当前第一列是否都是空格
+			bool currentColAllEmpty = true;
+			for (int i = 0; i < dataRows.size(); ++i) {
+				// 如果这一行没有数据，或者第一列不是空格，则当前列不全空
+				if (dataRows[i].size() == 0 || !dataRows[i][0].trimmed().isEmpty()) {
+					currentColAllEmpty = false;
+					break;
+				}
+			}
+			// 如果所有行的第一列都是空格，去掉所有行的第一列
+			if (currentColAllEmpty) {
+				for (int i = 0; i < dataRows.size(); ++i) {
+					if (dataRows[i].size() > 0) {
+						dataRows[i].removeAt(0);
+					}
+				}
+				removedAny = true;
+			} else {
+				// 如果当前第一列不全空，停止循环
+				break;
+			}
+		}
+		if (removedAny) {
+			qDebug() << "去掉所有行全空格的前几列";
+		}
+	}
+	
+	// 如果数据为空，尝试从原来的位置读取（兼容旧格式）
+	if (dataRows.isEmpty()) {
+		qDebug() << "未找到新格式数据，尝试从旧位置读取...";
+		// 从第4行、第2列开始读取
+		for (int row = 3; row < qMin(19, allDataRows.size()); ++row) {
+			QStringList rowData;
+			bool rowHasData = false;
+			for (int col = 1; col < qMin(13, allDataRows[row].size()); ++col) {
+				QString cellText = allDataRows[row][col];
+				if (!cellText.isEmpty() && !cellText.contains(corridorText)) {
+					rowData.append(cellText);
+					rowHasData = true;
+				}
+			}
+			if (rowHasData) {
+				dataRows.append(rowData);
+			}
+		}
+	}
+	
+	// 先清除之前的座位数据
+	if (seatTable) {
+		for (int row = 0; row < 8; ++row) {
+			for (int col = 0; col < 11; ++col) {
+				QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
+				if (btn && btn->property("isSeat").toBool()) {
+					btn->setText("");
+					btn->setProperty("studentId", QVariant());
+					btn->setProperty("studentName", QVariant());
+				}
+			}
+		}
+		seatTable->update();
+		seatTable->repaint();
+		qDebug() << "已清除之前的座位数据";
+	}
+	
+	// 填充新数据
 	fillSeatTableFromData(dataRows);
+	
 	QMessageBox::information(this, QString::fromUtf8(u8"导入成功"), 
-		QString::fromUtf8(u8"座位表导入成功！"));
+		QString::fromUtf8(u8"座位表导入成功！共导入 %1 行数据").arg(dataRows.size()));
 	
 	// 导入成功后自动上传到服务器
 	uploadSeatTableToServer();
@@ -1906,9 +2143,28 @@ inline void ScheduleDialog::importSeatFromCsv(const QString& filePath)
 		}
 	}
 	
+	// 先清除之前的座位数据
+	if (seatTable) {
+		for (int row = 0; row < 8; ++row) {
+			for (int col = 0; col < 11; ++col) {
+				QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
+				if (btn && btn->property("isSeat").toBool()) {
+					btn->setText("");
+					btn->setProperty("studentId", QVariant());
+					btn->setProperty("studentName", QVariant());
+				}
+			}
+		}
+		seatTable->update();
+		seatTable->repaint();
+		qDebug() << "已清除之前的座位数据（CSV导入）";
+	}
+	
+	// 填充新数据
 	fillSeatTableFromData(dataRows);
+	
 	QMessageBox::information(this, QString::fromUtf8(u8"导入成功"), 
-		QString::fromUtf8(u8"座位表导入成功！"));
+		QString::fromUtf8(u8"座位表导入成功！共导入 %1 行数据").arg(dataRows.size()));
 	
 	// 导入成功后自动上传到服务器
 	uploadSeatTableToServer();
@@ -1925,7 +2181,7 @@ inline void ScheduleDialog::fillSeatTableFromData(const QList<QStringList>& data
 	
 	// 清空所有座位
 	for (int row = 0; row < 8; ++row) {
-		for (int col = 0; col < 10; ++col) {
+		for (int col = 0; col < 11; ++col) {
 			QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
 			if (btn && btn->property("isSeat").toBool()) {
 				btn->setText("");
@@ -1940,120 +2196,152 @@ inline void ScheduleDialog::fillSeatTableFromData(const QList<QStringList>& data
 		return;
 	}
 	
+	// 新模板格式：每个数据块有两列学生信息，被"走廊"分隔
 	// 映射关系：导入的数据映射到seatTable的实际座位位置
-	// Excel的讲台在下面，所以Excel的最后一行（离讲台最近）应该映射到seatTable的第一行（窗口上面的第一排）
-	// 行顺序反转：最后一行 -> seatTable第1行，第一行 -> seatTable最后一行
+	// 模板中讲台在第一行，所以第一行数据（讲台行）应该直接映射到seatTable的第一行
+	// 不需要反转行顺序：第一行 -> seatTable第1行，最后一行 -> seatTable最后一行
 	// 最多处理8行数据（seatTable只有8行）
 	int maxRows = qMin(dataRows.size(), 8);
 	
 	for (int importRow = 0; importRow < maxRows; ++importRow) {
-		const QStringList& rowData = dataRows[importRow];
-		// 反转行顺序：最后一行（importRow=dataRows.size()-1）-> seatTable第1行（seatTableRow=0）
-		// 计算实际在数据中的位置（从后往前）
-		int actualDataRow = dataRows.size() - 1 - importRow;
-		const QStringList& actualRowData = dataRows[actualDataRow];
+		// 直接映射：第一行数据 -> seatTable第1行（不需要反转）
+		const QStringList& actualRowData = dataRows[importRow];
 		// seatTable的行号（0-7）
 		int seatTableRow = importRow;
 		
-		if (seatTableRow == 0) {
-			// 第1行：左侧2个座位（列0-1），右侧2个座位（列8-9）
-			// Excel原始布局：左座位 | 左走道 | 中走道 | 右座位 | 右走道
-			// Excel过滤走道后，数据按"左-右"顺序：列0-1是左座位，列2-3是右座位
-			// 左座位：Excel列0-1 -> seatTable列0-1
-			for (int i = 0; i < 2 && i < actualRowData.size(); ++i) {
-				if (!actualRowData[i].isEmpty()) {
-					QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(0, i));
-					if (btn && btn->property("isSeat").toBool()) {
-						btn->setText(actualRowData[i]);
-						btn->setProperty("studentName", actualRowData[i]);
-						QStringList parts = actualRowData[i].split(QRegExp("[\\s-]+"));
-						if (parts.size() >= 2) {
-							btn->setProperty("studentId", parts[1]);
-						}
-						btn->update();
-					}
+		// 解析学生信息：格式为"姓名编号"（如"任崇庆13-3"）
+		// 提取姓名和编号
+		auto parseStudentInfo = [](const QString& text) -> QPair<QString, QString> {
+			QString name, id;
+			// 匹配格式：中文姓名 + 数字-数字（如"任崇庆13-3"）
+			QRegExp regex("([\\u4e00-\\u9fa5]+)(\\d+-\\d+)");
+			if (regex.indexIn(text) >= 0) {
+				name = regex.cap(1);
+				id = regex.cap(2);
+			} else {
+				// 如果正则匹配失败，尝试按"-"分割
+				QStringList parts = text.split(QRegExp("[\\s-]+"));
+				if (parts.size() >= 2) {
+					name = parts[0];
+					id = parts[1];
+				} else {
+					name = text;
 				}
 			}
-			// 右座位：Excel列2-3 -> seatTable列8-9
-			for (int i = 2; i < 4 && i < actualRowData.size(); ++i) {
-				if (!actualRowData[i].isEmpty()) {
-					int seatTableCol = i + 6; // 2->8, 3->9
+			return qMakePair(name, id);
+		};
+		
+		if (seatTableRow == 0) {
+			// 第1行：讲台旁边的位置（如"王文1-5"）
+			// 座位顺序：列0, 列1, 列3（讲台左边）, 列7（讲台右边）, 列9, 列10
+			// 新格式：数据包括空格，按顺序填充，遇到空格就跳过该座位位置
+			
+			// 第1行的所有座位列表（按从左到右的顺序）
+			QList<int> seatCols = {0, 1, 3, 7, 9, 10};
+			int seatIndex = 0; // 座位索引
+			
+			// 遍历所有数据，按顺序填充
+			for (int i = 0; i < actualRowData.size() && seatIndex < seatCols.size(); ++i) {
+				QString cellText = actualRowData[i].trimmed();
+				
+				// 跳过空格，不填充对应座位位置
+				if (cellText.isEmpty()) {
+					// 空格不填充，跳过这个座位位置
+					seatIndex++;
+					continue;
+				}
+				
+				// 检查是否是学生信息格式
+				if (cellText.contains(QRegExp("\\d+-\\d+"))) {
+					// 填充到当前座位位置
+					int seatTableCol = seatCols[seatIndex];
 					QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(0, seatTableCol));
 					if (btn && btn->property("isSeat").toBool()) {
-						btn->setText(actualRowData[i]);
-						btn->setProperty("studentName", actualRowData[i]);
-						QStringList parts = actualRowData[i].split(QRegExp("[\\s-]+"));
-						if (parts.size() >= 2) {
-							btn->setProperty("studentId", parts[1]);
+						QPair<QString, QString> student = parseStudentInfo(cellText);
+						btn->setText(cellText);
+						btn->setProperty("studentName", student.first);
+						if (!student.second.isEmpty()) {
+							btn->setProperty("studentId", student.second);
 						}
 						btn->update();
 					}
+					seatIndex++;
 				}
 			}
 		} else {
-			// 第2-8行：左列3个（列0-2），中列3个（列4-6），右列2个（列8-9）
-			// Excel原始布局：左座位 | 左走道 | 中左座位 | 中走道 | 中右座位 | 右走道 | 右座位
-			// Excel过滤走道后，数据按"左-中左-中右-右"顺序
-			// 假设：左座位3个，中左座位2个，中右座位1个，右座位2个（共8个座位）
-			// 左座位：Excel列0-2 -> seatTable列0-2
-			for (int i = 0; i < 3 && i < actualRowData.size(); ++i) {
-				if (!actualRowData[i].isEmpty()) {
-					QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(seatTableRow, i));
+			// 第2-8行：新格式每个数据块有两列，3个走廊分隔4个数据块
+			// 布局：数据块1（列0-1），过道1（列2），数据块2（列3-4），过道2（列5），数据块3（列6-7），过道3（列8），数据块4（列9-10）
+			// 新格式数据：每行可能是2列、4列、6列、8列等（多个两列数据块）
+			// 按照从左到右的顺序填充：数据块1->数据块2->数据块3->数据块4
+			
+			int dataIndex = 0;
+			
+			// 数据块1座位：seatTable列0-1（2个，第一个数据块）
+			for (int col = 0; col < 2 && dataIndex < actualRowData.size(); ++col) {
+				if (!actualRowData[dataIndex].isEmpty()) {
+					QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(seatTableRow, col));
 					if (btn && btn->property("isSeat").toBool()) {
-						btn->setText(actualRowData[i]);
-						btn->setProperty("studentName", actualRowData[i]);
-						QStringList parts = actualRowData[i].split(QRegExp("[\\s-]+"));
-						if (parts.size() >= 2) {
-							btn->setProperty("studentId", parts[1]);
+						QPair<QString, QString> student = parseStudentInfo(actualRowData[dataIndex]);
+						btn->setText(actualRowData[dataIndex]);
+						btn->setProperty("studentName", student.first);
+						if (!student.second.isEmpty()) {
+							btn->setProperty("studentId", student.second);
 						}
 						btn->update();
 					}
 				}
+				dataIndex++;
 			}
-			// 中左座位：Excel列3-4 -> seatTable列4-5（中座位的前两个）
-			for (int i = 3; i < 5 && i < actualRowData.size(); ++i) {
-				if (!actualRowData[i].isEmpty()) {
-					int seatTableCol = i + 1; // 3->4, 4->5
-					QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(seatTableRow, seatTableCol));
+			
+			// 数据块2座位：seatTable列3-4（2个，第二个数据块，跳过过道列2）
+			for (int col = 3; col < 5 && dataIndex < actualRowData.size(); ++col) {
+				if (!actualRowData[dataIndex].isEmpty()) {
+					QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(seatTableRow, col));
 					if (btn && btn->property("isSeat").toBool()) {
-						btn->setText(actualRowData[i]);
-						btn->setProperty("studentName", actualRowData[i]);
-						QStringList parts = actualRowData[i].split(QRegExp("[\\s-]+"));
-						if (parts.size() >= 2) {
-							btn->setProperty("studentId", parts[1]);
+						QPair<QString, QString> student = parseStudentInfo(actualRowData[dataIndex]);
+						btn->setText(actualRowData[dataIndex]);
+						btn->setProperty("studentName", student.first);
+						if (!student.second.isEmpty()) {
+							btn->setProperty("studentId", student.second);
 						}
 						btn->update();
 					}
 				}
+				dataIndex++;
 			}
-			// 中右座位：Excel列5 -> seatTable列6（中座位的最后一个）
-			if (actualRowData.size() > 5 && !actualRowData[5].isEmpty()) {
-				QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(seatTableRow, 6));
-				if (btn && btn->property("isSeat").toBool()) {
-					btn->setText(actualRowData[5]);
-					btn->setProperty("studentName", actualRowData[5]);
-					QStringList parts = actualRowData[5].split(QRegExp("[\\s-]+"));
-					if (parts.size() >= 2) {
-						btn->setProperty("studentId", parts[1]);
-					}
-					btn->update();
-				}
-			}
-			// 右座位：Excel列6-7 -> seatTable列8-9
-			for (int i = 6; i < 8 && i < actualRowData.size(); ++i) {
-				if (!actualRowData[i].isEmpty()) {
-					int seatTableCol = i + 2; // 6->8, 7->9
-					QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(seatTableRow, seatTableCol));
+			
+			// 数据块3座位：seatTable列6-7（2个，第三个数据块，跳过过道列5）
+			for (int col = 6; col < 8 && dataIndex < actualRowData.size(); ++col) {
+				if (!actualRowData[dataIndex].isEmpty()) {
+					QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(seatTableRow, col));
 					if (btn && btn->property("isSeat").toBool()) {
-						btn->setText(actualRowData[i]);
-						btn->setProperty("studentName", actualRowData[i]);
-						QStringList parts = actualRowData[i].split(QRegExp("[\\s-]+"));
-						if (parts.size() >= 2) {
-							btn->setProperty("studentId", parts[1]);
+						QPair<QString, QString> student = parseStudentInfo(actualRowData[dataIndex]);
+						btn->setText(actualRowData[dataIndex]);
+						btn->setProperty("studentName", student.first);
+						if (!student.second.isEmpty()) {
+							btn->setProperty("studentId", student.second);
 						}
 						btn->update();
 					}
 				}
+				dataIndex++;
+			}
+			
+			// 数据块4座位：seatTable列9-10（2个，第四个数据块，跳过过道列8）
+			for (int col = 9; col < 11 && dataIndex < actualRowData.size(); ++col) {
+				if (!actualRowData[dataIndex].isEmpty()) {
+					QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(seatTableRow, col));
+					if (btn && btn->property("isSeat").toBool()) {
+						QPair<QString, QString> student = parseStudentInfo(actualRowData[dataIndex]);
+						btn->setText(actualRowData[dataIndex]);
+						btn->setProperty("studentName", student.first);
+						if (!student.second.isEmpty()) {
+							btn->setProperty("studentId", student.second);
+						}
+						btn->update();
+					}
+				}
+				dataIndex++;
 			}
 		}
 	}
@@ -2062,6 +2350,116 @@ inline void ScheduleDialog::fillSeatTableFromData(const QList<QStringList>& data
 	seatTable->update();
 	seatTable->repaint();
 	qDebug() << "座位表数据已刷新，共导入" << dataRows.size() << "行数据";
+}
+
+// 从服务器拉取座位表
+inline void ScheduleDialog::fetchSeatArrangementFromServer()
+{
+	if (!seatTable) {
+		qWarning() << "seatTable 未初始化，无法获取座位表";
+		return;
+	}
+	
+	if (m_classid.isEmpty()) {
+		qWarning() << "班级ID为空，无法获取座位表";
+		return;
+	}
+	
+	QUrl url("http://47.100.126.194:5000/seat-arrangement");
+	QUrlQuery query;
+	query.addQueryItem("class_id", m_classid);
+	url.setQuery(query);
+	
+	TAHttpHandler* handler = new TAHttpHandler(this);
+	if (!handler) {
+		qWarning() << "创建 TAHttpHandler 失败，无法获取座位表";
+		return;
+	}
+	
+	auto clearSeats = [this]() {
+		for (int row = 0; row < 8; ++row) {
+			for (int col = 0; col < 11; ++col) {
+				QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
+				if (btn && btn->property("isSeat").toBool()) {
+					btn->setText("");
+					btn->setProperty("studentId", QVariant());
+					btn->setProperty("studentName", QVariant());
+				}
+			}
+		}
+	};
+	
+	connect(handler, &TAHttpHandler::success, this, [=](const QString& responseString) {
+		handler->deleteLater();
+		
+		QJsonDocument respDoc = QJsonDocument::fromJson(responseString.toUtf8());
+		if (!respDoc.isObject()) {
+			qWarning() << "获取座位表失败：响应不是JSON对象";
+			return;
+		}
+		
+		QJsonObject obj = respDoc.object();
+		int code = obj.value("code").toInt(-1);
+		QString message = obj.value("message").toString();
+		
+		if (code == 200) {
+			QJsonObject dataObj = obj.value("data").toObject();
+			QJsonArray seatsArray = dataObj.value("seats").toArray();
+			
+			clearSeats();
+			
+			int filled = 0;
+			for (const QJsonValue& seatValue : seatsArray) {
+				if (!seatValue.isObject()) continue;
+				QJsonObject seatObj = seatValue.toObject();
+				int rowIdx = seatObj.value("row").toInt() - 1;
+				int colIdx = seatObj.value("col").toInt() - 1;
+				if (rowIdx < 0 || rowIdx >= 8 || colIdx < 0 || colIdx >= 11) continue;
+				
+				QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(rowIdx, colIdx));
+				if (!btn || !btn->property("isSeat").toBool()) continue;
+				
+				QString seatLabel = seatObj.value("student_name").toString();
+				QString name = seatObj.value("name").toString();
+				QString studentId = seatObj.value("student_id").toString();
+				if (seatLabel.trimmed().isEmpty()) {
+					if (!name.isEmpty()) {
+						seatLabel = name;
+						if (!studentId.isEmpty()) {
+							seatLabel += studentId;
+						}
+					} else if (!studentId.isEmpty()) {
+						seatLabel = studentId;
+					}
+				}
+				
+				btn->setText(seatLabel);
+				btn->setProperty("studentName", name.isEmpty() ? seatLabel : name);
+				btn->setProperty("studentId", studentId);
+				btn->update();
+				filled++;
+			}
+			
+			seatTable->update();
+			seatTable->repaint();
+			qDebug() << "从服务器加载座位表成功，填充" << filled << "个座位";
+		} else if (code == 404) {
+			clearSeats();
+			qDebug() << "服务器未找到座位信息" << message;
+		} else {
+			qWarning() << "获取座位表失败，code:" << code << "message:" << message;
+			QMessageBox::warning(this, QString::fromUtf8(u8"提示"), 
+				message.isEmpty() ? QString::fromUtf8(u8"获取座位表失败") : message);
+		}
+	});
+	
+	connect(handler, &TAHttpHandler::failed, this, [=](const QString& error) {
+		handler->deleteLater();
+		qWarning() << "获取座位表网络错误:" << error;
+	});
+	
+	handler->get(url.toString());
+	qDebug() << "正在请求座位表:" << url.toString();
 }
 
 // 上传座位表到服务器
@@ -2082,23 +2480,40 @@ inline void ScheduleDialog::uploadSeatTableToServer()
 	// 从seatTable提取座位数据
 	QJsonArray seatsArray;
 	for (int row = 0; row < 8; ++row) {
-		for (int col = 0; col < 10; ++col) {
+		for (int col = 0; col < 11; ++col) {
 			QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
 			if (btn && btn->property("isSeat").toBool()) {
-				QString studentName = btn->text().trimmed();
-				if (!studentName.isEmpty()) {
+				QString studentLabel = btn->text().trimmed();
+				if (!studentLabel.isEmpty()) {
 					QJsonObject seatObj;
 					seatObj["row"] = row + 1; // 行号从1开始
 					seatObj["col"] = col + 1; // 列号从1开始
-					seatObj["student_name"] = studentName;
-					
-					// 解析学生姓名和编号（如"刘峻源8-4"）
-					QStringList parts = studentName.split(QRegExp("[\\s-]+"));
-					if (parts.size() >= 1) {
-						seatObj["name"] = parts[0]; // 姓名
-						if (parts.size() >= 2) {
-							seatObj["student_id"] = parts[1]; // 编号
+					seatObj["student_name"] = studentLabel;
+
+					QString beforeSlash = studentLabel;
+					QString studentId;
+					int slashIndex = studentLabel.lastIndexOf('/');
+					if (slashIndex >= 0) {
+						studentId = studentLabel.mid(slashIndex + 1).trimmed();
+						beforeSlash = studentLabel.left(slashIndex).trimmed();
+					}
+
+					QString extractedName;
+					QStringList parts = beforeSlash.split(QRegExp("[\\s-]+"), Qt::SkipEmptyParts);
+					if (!parts.isEmpty()) {
+						extractedName = parts.first();
+						if (studentId.isEmpty() && parts.size() >= 2) {
+							studentId = parts.last();
 						}
+					} else {
+						extractedName = beforeSlash;
+					}
+
+					if (!extractedName.isEmpty()) {
+						seatObj["name"] = extractedName;
+					}
+					if (!studentId.isEmpty()) {
+						seatObj["student_id"] = studentId;
 					}
 					
 					seatsArray.append(seatObj);
@@ -2133,16 +2548,28 @@ inline void ScheduleDialog::uploadSeatTableToServer()
 			QJsonObject obj = respDoc.object();
 			int code = obj.value("code").toInt(-1);
 			if (code == 200 || code == 0) {
+				// 上传成功后刷新界面座位表
+				if (seatTable) {
+					seatTable->update();
+					seatTable->repaint();
+					qDebug() << "座位表界面已刷新";
+				}
 				QMessageBox::information(this, QString::fromUtf8(u8"上传成功"), 
-					QString::fromUtf8(u8"座位表已成功上传到服务器！"));
+					QString::fromUtf8(u8"座位表已成功上传到服务器并刷新界面！"));
 			} else {
 				QString errorMsg = obj.value("message").toString();
 				QMessageBox::warning(this, QString::fromUtf8(u8"上传失败"), 
 					QString::fromUtf8(u8"服务器返回错误：%1").arg(errorMsg));
 			}
 		} else {
+			// 上传成功后刷新界面座位表
+			if (seatTable) {
+				seatTable->update();
+				seatTable->repaint();
+				qDebug() << "座位表界面已刷新";
+			}
 			QMessageBox::information(this, QString::fromUtf8(u8"上传成功"), 
-				QString::fromUtf8(u8"座位表已成功上传到服务器！"));
+				QString::fromUtf8(u8"座位表已成功上传到服务器并刷新界面！"));
 		}
 	});
 	
@@ -2411,3 +2838,4 @@ inline void ScheduleDialog::openIntercomWebPage()
 
 
 // 热力图相关方法的实现在 ScheduleDialog_Heatmap.cpp 中
+
