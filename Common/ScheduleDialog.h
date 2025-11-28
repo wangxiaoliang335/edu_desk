@@ -31,6 +31,7 @@
 #include <qprogressbar.h>
 #include <QPoint>
 #include <QBrush>
+#include <QPair>
 #include <QColor>
 #include <QUrl>
 #include <QUrlQuery>
@@ -51,6 +52,9 @@
 #include <string>
 #include <QProcess>
 #include <QThread>
+#include <QMenu>
+#include <QTextEdit>
+#include <QMessageBox>
 #include "CustomListDialog.h"
 #include "ClickableLabel.h"
 #include "TAHttpHandler.h"
@@ -581,7 +585,13 @@ public:
 		connect(btnMore, &QPushButton::clicked, this, [=]() {
 			if (m_groupInfo && m_groupInfo->isHidden())
 			{
-				m_groupInfo->InitGroupMember();
+				// 使用 ScheduleDialog 的成员列表数据来初始化 QGroupInfo 的好友列表
+				if (!m_groupMemberInfo.isEmpty() && !m_unique_group_id.isEmpty()) {
+					m_groupInfo->InitGroupMember(m_unique_group_id, m_groupMemberInfo);
+				} else {
+					// 如果数据为空，尝试使用无参数版本（使用 QGroupInfo 自己的数据）
+					m_groupInfo->InitGroupMember();
+				}
 				m_groupInfo->show();
 			}
 			else if (m_groupInfo && !m_groupInfo->isHidden())
@@ -608,28 +618,26 @@ public:
 
 		// 时间 + 科目行
 		QHBoxLayout* timeLayout = new QHBoxLayout;
-		QString timeStyle = "background-color: royalblue; color: white; font-size:12px; min-width:40px;";
-		QString subjectStyle = "background-color: royalblue; color: white; font-size:12px; min-width:50px;";
-
-		QStringList times = { "7:20","8:00","2:00","2:00","2:00","2:00","2:00","2:00","2:00","2:00","2:00","2:00","2:00" };
-		QStringList subs = { "晨读","语文","数学","英语","物理","午饭","午休","数学","美术","道法","课服","晚自习","" };
+		m_timeButtonStyle = "background-color: royalblue; color: white; font-size:12px; min-width:40px;";
+		m_subjectButtonStyle = "background-color: royalblue; color: white; font-size:12px; min-width:50px;";
 
 		QVBoxLayout* vTimes = new QVBoxLayout;
-		QHBoxLayout* hTimeRow = new QHBoxLayout;
-		QHBoxLayout* hSubRow = new QHBoxLayout;
+		m_timeRowLayout = new QHBoxLayout;
+		m_subjectRowLayout = new QHBoxLayout;
+		m_specialSubjectRowLayout = new QHBoxLayout;
+		vTimes->addLayout(m_timeRowLayout);
+		vTimes->addLayout(m_subjectRowLayout);
+		QHBoxLayout* specialRowsLayout = new QHBoxLayout;
+		specialRowsLayout->setSpacing(4);
+		specialRowsLayout->addLayout(m_specialSubjectRowLayout);
+		specialRowsLayout->addStretch();
+		vTimes->addLayout(specialRowsLayout);
 
-		for (int i = 0; i < times.size(); ++i) {
-			QPushButton* btnT = new QPushButton(times[i]);
-			btnT->setStyleSheet(timeStyle);
-			hTimeRow->addWidget(btnT);
-
-			QPushButton* btnS = new QPushButton(subs[i]);
-			btnS->setStyleSheet(subjectStyle);
-			hSubRow->addWidget(btnS);
-		}
-
-		vTimes->addLayout(hTimeRow);
-		vTimes->addLayout(hSubRow);
+		auto dailySchedule = buildDefaultDailySchedule();
+		QMap<QString, QString> initialHighlights = extractHighlightTimes(dailySchedule.first, dailySchedule.second);
+		ensureDailyScheduleButtons(dailySchedule.first.size());
+		applyDailyScheduleToButtons(dailySchedule.first, dailySchedule.second, initialHighlights);
+		updateSpecialSubjects(initialHighlights);
 		// 包一层方便加边框
 		QFrame* frameTimes = new QFrame;
 		frameTimes->setLayout(vTimes);
@@ -643,10 +651,12 @@ public:
 		mainLayout->addWidget(line);
 
 		QHBoxLayout* timeIndicatorLayout = new QHBoxLayout;
+		timeIndicatorLayout->setSpacing(8);
 		QLabel* lblArrow = new QLabel("↓");
+		lblArrow->setStyleSheet("color: white; font-weight: bold;");
 		QLabel* lblTime = new QLabel("12:10");
 		lblTime->setAlignment(Qt::AlignCenter);
-		lblTime->setFixedSize(50, 25);
+		lblTime->setFixedSize(60, 25);
 		lblTime->setStyleSheet("background-color: pink; color:red; font-weight:bold;");
 		timeIndicatorLayout->addWidget(lblArrow);
 		timeIndicatorLayout->addWidget(lblTime);
@@ -1239,6 +1249,8 @@ public:
 		}
 	}
 
+	void setPrepareClassHistory(const QJsonArray& history);
+
 	void setNoticeMsg(QList<Notification> listNoticeMsg)
 	{
 		if (m_chatDlg)
@@ -1260,6 +1272,7 @@ public:
 	void fillSeatTableFromData(const QList<QStringList>& dataRows); // 将数据填充到座位表
 	void uploadSeatTableToServer(); // 上传座位表到服务器
 	void fetchSeatArrangementFromServer(); // 从服务器获取座位表
+	void fetchCourseScheduleForDailyView();
 	
 	// 热力图相关方法
 	void showSegmentDialog(); // 显示分段区间设置对话框
@@ -1297,7 +1310,7 @@ public:
 			
 			// 优先使用REST API获取群成员列表（从腾讯云IM直接获取，数据更准确）
 			// 如果REST API失败，可以回退到使用自己的服务器接口
-			m_groupInfo->fetchGroupMemberListFromREST(unique_group_id);
+			//m_groupInfo->fetchGroupMemberListFromREST(unique_group_id);
 		}
 
 		// 备用方案：调用自己的服务器接口获取群组成员列表
@@ -1348,6 +1361,7 @@ public:
 		// 班级群初始化时自动从服务器拉取座位表
 		if (isClassGroup) {
 			fetchSeatArrangementFromServer();
+			fetchCourseScheduleForDailyView();
 		}
 	}
 
@@ -1525,6 +1539,14 @@ private:
 	QPushButton* m_btnCam = nullptr;
 	QPushButton* m_btnMsg = nullptr;
 	QPushButton* m_btnTask = nullptr;
+	QHBoxLayout* m_timeRowLayout = nullptr;
+	QHBoxLayout* m_subjectRowLayout = nullptr;
+	QList<QPushButton*> m_timeButtons;
+	QList<QPushButton*> m_subjectButtons;
+	QList<QPushButton*> m_specialSubjectButtons;
+	QHBoxLayout* m_specialSubjectRowLayout = nullptr;
+	QString m_timeButtonStyle;
+	QString m_subjectButtonStyle;
 	bool m_isClassGroup = true; // 默认为班级群
 	QGroupInfo* m_groupInfo;
 	TAHttpHandler* m_httpHandler = NULL;
@@ -1556,8 +1578,33 @@ private:
 	void connectHomeworkButton(QPushButton* btnTask); // 连接作业按钮（教师端）
 	void showHomeworkViewDialog(); // 显示作业展示窗口（班级端）
 	
+	// 课前准备相关
+	void onSubjectButtonClicked(); // 科目按钮点击事件
+	void showPrepareClassDialog(const QString& subject, const QString& time = QString()); // 显示课前准备对话框
+	void sendPrepareClassContent(const QString& subject, const QString& content, const QString& time = QString()); // 发送课前准备内容
+	QString prepareClassCacheKey(const QString& subject, const QString& time) const;
+	QMap<QString, QString> m_prepareClassCache; // 课前准备内容缓存（科目|时间 -> 内容）
+	QJsonArray m_prepareClassHistoryData; // 课前准备历史原始数据
+	
+	// 课后评价相关
+	void showPostClassEvaluationDialog(const QString& subject); // 显示课后评价对话框
+	void sendPostClassEvaluationContent(const QString& subject, const QString& content); // 发送课后评价内容
+	
 	// 更新座位颜色（根据分段或渐变）
 	void updateSeatColors();
+	
+	void ensureDailyScheduleButtons(int count);
+	void applyDailyScheduleToButtons(const QStringList& times, const QStringList& subjects, const QMap<QString, QString>& highlights = QMap<QString, QString>());
+	QPair<QStringList, QStringList> buildDefaultDailySchedule() const;
+	QStringList defaultSubjectsForWeekday(int weekday) const;
+	QStringList defaultTimesForSubjects(const QStringList& subjects) const;
+	void applyDefaultDailySchedule();
+	QString currentTermString() const;
+	QStringList jsonArrayToStringList(const QJsonArray& arr) const;
+	bool looksLikeTimeText(const QString& text) const;
+	void applyServerDailySchedule(const QStringList& days, const QStringList& times, const QJsonArray& cells);
+	QMap<QString, QString> extractHighlightTimes(const QStringList& times, const QStringList& subjects) const;
+	void updateSpecialSubjects(const QMap<QString, QString>& highlights);
 	
 	// 打开对讲界面网页
 	void openIntercomWebPage();
@@ -2583,6 +2630,499 @@ inline void ScheduleDialog::uploadSeatTableToServer()
 	qDebug() << "开始上传座位表到服务器，班级ID:" << m_classid << "，座位数量:" << seatsArray.size();
 }
 
+inline void ScheduleDialog::ensureDailyScheduleButtons(int count)
+{
+	if (!m_timeRowLayout || !m_subjectRowLayout) {
+		return;
+	}
+
+	auto createButton = [](const QString& style) -> QPushButton* {
+		QPushButton* btn = new QPushButton("");
+		btn->setStyleSheet(style);
+		return btn;
+	};
+
+	while (m_timeButtons.size() < count) {
+		QPushButton* btn = createButton(m_timeButtonStyle);
+		m_timeRowLayout->addWidget(btn);
+		m_timeButtons.append(btn);
+	}
+	while (m_subjectButtons.size() < count) {
+		QPushButton* btn = createButton(m_subjectButtonStyle);
+		m_subjectRowLayout->addWidget(btn);
+		m_subjectButtons.append(btn);
+	}
+
+	for (int i = 0; i < m_timeButtons.size(); ++i) {
+		bool visible = i < count;
+		m_timeButtons[i]->setVisible(visible);
+		m_subjectButtons[i]->setVisible(visible);
+		if (!visible) {
+			m_timeButtons[i]->setText("");
+			m_subjectButtons[i]->setText("");
+		}
+	}
+}
+
+inline void ScheduleDialog::applyDailyScheduleToButtons(const QStringList& times, const QStringList& subjects, const QMap<QString, QString>& highlights)
+{
+	// 创建数据结构来区分课程表和特殊时间
+	// 使用三元组：时间、科目、是否来自课程表
+	struct TimeSubjectItem {
+		QString time;
+		QString subject;
+		bool isFromSchedule; // true=来自课程表, false=来自特殊时间
+		bool isHighlight;    // 是否为特殊科目
+	};
+
+	QList<TimeSubjectItem> items;
+	QSet<QString> highlightSubjects;
+
+	// 添加课程表的项目
+	int scheduleCount = qMin(times.size(), subjects.size());
+	for (int i = 0; i < scheduleCount; ++i) {
+		QString subject = subjects[i];
+		bool isHighlight = highlights.contains(subject);
+		TimeSubjectItem item;
+		// 如果课程表中已有特殊科目，使用特殊时间的时间；否则使用课程表的时间
+		item.time = isHighlight ? highlights.value(subject) : times[i];
+		item.subject = subject;
+		item.isFromSchedule = true;
+		item.isHighlight = isHighlight;
+		items.append(item);
+		if (isHighlight) {
+			highlightSubjects.insert(subject);
+		}
+	}
+
+	// 添加不存在的特殊科目
+	for (auto it = highlights.constBegin(); it != highlights.constEnd(); ++it) {
+		if (!highlightSubjects.contains(it.key())) {
+			TimeSubjectItem item;
+			item.time = it.value();
+			item.subject = it.key();
+			item.isFromSchedule = false;
+			item.isHighlight = true;
+			items.append(item);
+			highlightSubjects.insert(it.key());
+		}
+	}
+
+	// 按时间字符串排序（格式如 "07:20", "08:00", "12:00" 等）
+	// 将时间字符串转换为分钟数进行比较，确保正确排序
+	auto timeToMinutes = [](const QString& timeStr) -> int {
+		if (timeStr.isEmpty()) return 9999; // 空时间排在最后
+		QStringList parts = timeStr.split(':');
+		if (parts.size() < 2) return 9999;
+		bool ok1, ok2;
+		int hours = parts[0].toInt(&ok1);
+		int minutes = parts[1].toInt(&ok2);
+		if (!ok1 || !ok2) return 9999;
+		return hours * 60 + minutes;
+	};
+
+	std::sort(items.begin(), items.end(), 
+		[&timeToMinutes](const TimeSubjectItem& a, const TimeSubjectItem& b) {
+			return timeToMinutes(a.time) < timeToMinutes(b.time);
+		});
+
+	// 对相同时间的项目进行去重：优先保留课程表的（如果科目不为空），否则保留特殊时间的
+	QMap<QString, TimeSubjectItem> timeMap; // 时间 -> 项目
+
+	for (const auto& item : items) {
+		if (!timeMap.contains(item.time)) {
+			// 新时间，直接添加
+			timeMap[item.time] = item;
+		} else {
+			// 已存在相同时间的项目
+			TimeSubjectItem& existing = timeMap[item.time];
+			// 规则：优先保留课程表的（如果课程表科目不为空），否则保留特殊时间的
+			if (item.isFromSchedule && !item.subject.trimmed().isEmpty()) {
+				// 新项目是课程表且科目不为空，优先保留
+				existing = item;
+			} else if (!item.isFromSchedule && existing.isFromSchedule && existing.subject.trimmed().isEmpty()) {
+				// 现有的是课程表但科目为空，新的是特殊时间，保留特殊时间
+				existing = item;
+			} else if (!item.isFromSchedule && !existing.isFromSchedule) {
+				// 两个都是特殊时间，保留科目不为空的
+				if (!item.subject.trimmed().isEmpty() && existing.subject.trimmed().isEmpty()) {
+					existing = item;
+				}
+			}
+			// 其他情况保持现有的
+		}
+	}
+
+	// 提取去重后的时间和科目列表（按时间排序）
+	QStringList sortedTimes;
+	QStringList sortedSubjects;
+	for (const auto& item : timeMap.values()) {
+		sortedTimes.append(item.time);
+		sortedSubjects.append(item.subject);
+	}
+
+	// 重新排序（因为QMap的values()可能不保持顺序）
+	QList<QPair<QString, QString>> finalPairs;
+	for (int i = 0; i < sortedTimes.size(); ++i) {
+		finalPairs.append(qMakePair(sortedTimes[i], sortedSubjects[i]));
+	}
+	std::sort(finalPairs.begin(), finalPairs.end(), 
+		[&timeToMinutes](const QPair<QString, QString>& a, const QPair<QString, QString>& b) {
+			return timeToMinutes(a.first) < timeToMinutes(b.first);
+		});
+
+	sortedTimes.clear();
+	sortedSubjects.clear();
+	for (const auto& pair : finalPairs) {
+		sortedTimes.append(pair.first);
+		sortedSubjects.append(pair.second);
+	}
+
+	// 显示合并和排序后的数据
+	int count = sortedTimes.size();
+	if (count == 0) {
+		return;
+	}
+	ensureDailyScheduleButtons(count);
+
+	const QString highlightTimeStyle = "background-color: darkorange; color: white; font-size:12px; min-width:40px;";
+	const QString highlightSubjectStyle = "background-color: darkorange; color: white; font-size:12px; min-width:50px;";
+
+	for (int i = 0; i < count; ++i) {
+		QString timeText = sortedTimes[i];
+		QString subjectText = sortedSubjects[i];
+		bool isHighlight = !subjectText.isEmpty() && highlightSubjects.contains(subjectText);
+		// 特殊科目只显示科目名，不显示时间（时间已经在上面显示了）
+		QString displaySubject = subjectText;
+
+		// 去掉时间字符串中小时部分前面的0，如 "07:20" -> "7:20"
+		QString displayTime = timeText;
+		if (displayTime.length() >= 5 && displayTime.startsWith("0") && displayTime[1].isDigit()) {
+			displayTime = displayTime.mid(1); // 去掉第一个字符（0）
+		}
+
+		if (i < m_timeButtons.size()) {
+			m_timeButtons[i]->setVisible(true);
+			m_timeButtons[i]->setText(displayTime);
+			m_timeButtons[i]->setProperty("raw_time", timeText);
+			m_timeButtons[i]->setStyleSheet(isHighlight ? highlightTimeStyle : m_timeButtonStyle);
+		}
+		if (i < m_subjectButtons.size()) {
+			m_subjectButtons[i]->setVisible(true);
+			m_subjectButtons[i]->setText(displaySubject);
+			m_subjectButtons[i]->setStyleSheet(isHighlight ? highlightSubjectStyle : m_subjectButtonStyle);
+			// 保存科目名称到按钮属性中，用于点击事件
+			m_subjectButtons[i]->setProperty("subject", displaySubject);
+			m_subjectButtons[i]->setProperty("time", timeText);
+			// 连接点击事件（如果还没有连接）
+			m_subjectButtons[i]->disconnect(); // 先断开之前的连接
+			connect(m_subjectButtons[i], &QPushButton::clicked, this, &ScheduleDialog::onSubjectButtonClicked);
+		}
+	}
+
+	for (int i = count; i < m_timeButtons.size(); ++i) {
+		m_timeButtons[i]->setVisible(false);
+	}
+	for (int i = count; i < m_subjectButtons.size(); ++i) {
+		m_subjectButtons[i]->setVisible(false);
+	}
+}
+
+inline QMap<QString, QString> ScheduleDialog::extractHighlightTimes(const QStringList& times, const QStringList& subjects) const
+{
+	QMap<QString, QString> result;
+	result.insert(QStringLiteral("晨读"), QStringLiteral("07:20"));
+	result.insert(QStringLiteral("午饭"), QStringLiteral("12:00"));
+	result.insert(QStringLiteral("午休"), QStringLiteral("12:40"));
+	result.insert(QStringLiteral("晚自习"), QStringLiteral("19:00"));
+
+	int count = qMin(times.size(), subjects.size());
+	for (int i = 0; i < count; ++i) {
+		const QString subject = subjects[i];
+		const QString time = times[i];
+		if (result.contains(subject) && !time.isEmpty()) {
+			result[subject] = time;
+		}
+	}
+	return result;
+}
+
+inline void ScheduleDialog::updateSpecialSubjects(const QMap<QString, QString>& highlights)
+{
+	if (!m_specialSubjectRowLayout) {
+		return;
+	}
+
+	while (QLayoutItem* item = m_specialSubjectRowLayout->takeAt(0)) {
+		if (item->widget()) {
+			item->widget()->deleteLater();
+		}
+		delete item;
+	}
+
+	if (highlights.isEmpty()) {
+		m_specialSubjectRowLayout->addStretch();
+		return;
+	}
+
+	QStringList order = { QStringLiteral("晨读"), QStringLiteral("午饭"), QStringLiteral("午休"), QStringLiteral("晚自习") };
+	QStringList keys;
+	for (const QString& key : order) {
+		if (highlights.contains(key)) {
+			keys.append(key);
+		}
+	}
+	for (auto it = highlights.constBegin(); it != highlights.constEnd(); ++it) {
+		if (!keys.contains(it.key())) {
+			keys.append(it.key());
+		}
+	}
+
+	bool first = true;
+	for (const QString& subject : keys) {
+		if (!first) {
+			QLabel* sep = new QLabel("   |   ");
+			sep->setStyleSheet("color: white; font-size: 12px;");
+			m_specialSubjectRowLayout->addWidget(sep);
+		}
+		QString display = QStringLiteral("%1 %2").arg(subject, highlights.value(subject));
+		QLabel* lbl = new QLabel(display);
+		lbl->setStyleSheet("color: white; font-size: 12px;");
+		m_specialSubjectRowLayout->addWidget(lbl);
+		first = false;
+	}
+	m_specialSubjectRowLayout->addStretch();
+}
+
+inline QStringList ScheduleDialog::defaultSubjectsForWeekday(int weekday) const
+{
+	static const QMap<int, QStringList> subjectsByWeekday = {
+		{1, {"晨读","语文","数学","英语","物理","午饭","午休","数学","美术","道法","课服","晚自习",""}},
+		{2, {"晨读","语文","数学","英语","化学","午饭","午休","物理","信息","体育","课服","晚自习",""}},
+		{3, {"晨读","语文","数学","英语","生物","午饭","午休","数学","历史","地理","课服","晚自习",""}},
+		{4, {"晨读","语文","数学","英语","政治","午饭","午休","数学","音乐","美术","课服","晚自习",""}},
+		{5, {"晨读","语文","数学","英语","综合实践","午饭","午休","数学","信息","体育","课服","晚自习",""}},
+		{6, {"晨读","自习","自习","自习","自习","午饭","午休","兴趣","兴趣","综合","课服","晚自习",""}},
+		{7, {"晨读","休息","休息","休息","休息","午饭","午休","休息","休息","休息","课服","晚自习",""}}
+	};
+	return subjectsByWeekday.value(weekday, subjectsByWeekday.value(1));
+}
+
+inline QStringList ScheduleDialog::defaultTimesForSubjects(const QStringList& subjects) const
+{
+	QStringList slotDefaults = { "07:20","08:00","08:45","09:35","10:25","12:00","12:40","14:00","14:45","15:35","17:00","19:00","20:30" };
+	QString morningRead = "07:20";
+	QString lunchTime = "12:00";
+	QString napTime = "12:40";
+	QString tutoringTime = "17:00";
+	QString eveningStudyTime = "19:00";
+
+	QStringList times;
+	times.reserve(subjects.size());
+	for (int i = 0; i < subjects.size(); ++i) {
+		QString subject = subjects[i];
+		QString slotTime = slotDefaults.value(i, "--:--");
+		if (subject == "晨读") {
+			slotTime = morningRead;
+		} else if (subject == "午饭") {
+			slotTime = lunchTime;
+		} else if (subject == "午休") {
+			slotTime = napTime;
+		} else if (subject == "课服") {
+			slotTime = tutoringTime;
+		} else if (subject == "晚自习") {
+			slotTime = eveningStudyTime;
+		}
+		times.append(slotTime);
+	}
+	return times;
+}
+
+inline QPair<QStringList, QStringList> ScheduleDialog::buildDefaultDailySchedule() const
+{
+	int weekday = QDate::currentDate().dayOfWeek(); // 1=Monday ... 7=Sunday
+	QStringList subs = defaultSubjectsForWeekday(weekday);
+	QStringList times = defaultTimesForSubjects(subs);
+	return qMakePair(times, subs);
+}
+
+inline void ScheduleDialog::applyDefaultDailySchedule()
+{
+	auto dailySchedule = buildDefaultDailySchedule();
+	QMap<QString, QString> highlights = extractHighlightTimes(dailySchedule.first, dailySchedule.second);
+	applyDailyScheduleToButtons(dailySchedule.first, dailySchedule.second, highlights);
+	updateSpecialSubjects(highlights);
+}
+
+inline QString ScheduleDialog::currentTermString() const
+{
+	QDate today = QDate::currentDate();
+	int year = today.year();
+	int month = today.month();
+
+	int startYear = year;
+	int endYear = year + 1;
+	int termIndex = 1;
+
+	if (month >= 9) {
+		startYear = year;
+		endYear = year + 1;
+		termIndex = 1;
+	} else if (month >= 3 && month <= 8) {
+		startYear = year - 1;
+		endYear = year;
+		termIndex = 2;
+	} else {
+		startYear = year - 1;
+		endYear = year;
+		termIndex = 1;
+	}
+
+	return QString("%1-%2-%3").arg(startYear).arg(endYear).arg(termIndex);
+}
+
+inline QStringList ScheduleDialog::jsonArrayToStringList(const QJsonArray& arr) const
+{
+	QStringList list;
+	for (const QJsonValue& value : arr) {
+		list << value.toString();
+	}
+	return list;
+}
+
+inline bool ScheduleDialog::looksLikeTimeText(const QString& text) const
+{
+	static QRegExp preciseTimePattern(QStringLiteral("^\\d{1,2}:\\d{2}(?::\\d{2}(?:\\.\\d{1,3})?)?$"));
+	if (preciseTimePattern.exactMatch(text))
+		return true;
+
+	QRegExp rangePattern(QStringLiteral("^(\\d{1,2}:\\d{2})\\s*-\\s*(\\d{1,2}:\\d{2})$"));
+	return rangePattern.exactMatch(text);
+}
+
+inline void ScheduleDialog::applyServerDailySchedule(const QStringList& days, const QStringList& times, const QJsonArray& cells)
+{
+	if (times.isEmpty()) {
+		applyDefaultDailySchedule();
+		return;
+	}
+
+	int weekday = QDate::currentDate().dayOfWeek() - 1; // 0-based
+	if (!days.isEmpty()) {
+		weekday = qBound(0, weekday, days.size() - 1);
+	}
+
+	bool hasLeadingTimeColumn = false;
+	for (const QJsonValue& value : cells) {
+		if (!value.isObject())
+			continue;
+		QJsonObject obj = value.toObject();
+		int colIndex = obj.value(QStringLiteral("col_index")).toInt(-1);
+		QString courseName = obj.value(QStringLiteral("course_name")).toString();
+		if (colIndex == 0 && looksLikeTimeText(courseName)) {
+			hasLeadingTimeColumn = true;
+			break;
+		}
+	}
+
+	int targetCol = weekday;
+	if (hasLeadingTimeColumn) {
+		targetCol += 1;
+	}
+
+	QStringList subjects;
+	subjects.reserve(times.size());
+	for (int i = 0; i < times.size(); ++i) {
+		subjects.append("");
+	}
+	for (const QJsonValue& value : cells) {
+		if (!value.isObject())
+			continue;
+		QJsonObject obj = value.toObject();
+		int rowIndex = obj.value(QStringLiteral("row_index")).toInt(-1);
+		int colIndex = obj.value(QStringLiteral("col_index")).toInt(-1);
+		QString courseName = obj.value(QStringLiteral("course_name")).toString();
+		if (rowIndex < 0 || rowIndex >= subjects.size())
+			continue;
+		if (colIndex != targetCol)
+			continue;
+		if (courseName.isEmpty())
+			continue;
+		if (looksLikeTimeText(courseName))
+			continue;
+		subjects[rowIndex] = courseName;
+	}
+
+	QMap<QString, QString> highlights = extractHighlightTimes(times, subjects);
+	applyDailyScheduleToButtons(times, subjects, highlights);
+	updateSpecialSubjects(highlights);
+}
+
+inline void ScheduleDialog::fetchCourseScheduleForDailyView()
+{
+	if (!m_isClassGroup) {
+		applyDefaultDailySchedule();
+		return;
+	}
+	if (m_classid.isEmpty()) {
+		applyDefaultDailySchedule();
+		return;
+	}
+
+	const QString term = currentTermString();
+	QUrl url(QStringLiteral("http://47.100.126.194:5000/course-schedule"));
+	QUrlQuery query;
+	query.addQueryItem(QStringLiteral("class_id"), m_classid);
+	query.addQueryItem(QStringLiteral("term"), term);
+	url.setQuery(query);
+
+	TAHttpHandler* handler = new TAHttpHandler(this);
+	if (!handler) {
+		applyDefaultDailySchedule();
+		return;
+	}
+
+	connect(handler, &TAHttpHandler::success, this, [=](const QString& responseString) {
+		handler->deleteLater();
+		QJsonParseError parseError;
+		QJsonDocument doc = QJsonDocument::fromJson(responseString.toUtf8(), &parseError);
+		if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+			qWarning() << "课程表解析失败:" << parseError.errorString();
+			applyDefaultDailySchedule();
+			return;
+		}
+
+		QJsonObject obj = doc.object();
+		int code = obj.value(QStringLiteral("code")).toInt(-1);
+		QString message = obj.value(QStringLiteral("message")).toString();
+		if (code != 200) {
+			qWarning() << "课程表接口返回错误:" << code << message;
+			applyDefaultDailySchedule();
+			return;
+		}
+
+		QJsonObject dataObj = obj.value(QStringLiteral("data")).toObject();
+		QJsonObject scheduleObj = dataObj.value(QStringLiteral("schedule")).toObject();
+		QStringList days = jsonArrayToStringList(scheduleObj.value(QStringLiteral("days")).toArray());
+		QStringList times = jsonArrayToStringList(scheduleObj.value(QStringLiteral("times")).toArray());
+		QJsonArray cells = dataObj.value(QStringLiteral("cells")).toArray();
+		if (times.isEmpty() || cells.isEmpty()) {
+			applyDefaultDailySchedule();
+			return;
+		}
+		applyServerDailySchedule(days, times, cells);
+	});
+
+	connect(handler, &TAHttpHandler::failed, this, [=](const QString& error) {
+		handler->deleteLater();
+		qWarning() << "课程表接口请求失败:" << error;
+		applyDefaultDailySchedule();
+	});
+
+	handler->get(url.toString());
+	qDebug() << "正在请求课程表:" << url.toString();
+}
+
 // 打开对讲界面网页
 inline void ScheduleDialog::openIntercomWebPage()
 {
@@ -2839,3 +3379,285 @@ inline void ScheduleDialog::openIntercomWebPage()
 
 // 热力图相关方法的实现在 ScheduleDialog_Heatmap.cpp 中
 
+// 科目按钮点击事件：弹出菜单
+inline void ScheduleDialog::onSubjectButtonClicked()
+{
+	QPushButton* btn = qobject_cast<QPushButton*>(sender());
+	if (!btn) return;
+	
+	QString subject = btn->property("subject").toString();
+	if (subject.isEmpty()) {
+		subject = btn->text();
+	}
+	
+	// 创建弹出菜单
+	QMenu menu(this);
+	QAction* actionPrepare = menu.addAction(QString::fromUtf8(u8"课前准备"));
+	QAction* actionEvaluation = menu.addAction(QString::fromUtf8(u8"课后评价"));
+	
+	// 显示菜单
+	QAction* selectedAction = menu.exec(btn->mapToGlobal(QPoint(0, btn->height())));
+	
+	if (selectedAction == actionPrepare) {
+		// 找到对应的时间按钮
+		QString time = btn->property("time").toString();
+		if (time.isEmpty()) {
+			int subjectIndex = m_subjectButtons.indexOf(btn);
+			if (subjectIndex >= 0 && subjectIndex < m_timeButtons.size()) {
+				time = m_timeButtons[subjectIndex]->property("raw_time").toString();
+				if (time.isEmpty()) {
+					time = m_timeButtons[subjectIndex]->text();
+				}
+			}
+		}
+		showPrepareClassDialog(subject, time);
+	} else if (selectedAction == actionEvaluation) {
+		showPostClassEvaluationDialog(subject);
+	}
+}
+
+// 显示课前准备对话框
+inline void ScheduleDialog::showPrepareClassDialog(const QString& subject, const QString& time)
+{
+	// 创建对话框
+	QDialog* dlg = new QDialog(this);
+	dlg->setWindowTitle(QString::fromUtf8(u8"课前准备"));
+	dlg->setFixedSize(500, 400);
+	dlg->setStyleSheet(
+		"QDialog { background-color: #2b2b2b; }"
+		"QLabel { color: white; font-size: 14px; }"
+		"QTextEdit { background-color: #3b3b3b; color: white; border: 1px solid #555; border-radius: 4px; padding: 8px; }"
+		"QPushButton { background-color: #4a4a4a; color: white; border: 1px solid #666; border-radius: 4px; padding: 8px 16px; font-size: 14px; }"
+		"QPushButton:hover { background-color: #5a5a5a; }"
+		"QPushButton:pressed { background-color: #3a3a3a; }"
+	);
+	
+	QVBoxLayout* mainLayout = new QVBoxLayout(dlg);
+	mainLayout->setSpacing(15);
+	mainLayout->setContentsMargins(20, 20, 20, 20);
+	
+	// 提示文字
+	QLabel* lblPrompt = new QLabel(QString::fromUtf8(u8"请输入课前准备内容"));
+	lblPrompt->setStyleSheet("color: white; font-size: 14px;");
+	mainLayout->addWidget(lblPrompt);
+	
+	// 文本输入框
+	QTextEdit* textEdit = new QTextEdit(dlg);
+	textEdit->setPlaceholderText(QString::fromUtf8(u8"请输入课前准备内容..."));
+	textEdit->setMinimumHeight(200);
+	const QString cacheKey = prepareClassCacheKey(subject, time);
+	if (m_prepareClassCache.contains(cacheKey)) {
+		textEdit->setPlainText(m_prepareClassCache.value(cacheKey));
+	}
+	mainLayout->addWidget(textEdit, 1);
+	
+	// 按钮布局
+	QHBoxLayout* btnLayout = new QHBoxLayout;
+	btnLayout->addStretch();
+	
+	QPushButton* btnCancel = new QPushButton(QString::fromUtf8(u8"取消"));
+	btnCancel->setFixedSize(80, 35);
+	btnCancel->setStyleSheet(
+		"QPushButton { background-color: #4a4a4a; color: white; }"
+		"QPushButton:hover { background-color: #5a5a5a; }"
+	);
+	
+	QPushButton* btnConfirm = new QPushButton(QString::fromUtf8(u8"确定"));
+	btnConfirm->setFixedSize(80, 35);
+	btnConfirm->setStyleSheet(
+		"QPushButton { background-color: #0078d4; color: white; }"
+		"QPushButton:hover { background-color: #0063b1; }"
+	);
+	
+	btnLayout->addWidget(btnCancel);
+	btnLayout->addWidget(btnConfirm);
+	mainLayout->addLayout(btnLayout);
+	
+	// 连接按钮事件
+	connect(btnCancel, &QPushButton::clicked, dlg, &QDialog::reject);
+	connect(btnConfirm, &QPushButton::clicked, dlg, [=]() {
+		QString content = textEdit->toPlainText().trimmed();
+		if (content.isEmpty()) {
+			QMessageBox::warning(dlg, QString::fromUtf8(u8"提示"), QString::fromUtf8(u8"请输入课前准备内容！"));
+			return;
+		}
+		// 保存到缓存
+		m_prepareClassCache[cacheKey] = content;
+		sendPrepareClassContent(subject, content, time);
+		dlg->accept();
+	});
+	
+	// 显示对话框
+	dlg->exec();
+	dlg->deleteLater();
+}
+
+// 发送课前准备内容（通过WebSocket发送到群组）
+inline void ScheduleDialog::sendPrepareClassContent(const QString& subject, const QString& content, const QString& time)
+{
+	if (m_unique_group_id.isEmpty()) {
+		QMessageBox::warning(this, QString::fromUtf8(u8"错误"), QString::fromUtf8(u8"群组ID为空，无法发送！"));
+		return;
+	}
+	
+	if (!m_pWs) {
+		QMessageBox::warning(this, QString::fromUtf8(u8"错误"), QString::fromUtf8(u8"WebSocket未连接，无法发送！"));
+		return;
+	}
+	
+	// 构建JSON消息体
+	QJsonObject jsonObj;
+	jsonObj[QStringLiteral("type")] = QStringLiteral("prepare_class"); // 消息类型：课前准备
+	jsonObj[QStringLiteral("class_id")] = m_classid;
+	jsonObj[QStringLiteral("subject")] = subject;
+	jsonObj[QStringLiteral("content")] = content;
+	jsonObj[QStringLiteral("date")] = QDate::currentDate().toString(QStringLiteral("yyyy-MM-dd"));
+	jsonObj[QStringLiteral("sender_id")] = m_userId;
+	jsonObj[QStringLiteral("sender_name")] = m_userName;
+	// 添加时间参数（如果提供）
+	if (!time.isEmpty()) {
+		jsonObj[QStringLiteral("time")] = time;
+	}
+	
+	QJsonDocument doc(jsonObj);
+	QString jsonString = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+	
+	// 通过WebSocket发送到群组，格式：to:群组ID:消息内容
+	QString message = QString("to:%1:%2").arg(m_unique_group_id, jsonString);
+	TaQTWebSocket::sendPrivateMessage(message);
+	
+	qDebug() << "正在通过WebSocket发送课前准备内容到群组:" << m_unique_group_id;
+	qDebug() << "消息内容:" << jsonString;
+	
+	QMessageBox::information(this, QString::fromUtf8(u8"成功"), QString::fromUtf8(u8"课前准备内容已发送到群组！"));
+}
+
+inline QString ScheduleDialog::prepareClassCacheKey(const QString& subject, const QString& time) const
+{
+	return subject.trimmed() + "|" + time.trimmed();
+}
+
+inline void ScheduleDialog::setPrepareClassHistory(const QJsonArray& history)
+{
+	m_prepareClassHistoryData = history;
+	for (const auto& value : history) {
+		if (!value.isObject()) {
+			continue;
+		}
+		QJsonObject obj = value.toObject();
+		QString subject = obj.value(QStringLiteral("subject")).toString();
+		QString time = obj.value(QStringLiteral("time")).toString();
+		QString content = obj.value(QStringLiteral("content")).toString();
+		if (subject.trimmed().isEmpty() || content.isEmpty()) {
+			continue;
+		}
+		QString key = prepareClassCacheKey(subject, time);
+		m_prepareClassCache[key] = content;
+	}
+}
+
+// 显示课后评价对话框
+inline void ScheduleDialog::showPostClassEvaluationDialog(const QString& subject)
+{
+	// 创建对话框
+	QDialog* dlg = new QDialog(this);
+	dlg->setWindowTitle(QString::fromUtf8(u8"课后评价"));
+	dlg->setFixedSize(500, 400);
+	dlg->setStyleSheet(
+		"QDialog { background-color: #2b2b2b; }"
+		"QLabel { color: white; font-size: 14px; }"
+		"QTextEdit { background-color: #3b3b3b; color: white; border: 1px solid #555; border-radius: 4px; padding: 8px; }"
+		"QPushButton { background-color: #4a4a4a; color: white; border: 1px solid #666; border-radius: 4px; padding: 8px 16px; font-size: 14px; }"
+		"QPushButton:hover { background-color: #5a5a5a; }"
+		"QPushButton:pressed { background-color: #3a3a3a; }"
+	);
+	
+	QVBoxLayout* mainLayout = new QVBoxLayout(dlg);
+	mainLayout->setSpacing(15);
+	mainLayout->setContentsMargins(20, 20, 20, 20);
+	
+	// 提示文字
+	QLabel* lblPrompt = new QLabel(QString::fromUtf8(u8"请输入课后评价内容"));
+	lblPrompt->setStyleSheet("color: white; font-size: 14px;");
+	mainLayout->addWidget(lblPrompt);
+	
+	// 文本输入框
+	QTextEdit* textEdit = new QTextEdit(dlg);
+	textEdit->setPlaceholderText(QString::fromUtf8(u8"请输入课后评价内容..."));
+	textEdit->setMinimumHeight(200);
+	mainLayout->addWidget(textEdit, 1);
+	
+	// 按钮布局
+	QHBoxLayout* btnLayout = new QHBoxLayout;
+	btnLayout->addStretch();
+	
+	QPushButton* btnCancel = new QPushButton(QString::fromUtf8(u8"取消"));
+	btnCancel->setFixedSize(80, 35);
+	btnCancel->setStyleSheet(
+		"QPushButton { background-color: #4a4a4a; color: white; }"
+		"QPushButton:hover { background-color: #5a5a5a; }"
+	);
+	
+	QPushButton* btnConfirm = new QPushButton(QString::fromUtf8(u8"确定"));
+	btnConfirm->setFixedSize(80, 35);
+	btnConfirm->setStyleSheet(
+		"QPushButton { background-color: #0078d4; color: white; }"
+		"QPushButton:hover { background-color: #0063b1; }"
+	);
+	
+	btnLayout->addWidget(btnCancel);
+	btnLayout->addWidget(btnConfirm);
+	mainLayout->addLayout(btnLayout);
+	
+	// 连接按钮事件
+	connect(btnCancel, &QPushButton::clicked, dlg, &QDialog::reject);
+	connect(btnConfirm, &QPushButton::clicked, dlg, [=]() {
+		QString content = textEdit->toPlainText().trimmed();
+		if (content.isEmpty()) {
+			QMessageBox::warning(dlg, QString::fromUtf8(u8"提示"), QString::fromUtf8(u8"请输入课后评价内容！"));
+			return;
+		}
+		sendPostClassEvaluationContent(subject, content);
+		dlg->accept();
+	});
+	
+	// 显示对话框
+	dlg->exec();
+	dlg->deleteLater();
+}
+
+// 发送课后评价内容（通过WebSocket发送到群组）
+inline void ScheduleDialog::sendPostClassEvaluationContent(const QString& subject, const QString& content)
+{
+	if (m_unique_group_id.isEmpty()) {
+		QMessageBox::warning(this, QString::fromUtf8(u8"错误"), QString::fromUtf8(u8"群组ID为空，无法发送！"));
+		return;
+	}
+	
+	if (!m_pWs) {
+		QMessageBox::warning(this, QString::fromUtf8(u8"错误"), QString::fromUtf8(u8"WebSocket未连接，无法发送！"));
+		return;
+	}
+	
+	// 构建JSON消息体
+	QJsonObject jsonObj;
+	jsonObj[QStringLiteral("type")] = QStringLiteral("post_class_evaluation"); // 消息类型：课后评价
+	jsonObj[QStringLiteral("class_id")] = m_classid;
+	jsonObj[QStringLiteral("subject")] = subject;
+	jsonObj[QStringLiteral("content")] = content;
+	jsonObj[QStringLiteral("date")] = QDate::currentDate().toString(QStringLiteral("yyyy-MM-dd"));
+	jsonObj[QStringLiteral("sender_id")] = m_userId;
+	jsonObj[QStringLiteral("sender_name")] = m_userName;
+	
+	QJsonDocument doc(jsonObj);
+	QString jsonString = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+	
+	// 通过WebSocket发送到群组，格式：to:群组ID:消息内容
+	QString message = QString("to:%1:%2").arg(m_unique_group_id, jsonString);
+	TaQTWebSocket::sendPrivateMessage(message);
+	
+	qDebug() << "正在通过WebSocket发送课后评价内容到群组:" << m_unique_group_id;
+	qDebug() << "消息内容:" << jsonString;
+	
+	QMessageBox::information(this, QString::fromUtf8(u8"成功"), QString::fromUtf8(u8"课后评价内容已发送到群组！"));
+}

@@ -154,6 +154,8 @@ protected:
     QString m_groupNumberId;
     QVector<GroupMemberInfo> m_groupMemberInfo;
     QHBoxLayout* circlesLayout = NULL;
+    FriendButton* m_circlePlus = nullptr; // + 按钮（添加成员）
+    FriendButton* m_circleMinus = nullptr; // - 按钮（移除成员）
     FriendSelectDialog* m_friendSelectDlg = NULL;
     MemberKickDialog* m_memberKickDlg = NULL; // 踢出成员对话框
     //ClassTeacherDelDialog* m_classTeacherDelDlg = NULL;

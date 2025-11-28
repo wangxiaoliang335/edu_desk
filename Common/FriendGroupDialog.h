@@ -126,6 +126,7 @@ private:
     QTreeWidgetItem* m_normalManagedRoot = nullptr;
     QTreeWidgetItem* m_normalJoinedRoot = nullptr;
     QHash<QString, QTreeWidgetItem*> m_groupItemMap;
+    QHash<QString, QJsonArray> m_prepareClassHistoryCache;
 
     void setupFriendTree();
     void clearFriendTree();
@@ -139,4 +140,5 @@ private:
     void addGroupTreeNode(const QString& displayName, const QString& groupId, const QString& classid, bool iGroupOwner, bool isClassGroup);
     void handleGroupItemActivated(QTreeWidgetItem* item);
     void openScheduleForGroup(const QString& groupName, const QString& unique_group_id, const QString& classid, bool iGroupOwner, bool isClassGroup);
+    void processPrepareClassHistoryMessage(const QJsonObject& rootObj);
 };

@@ -342,6 +342,9 @@ void FriendGroupDialog::openScheduleForGroup(const QString& groupName, const QSt
             }
         }
         dlg->setNoticeMsg(curNotification);
+        if (m_prepareClassHistoryCache.contains(unique_group_id)) {
+            dlg->setPrepareClassHistory(m_prepareClassHistoryCache.value(unique_group_id));
+        }
         connectGroupLeftSignal(dlg, unique_group_id);
         m_scheduleDlg[unique_group_id] = dlg;
     }
@@ -1189,6 +1192,12 @@ void FriendGroupDialog::onWebSocketMessage(const QString& msg)
 
     QJsonObject rootObj = doc.object();
 
+    const QString type = rootObj.value(QStringLiteral("type")).toString();
+    if (type == QStringLiteral("prepare_class_history")) {
+        processPrepareClassHistoryMessage(rootObj);
+        return;
+    }
+
     // 提取 data 数组
     if (rootObj.contains("data") && rootObj["data"].isArray()) {
         QJsonArray dataArray = rootObj["data"].toArray();
@@ -1212,6 +1221,44 @@ void FriendGroupDialog::onWebSocketMessage(const QString& msg)
             n.updated_at = obj["updated_at"].toString();
 
             notifications.append(n);
+        }
+    }
+}
+
+void FriendGroupDialog::processPrepareClassHistoryMessage(const QJsonObject& rootObj)
+{
+    if (!rootObj.contains(QStringLiteral("data")) || !rootObj.value(QStringLiteral("data")).isArray()) {
+        qWarning() << "prepare_class_history 消息缺少 data 数组";
+        return;
+    }
+
+    QJsonArray dataArray = rootObj.value(QStringLiteral("data")).toArray();
+    if (dataArray.isEmpty()) {
+        qDebug() << "prepare_class_history 数据为空";
+        return;
+    }
+
+    QHash<QString, QJsonArray> groupedByGroupId;
+    for (const auto& item : dataArray) {
+        if (!item.isObject()) {
+            continue;
+        }
+        QJsonObject obj = item.toObject();
+        QString groupId = obj.value(QStringLiteral("group_id")).toString();
+        if (groupId.isEmpty()) {
+            groupId = obj.value(QStringLiteral("unique_group_id")).toString();
+        }
+        if (groupId.isEmpty()) {
+            continue;
+        }
+        groupedByGroupId[groupId].append(item);
+    }
+
+    for (auto it = groupedByGroupId.constBegin(); it != groupedByGroupId.constEnd(); ++it) {
+        const QString& groupId = it.key();
+        m_prepareClassHistoryCache[groupId] = it.value();
+        if (ScheduleDialog* dlg = m_scheduleDlg.value(groupId, nullptr)) {
+            dlg->setPrepareClassHistory(it.value());
         }
     }
 }

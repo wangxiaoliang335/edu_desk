@@ -15,7 +15,14 @@ struct DismissGroupCallbackData {
 QGroupInfo::QGroupInfo(QWidget* parent)
 	: QDialog(parent)
 {
+    // 初始化时不显示，由外部调用 show() 时才显示
+    //setVisible(false);
     
+    // 初始化成员变量
+    m_circlePlus = nullptr;
+    m_circleMinus = nullptr;
+    m_btnDismiss = nullptr;
+    m_btnExit = nullptr;
 }
 
 void QGroupInfo::initData(QString groupName, QString groupNumberId, QString classid)
@@ -96,11 +103,11 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, QString clas
     //lblNumber->setAlignment(Qt::AlignCenter);
     //lblNumber->setFixedSize(30, 30);
     //lblNumber->setStyleSheet("background-color: yellow; border-radius: 15px; font-weight: bold;");
-    QLabel* lblAvatar = new QLabel;
+    QLabel* lblAvatar = new QLabel(this);
     lblAvatar->setFixedSize(50, 50);
     lblAvatar->setStyleSheet("background-color: lightgray;");
-    QLabel* lblInfo = new QLabel(groupName + "\n" + groupNumberId);
-    QPushButton* btnMore = new QPushButton("...");
+    QLabel* lblInfo = new QLabel(groupName + "\n" + groupNumberId, this);
+    QPushButton* btnMore = new QPushButton("...", this);
     btnMore->setFixedSize(30, 30);
     //topLayout->addWidget(lblNumber);
     topLayout->addWidget(lblAvatar);
@@ -110,14 +117,14 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, QString clas
     mainLayout->addLayout(topLayout);
 
     // 班级编号
-    QLineEdit* editClassNum = new QLineEdit("2349235");
+    QLineEdit* editClassNum = new QLineEdit("2349235", this);
     editClassNum->setAlignment(Qt::AlignCenter);
     editClassNum->setStyleSheet("color:red; font-size:18px; font-weight:bold;");
     mainLayout->addWidget(editClassNum);
 
-    QHBoxLayout* pHBoxLayut = new QHBoxLayout(this);
+    QHBoxLayout* pHBoxLayut = new QHBoxLayout;
     // 班级课程表按钮
-    QPushButton* btnSchedule = new QPushButton("班级课程表");
+    QPushButton* btnSchedule = new QPushButton("班级课程表", this);
     btnSchedule->setStyleSheet("background-color:green; color:white; font-weight:bold;");
 
     pHBoxLayut->addWidget(btnSchedule);
@@ -140,9 +147,15 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, QString clas
     
 
     // 好友列表
-    QGroupBox* groupFriends = new QGroupBox("好友列表");
+    QGroupBox* groupFriends = new QGroupBox("好友列表", this);
+    groupFriends->setMinimumHeight(80); // 设置最小高度，确保有足够空间显示按钮
     QVBoxLayout* friendsLayout = new QVBoxLayout(groupFriends);
-    circlesLayout = new QHBoxLayout;
+    friendsLayout->setContentsMargins(10, 10, 10, 10); // 设置 friendsLayout 的边距
+    friendsLayout->setSpacing(5); // 设置 friendsLayout 的间距
+    circlesLayout = new QHBoxLayout();
+    // 设置布局的间距和边距
+    circlesLayout->setSpacing(8);
+    circlesLayout->setContentsMargins(5, 5, 5, 5);
 
     //QString blueStyle = "background-color:blue; border-radius:15px; color:white; font-weight:bold;";
     //QString redStyle = "background-color:red; border-radius:15px; color:white; font-weight:bold;";
@@ -180,13 +193,71 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, QString clas
     //circlesLayout->addWidget(circlePlus);
     //circlesLayout->addWidget(circleMinus);
 
+    // 在初始化时就创建 + 和 - 按钮，确保它们总是可见
+    // 注意：按钮的父控件应该是 groupFriends，这样它们才会显示在正确的容器内
+    m_circlePlus = new FriendButton("+", groupFriends);
+    m_circlePlus->setFixedSize(50, 50);
+    m_circlePlus->setMinimumSize(50, 50);
+    m_circlePlus->setContextMenuEnabled(false);
+    m_circlePlus->setVisible(true);
+    circlesLayout->addWidget(m_circlePlus);
+    
+    m_circleMinus = new FriendButton("-", groupFriends);
+    m_circleMinus->setFixedSize(50, 50);
+    m_circleMinus->setMinimumSize(50, 50);
+    m_circleMinus->setContextMenuEnabled(false);
+    m_circleMinus->setVisible(true);
+    circlesLayout->addWidget(m_circleMinus);
+    
+    // 连接按钮点击事件（这些连接会在 InitGroupMember 中重新设置，但先设置确保可用）
+    connect(m_circlePlus, &FriendButton::clicked, this, [this]() {
+        if (m_friendSelectDlg)
+        {
+            if (m_friendSelectDlg->isHidden())
+            {
+                // 获取当前群组成员ID列表，用于排除
+                QVector<QString> memberIds;
+                for (const auto& member : m_groupMemberInfo)
+                {
+                    memberIds.append(member.member_id);
+                }
+                m_friendSelectDlg->setExcludedMemberIds(memberIds);
+                m_friendSelectDlg->setGroupId(m_groupNumberId);
+                m_friendSelectDlg->setGroupName(m_groupName);
+                m_friendSelectDlg->InitData();
+                m_friendSelectDlg->show();
+            }
+            else
+            {
+                m_friendSelectDlg->hide();
+            }
+        }
+    });
+    
+    connect(m_circleMinus, &FriendButton::clicked, this, [this]() {
+        if (m_memberKickDlg)
+        {
+            if (m_memberKickDlg->isHidden())
+            {
+                m_memberKickDlg->setGroupId(m_groupNumberId);
+                m_memberKickDlg->setGroupName(m_groupName);
+                m_memberKickDlg->InitData(m_groupMemberInfo);
+                m_memberKickDlg->show();
+            }
+            else
+            {
+                m_memberKickDlg->hide();
+            }
+        }
+    });
+
     friendsLayout->addLayout(circlesLayout);
     mainLayout->addWidget(groupFriends);
 
     // 科目输入
-    QGroupBox* groupSubject = new QGroupBox("科目");
+    QGroupBox* groupSubject = new QGroupBox("科目", this);
     QVBoxLayout* subjectLayout = new QVBoxLayout(groupSubject);
-    QLineEdit* editSubject = new QLineEdit("语文");
+    QLineEdit* editSubject = new QLineEdit("语文", this);
     editSubject->setAlignment(Qt::AlignCenter);
     editSubject->setStyleSheet("color:red; font-size:18px; font-weight:bold;");
     subjectLayout->addWidget(editSubject);
@@ -194,17 +265,27 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, QString clas
 
     // 开启对讲(开关)
     QHBoxLayout* talkLayout = new QHBoxLayout;
-    QLabel* lblTalk = new QLabel("开启对讲");
-    QCheckBox* chkTalk = new QCheckBox;
+    QLabel* lblTalk = new QLabel("开启对讲", this);
+    QCheckBox* chkTalk = new QCheckBox(this);
     talkLayout->addWidget(lblTalk);
     talkLayout->addStretch();
     talkLayout->addWidget(chkTalk);
     mainLayout->addLayout(talkLayout);
 
     // 解散群聊 / 退出群聊
+    // 如果按钮已经存在，先删除它们（防止重复创建）
+    if (m_btnDismiss) {
+        m_btnDismiss->deleteLater();
+        m_btnDismiss = nullptr;
+    }
+    if (m_btnExit) {
+        m_btnExit->deleteLater();
+        m_btnExit = nullptr;
+    }
+    
     QHBoxLayout* bottomBtns = new QHBoxLayout;
-    m_btnDismiss = new QPushButton("解散群聊");
-    m_btnExit = new QPushButton("退出群聊");
+    m_btnDismiss = new QPushButton("解散群聊", this);
+    m_btnExit = new QPushButton("退出群聊", this);
     bottomBtns->addWidget(m_btnDismiss);
     bottomBtns->addWidget(m_btnExit);
     mainLayout->addLayout(bottomBtns);
@@ -221,15 +302,65 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, QString clas
 
 void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> groupMemberInfo)
 {
+    // 检查传入的参数是否与已保存的参数相同
+    if (m_groupNumberId == group_id && m_groupMemberInfo.size() == groupMemberInfo.size()) {
+        // 检查成员列表是否完全相同
+        bool isSame = true;
+        for (int i = 0; i < groupMemberInfo.size(); ++i) {
+            if (m_groupMemberInfo[i].member_id != groupMemberInfo[i].member_id ||
+                m_groupMemberInfo[i].member_name != groupMemberInfo[i].member_name ||
+                m_groupMemberInfo[i].member_role != groupMemberInfo[i].member_role) {
+                isSame = false;
+                break;
+            }
+        }
+        if (isSame) {
+            qDebug() << "QGroupInfo::InitGroupMember 参数相同，跳过更新。群组ID:" << group_id << "，成员数量:" << groupMemberInfo.size();
+            return;
+        }
+    }
+    
     m_groupNumberId = group_id;
     m_groupMemberInfo = groupMemberInfo;
 
+    qDebug() << "QGroupInfo::InitGroupMember 被调用，群组ID:" << group_id << "，成员数量:" << groupMemberInfo.size();
+
+    // 确保 circlesLayout 已初始化
+    if (!circlesLayout) {
+        qWarning() << "circlesLayout 未初始化，无法显示好友列表！";
+        return;
+    }
+    
+    // 找到 groupFriends 容器，成员按钮的父控件应该是它
+    QGroupBox* groupFriends = nullptr;
+    QWidget* parentWidget = circlesLayout->parentWidget();
+    if (parentWidget) {
+        groupFriends = qobject_cast<QGroupBox*>(parentWidget);
+    }
+    if (!groupFriends) {
+        // 如果找不到，尝试从 circlesLayout 的父布局查找
+        QLayout* parentLayout = qobject_cast<QLayout*>(circlesLayout->parent());
+        if (parentLayout && parentLayout->parentWidget()) {
+            groupFriends = qobject_cast<QGroupBox*>(parentLayout->parentWidget());
+        }
+    }
+    // 如果还是找不到，使用 this 作为父控件
+    if (!groupFriends) {
+        // 尝试通过对象名查找
+        QList<QGroupBox*> groupBoxes = this->findChildren<QGroupBox*>();
+        for (QGroupBox* gb : groupBoxes) {
+            if (gb->title() == "好友列表") {
+                groupFriends = gb;
+                break;
+            }
+        }
+    }
+    // 最后使用 this 作为父控件
+    QWidget* buttonParent = groupFriends ? static_cast<QWidget*>(groupFriends) : this;
+    qDebug() << "成员按钮的父控件:" << (groupFriends ? "groupFriends" : "this");
+
     // 清空之前的成员圆圈（保留 + 和 - 按钮）
-    if (circlesLayout) {
-        // 先找到 + 和 - 按钮，保存它们
-        FriendButton* circlePlus = nullptr;
-        FriendButton* circleMinus = nullptr;
-        
+    {
         // 遍历布局，找到 + 和 - 按钮，删除其他成员圆圈
         QList<QLayoutItem*> itemsToRemove;
         for (int i = 0; i < circlesLayout->count(); i++) {
@@ -238,11 +369,11 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
                 FriendButton* btn = qobject_cast<FriendButton*>(item->widget());
                 if (btn) {
                     if (btn->text() == "+") {
-                        circlePlus = btn;
-                        circlePlus->setContextMenuEnabled(false); // 禁用右键菜单
+                        m_circlePlus = btn;
+                        m_circlePlus->setContextMenuEnabled(false); // 禁用右键菜单
                     } else if (btn->text() == "-") {
-                        circleMinus = btn;
-                        circleMinus->setContextMenuEnabled(false); // 禁用右键菜单
+                        m_circleMinus = btn;
+                        m_circleMinus->setContextMenuEnabled(false); // 禁用右键菜单
                     } else {
                         // 成员圆圈，标记为删除
                         itemsToRemove.append(item);
@@ -261,10 +392,13 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
         }
         
         // 如果 + 和 - 按钮不存在，创建它们
-        if (!circlePlus) {
-            circlePlus = new FriendButton("+", this);
-            circlePlus->setContextMenuEnabled(false); // 禁用右键菜单
-            connect(circlePlus, &FriendButton::clicked, this, [this]() {
+        if (!m_circlePlus) {
+            m_circlePlus = new FriendButton("+", buttonParent);
+            // FriendButton 构造函数已设置 setFixedSize(50, 50)，这里确保尺寸正确
+            m_circlePlus->setFixedSize(50, 50);
+            m_circlePlus->setMinimumSize(50, 50);
+            m_circlePlus->setContextMenuEnabled(false); // 禁用右键菜单
+            connect(m_circlePlus, &FriendButton::clicked, this, [this]() {
                 if (m_friendSelectDlg)
                 {
                     if (m_friendSelectDlg->isHidden())
@@ -287,12 +421,15 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
                     }
                 }
             });
-            circlesLayout->addWidget(circlePlus);
+            circlesLayout->addWidget(m_circlePlus);
         }
-        if (!circleMinus) {
-            circleMinus = new FriendButton("-", this);
-            circleMinus->setContextMenuEnabled(false); // 禁用右键菜单
-            connect(circleMinus, &FriendButton::clicked, this, [this]() {
+        if (!m_circleMinus) {
+            m_circleMinus = new FriendButton("-", buttonParent);
+            // FriendButton 构造函数已设置 setFixedSize(50, 50)，这里确保尺寸正确
+            m_circleMinus->setFixedSize(50, 50);
+            m_circleMinus->setMinimumSize(50, 50);
+            m_circleMinus->setContextMenuEnabled(false); // 禁用右键菜单
+            connect(m_circleMinus, &FriendButton::clicked, this, [this]() {
                 if (m_memberKickDlg)
                 {
                     if (m_memberKickDlg->isHidden())
@@ -310,8 +447,15 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
                     }
                 }
             });
-            circlesLayout->addWidget(circleMinus);
+            circlesLayout->addWidget(m_circleMinus);
         }
+    }
+
+    // 检查成员数据是否为空
+    if (m_groupMemberInfo.isEmpty()) {
+        qDebug() << "成员列表为空，不显示任何成员";
+        updateButtonStates();
+        return;
     }
 
     QString redStyle = "background-color:red; border-radius:25px; color:white; font-weight:bold;";
@@ -328,22 +472,45 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
         }
     }
 
-    // 添加成员圆圈（在 + 和 - 按钮之前插入）
-    // 找到 + 按钮的位置，在它之前插入成员
-    int insertIndex = circlesLayout->count() - 2; // 在倒数第二个位置（+ 按钮之前）插入
-    if (insertIndex < 0) insertIndex = 0;
+    // 找到 + 按钮的位置（应该在倒数第二个位置，- 按钮在最后）
+    int plusButtonIndex = -1;
+    int minusButtonIndex = -1;
+    for (int i = 0; i < circlesLayout->count(); ++i) {
+        QLayoutItem* item = circlesLayout->itemAt(i);
+        if (item && item->widget()) {
+            FriendButton* btn = qobject_cast<FriendButton*>(item->widget());
+            if (btn) {
+                if (btn->text() == "+") {
+                    plusButtonIndex = i;
+                } else if (btn->text() == "-") {
+                    minusButtonIndex = i;
+                }
+            }
+        }
+    }
+
+    // 确定插入位置：在 + 按钮之前插入，如果找不到 + 按钮，则在布局开始位置插入
+    int insertIndex = (plusButtonIndex >= 0) ? plusButtonIndex : 0;
+    qDebug() << "插入位置计算：+ 按钮索引:" << plusButtonIndex << "，- 按钮索引:" << minusButtonIndex << "，最终插入位置:" << insertIndex;
     
+    // 使用之前找到的 buttonParent（应该是 groupFriends）
     for (auto iter : m_groupMemberInfo)
     {
         FriendButton* circleBtn = nullptr;
         if (iter.member_role == "群主")
         {
-            circleBtn = new FriendButton("", this);
+            circleBtn = new FriendButton("", buttonParent);
+            // FriendButton 构造函数已设置 setFixedSize(50, 50)，这里确保尺寸正确
+            circleBtn->setFixedSize(50, 50);
+            circleBtn->setMinimumSize(50, 50);
             circleBtn->setStyleSheet(redStyle); // 群主用红色圆圈
         }
         else
         {
-            circleBtn = new FriendButton("", this);
+            circleBtn = new FriendButton("", buttonParent);
+            // FriendButton 构造函数已设置 setFixedSize(50, 50)，这里确保尺寸正确
+            circleBtn->setFixedSize(50, 50);
+            circleBtn->setMinimumSize(50, 50);
             circleBtn->setStyleSheet(blueStyle); // 其他成员用蓝色圆圈
         }
         
@@ -362,16 +529,63 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
             onCancelLeaderRequested(memberId);
         });
         
+        // 设置按钮文本（完整成员名字）
         circleBtn->setText(iter.member_name);
         circleBtn->setProperty("member_id", iter.member_id);
+        
+        // 确保按钮可见并显示
+        circleBtn->setVisible(true);
+        circleBtn->show();
         
         // 在 + 按钮之前插入成员圆圈
         circlesLayout->insertWidget(insertIndex, circleBtn);
         insertIndex++; // 更新插入位置
+        
+        qDebug() << "添加成员按钮:" << iter.member_name << "，角色:" << iter.member_role 
+                 << "，插入位置:" << (insertIndex - 1) << "，按钮尺寸:" << circleBtn->size() 
+                 << "，是否可见:" << circleBtn->isVisible() << "，父窗口:" << circleBtn->parent();
     }
+    
+    // 确保所有按钮都可见并强制刷新布局
+    qDebug() << "开始检查布局中的所有按钮，布局项总数:" << circlesLayout->count();
+    /*for (int i = 0; i < circlesLayout->count(); ++i) {
+        QLayoutItem* item = circlesLayout->itemAt(i);
+        if (item && item->widget()) {
+            QWidget* widget = item->widget();
+            FriendButton* btn = qobject_cast<FriendButton*>(widget);
+            if (btn) {
+                widget->setVisible(true);
+                widget->show();
+                widget->raise();
+                widget->update();
+                qDebug() << "按钮[" << i << "] 文本:" << btn->text() << "，尺寸:" << widget->size() 
+                         << "，可见:" << widget->isVisible() << "，父窗口:" << widget->parent();
+            } else {
+                widget->setVisible(true);
+                widget->show();
+                widget->update();
+            }
+        }
+    }*/
+    
+    // 强制刷新布局和父容器
+    //circlesLayout->update();
+    //QWidget* parentWidget = circlesLayout->parentWidget();
+    //if (parentWidget) {
+    //    parentWidget->update();
+    //    parentWidget->repaint();
+    //    qDebug() << "父容器已刷新:" << parentWidget->objectName() << "，尺寸:" << parentWidget->size();
+    //}
+    //
+
+    qDebug() << "好友列表显示完成，共添加" << m_groupMemberInfo.size() << "个成员，当前布局项数:" << circlesLayout->count();
     
     // 更新按钮状态（根据当前用户是否是群主）
     updateButtonStates();
+
+    // 刷新整个对话框
+    this->update();
+    this->repaint();
 }
 
 
@@ -387,10 +601,6 @@ void QGroupInfo::InitGroupMember()
 
     // 清空之前的成员圆圈（保留 + 和 - 按钮）
     if (circlesLayout) {
-        // 先找到 + 和 - 按钮，保存它们
-        FriendButton* circlePlus = nullptr;
-        FriendButton* circleMinus = nullptr;
-
         // 遍历布局，找到 + 和 - 按钮，删除其他成员圆圈
         QList<QLayoutItem*> itemsToRemove;
         for (int i = 0; i < circlesLayout->count(); i++) {
@@ -399,12 +609,12 @@ void QGroupInfo::InitGroupMember()
                 FriendButton* btn = qobject_cast<FriendButton*>(item->widget());
                 if (btn) {
                     if (btn->text() == "+") {
-                        circlePlus = btn;
-                        circlePlus->setContextMenuEnabled(false); // 禁用右键菜单
+                        m_circlePlus = btn;
+                        m_circlePlus->setContextMenuEnabled(false); // 禁用右键菜单
                     }
                     else if (btn->text() == "-") {
-                        circleMinus = btn;
-                        circleMinus->setContextMenuEnabled(false); // 禁用右键菜单
+                        m_circleMinus = btn;
+                        m_circleMinus->setContextMenuEnabled(false); // 禁用右键菜单
                     }
                     else {
                         // 成员圆圈，标记为删除
@@ -423,11 +633,36 @@ void QGroupInfo::InitGroupMember()
             delete item;
         }
 
+        // 找到 groupFriends 容器，按钮的父控件应该是它
+        QGroupBox* groupFriends = nullptr;
+        QWidget* parentWidget = circlesLayout->parentWidget();
+        if (parentWidget) {
+            groupFriends = qobject_cast<QGroupBox*>(parentWidget);
+        }
+        if (!groupFriends) {
+            QLayout* parentLayout = qobject_cast<QLayout*>(circlesLayout->parent());
+            if (parentLayout && parentLayout->parentWidget()) {
+                groupFriends = qobject_cast<QGroupBox*>(parentLayout->parentWidget());
+            }
+        }
+        if (!groupFriends) {
+            QList<QGroupBox*> groupBoxes = this->findChildren<QGroupBox*>();
+            for (QGroupBox* gb : groupBoxes) {
+                if (gb->title() == "好友列表") {
+                    groupFriends = gb;
+                    break;
+                }
+            }
+        }
+        QWidget* buttonParent = groupFriends ? static_cast<QWidget*>(groupFriends) : this;
+        
         // 如果 + 和 - 按钮不存在，创建它们
-        if (!circlePlus) {
-            circlePlus = new FriendButton("+", this);
-            circlePlus->setContextMenuEnabled(false); // 禁用右键菜单
-            connect(circlePlus, &FriendButton::clicked, this, [this]() {
+        if (!m_circlePlus) {
+            m_circlePlus = new FriendButton("+", buttonParent);
+            m_circlePlus->setFixedSize(50, 50);
+            m_circlePlus->setMinimumSize(50, 50);
+            m_circlePlus->setContextMenuEnabled(false); // 禁用右键菜单
+            connect(m_circlePlus, &FriendButton::clicked, this, [this]() {
                 if (m_friendSelectDlg)
                 {
                     if (m_friendSelectDlg->isHidden())
@@ -450,12 +685,15 @@ void QGroupInfo::InitGroupMember()
                     }
                 }
                 });
-            circlesLayout->addWidget(circlePlus);
+            circlesLayout->addWidget(m_circlePlus);
         }
-        if (!circleMinus) {
-            circleMinus = new FriendButton("-", this);
-            circleMinus->setContextMenuEnabled(false); // 禁用右键菜单
-            connect(circleMinus, &FriendButton::clicked, this, [this]() {
+        if (!m_circleMinus) {
+            m_circleMinus = new FriendButton("-", buttonParent);
+            // FriendButton 构造函数已设置 setFixedSize(50, 50)，这里确保尺寸正确
+            m_circleMinus->setFixedSize(50, 50);
+            m_circleMinus->setMinimumSize(50, 50);
+            m_circleMinus->setContextMenuEnabled(false); // 禁用右键菜单
+            connect(m_circleMinus, &FriendButton::clicked, this, [this]() {
                 if (m_memberKickDlg)
                 {
                     if (m_memberKickDlg->isHidden())
@@ -473,7 +711,7 @@ void QGroupInfo::InitGroupMember()
                     }
                 }
                 });
-            circlesLayout->addWidget(circleMinus);
+            circlesLayout->addWidget(m_circleMinus);
         }
     }
 
@@ -491,25 +729,75 @@ void QGroupInfo::InitGroupMember()
         }
     }
 
-    // 添加成员圆圈（在 + 和 - 按钮之前插入）
-    // 找到 + 按钮的位置，在它之前插入成员
-    int insertIndex = circlesLayout->count() - 2; // 在倒数第二个位置（+ 按钮之前）插入
-    if (insertIndex < 0) insertIndex = 0;
+    // 找到 + 按钮的位置（应该在倒数第二个位置，- 按钮在最后）
+    int plusButtonIndex = -1;
+    int minusButtonIndex = -1;
+    for (int i = 0; i < circlesLayout->count(); ++i) {
+        QLayoutItem* item = circlesLayout->itemAt(i);
+        if (item && item->widget()) {
+            FriendButton* btn = qobject_cast<FriendButton*>(item->widget());
+            if (btn) {
+                if (btn->text() == "+") {
+                    plusButtonIndex = i;
+                } else if (btn->text() == "-") {
+                    minusButtonIndex = i;
+                }
+            }
+        }
+    }
 
+    // 找到 groupFriends 容器，成员按钮的父控件应该是它
+    QGroupBox* groupFriends = nullptr;
+    QWidget* parentWidget = circlesLayout->parentWidget();
+    if (parentWidget) {
+        groupFriends = qobject_cast<QGroupBox*>(parentWidget);
+    }
+    if (!groupFriends) {
+        // 如果找不到，尝试从 circlesLayout 的父布局查找
+        QLayout* parentLayout = qobject_cast<QLayout*>(circlesLayout->parent());
+        if (parentLayout && parentLayout->parentWidget()) {
+            groupFriends = qobject_cast<QGroupBox*>(parentLayout->parentWidget());
+        }
+    }
+    // 如果还是找不到，使用 this 作为父控件
+    if (!groupFriends) {
+        // 尝试通过对象名查找
+        QList<QGroupBox*> groupBoxes = this->findChildren<QGroupBox*>();
+        for (QGroupBox* gb : groupBoxes) {
+            if (gb->title() == "好友列表") {
+                groupFriends = gb;
+                break;
+            }
+        }
+    }
+    // 最后使用 this 作为父控件
+    QWidget* buttonParent = groupFriends ? static_cast<QWidget*>(groupFriends) : this;
+    qDebug() << "成员按钮的父控件:" << (groupFriends ? "groupFriends" : "this");
+    
+    // 确定插入位置：在 + 按钮之前插入，如果找不到 + 按钮，则在布局开始位置插入
+    int insertIndex = (plusButtonIndex >= 0) ? plusButtonIndex : 0;
+    qDebug() << "插入位置计算：+ 按钮索引:" << plusButtonIndex << "，- 按钮索引:" << minusButtonIndex << "，最终插入位置:" << insertIndex;
+    
     for (auto iter : m_groupMemberInfo)
     {
         FriendButton* circleBtn = nullptr;
         if (iter.member_role == "群主")
         {
-            circleBtn = new FriendButton("", this);
+            circleBtn = new FriendButton("", buttonParent);
+            // FriendButton 构造函数已设置 setFixedSize(50, 50)，这里确保尺寸正确
+            circleBtn->setFixedSize(50, 50);
+            circleBtn->setMinimumSize(50, 50);
             circleBtn->setStyleSheet(redStyle); // 群主用红色圆圈
         }
         else
         {
-            circleBtn = new FriendButton("", this);
+            circleBtn = new FriendButton("", buttonParent);
+            // FriendButton 构造函数已设置 setFixedSize(50, 50)，这里确保尺寸正确
+            circleBtn->setFixedSize(50, 50);
+            circleBtn->setMinimumSize(50, 50);
             circleBtn->setStyleSheet(blueStyle); // 其他成员用蓝色圆圈
         }
-
+        
         // 设置成员角色
         circleBtn->setMemberRole(iter.member_role);
         
@@ -524,13 +812,17 @@ void QGroupInfo::InitGroupMember()
         connect(circleBtn, &FriendButton::cancelLeaderRequested, this, [this, memberId]() {
             onCancelLeaderRequested(memberId);
         });
-
+        
+        circleBtn->setVisible(true);
+        circleBtn->show();
         circleBtn->setText(iter.member_name);
         circleBtn->setProperty("member_id", iter.member_id);
-
+        
         // 在 + 按钮之前插入成员圆圈
         circlesLayout->insertWidget(insertIndex, circleBtn);
         insertIndex++; // 更新插入位置
+        
+        qDebug() << "添加成员按钮:" << iter.member_name << "，角色:" << iter.member_role << "，插入位置:" << (insertIndex - 1);
     }
 
     // 更新按钮状态（根据当前用户是否是群主）
