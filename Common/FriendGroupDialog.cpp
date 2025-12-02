@@ -295,8 +295,9 @@ void FriendGroupDialog::addGroupTreeNode(const QString& displayName, const QStri
         return;
 
     QString title = displayName.trimmed().isEmpty() ? QStringLiteral("未命名群聊") : displayName.trimmed();
-    QString badge = classid.trimmed().isEmpty() ? QString() : classid.right(2);
-    QString label = badge.isEmpty() ? title : QStringLiteral("%1   %2").arg(badge, title);
+    //QString badge = classid.trimmed().isEmpty() ? QString() : classid.right(2);
+    //QString label = badge.isEmpty() ? title : QStringLiteral("%1   %2").arg(badge, title);
+    QString label = title;
 
     QTreeWidgetItem* item = new QTreeWidgetItem(parent);
     item->setText(0, label);

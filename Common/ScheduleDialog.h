@@ -167,7 +167,7 @@ public:
         resize(1238, 669);
         m_cornerRadius = 16;
         updateMask();
-        setStyleSheet("QDialog { background-color: #5C5C5C; color: white; border: 1px solid #5C5C5C; font-weight: bold; } "
+        setStyleSheet("QDialog { background-color: #282A2B; color: white; border: 1px solid #5C5C5C; font-weight: bold; } "
 			"QPushButton { font-size:14px; color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
 			"QLabel { font-size:14px; color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
 			"QLineEdit { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
@@ -613,24 +613,14 @@ public:
 
 		// 顶部：头像 + 班级信息 + 功能按钮 + 更多
 		QHBoxLayout* topLayout = new QHBoxLayout;
-		ClickableLabel* lblAvatar = new ClickableLabel();
-		lblAvatar->setFixedSize(50, 50);
-
-		QPixmap avatarPixmap(".\\res\\img\\home.png");
-		// 如果需要缩放到控件大小：
-		avatarPixmap = avatarPixmap.scaled(lblAvatar->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
-		lblAvatar->setPixmap(avatarPixmap);
-		lblAvatar->setScaledContents(true); // 自动适应 QLabel 尺寸
-
-		lblAvatar->setStyleSheet("background-color: lightgray; border:1px solid gray; text-align:center;");
-		connect(lblAvatar, &ClickableLabel::clicked, this, [&, lblAvatar]() {
-			QString file = QFileDialog::getOpenFileName(
-				this, "选择新头像", "", "Images (*.png *.jpg *.jpeg *.bmp)");
-			if (!file.isEmpty()) {
-				lblAvatar->setPixmap(QPixmap(file));
-				uploadAvatar(file);
-			}
-			});
+		m_lblAvatar = new QLabel(); // 改为普通QLabel，用于显示班级文字
+		m_lblAvatar->setFixedSize(50, 50);
+		m_lblAvatar->setAlignment(Qt::AlignCenter); // 文字居中
+		m_lblAvatar->setStyleSheet("background-color: #4169E1; color: white; border:1px solid #4169E1; text-align:center; font-size:14px; font-weight:bold; border-radius: 8px;");
+		QFont font = m_lblAvatar->font();
+		font.setBold(true);
+		font.setWeight(QFont::Bold);
+		m_lblAvatar->setFont(font);
 
 		m_lblClass = new QLabel("");
 		QPushButton* btnEdit = new QPushButton("✎");
@@ -642,12 +632,17 @@ public:
 	btnTalk = new QPushButton("按住开始对讲");
 	QPushButton* btnMsg = new QPushButton("通知");
 	QPushButton* btnTask = new QPushButton("作业");
-	QString greenStyle = "background-color: green; color: white; padding: 4px 8px;";
+	QString greenStyle = "background-color: #2D2E2D; color: white; padding: 4px 8px; border: none;";
 	btnSeat->setStyleSheet(greenStyle);
 	btnCam->setStyleSheet(greenStyle);
 	btnTalk->setStyleSheet(greenStyle);
 	btnMsg->setStyleSheet(greenStyle);
 	btnTask->setStyleSheet(greenStyle);
+	btnSeat->setIcon(QIcon(":/res/img/class_card_ic_seating chart@2x.png"));
+	btnCam->setIcon(QIcon(":/res/img/class_card_ic_camera@2x.png"));
+	btnTalk->setIcon(QIcon(":/res/img/class_card_ic_intercom@2x.png"));
+	btnMsg->setIcon(QIcon(":/res/img/class_card_ic_notice@2x.png"));
+	btnTask->setIcon(QIcon(":/res/img/class_card_ic_school@2x.png"));
 	
 	// 保存按钮指针，用于根据群组类型显示/隐藏
 	m_btnSeat = btnSeat;
@@ -690,7 +685,7 @@ public:
 			}
 		});
 
-		topLayout->addWidget(lblAvatar);
+		topLayout->addWidget(m_lblAvatar);
 		topLayout->addWidget(m_lblClass);
 		topLayout->addWidget(btnEdit);
 		topLayout->addSpacing(10);
@@ -708,8 +703,8 @@ public:
 
 		// 时间 + 科目行
 		QHBoxLayout* timeLayout = new QHBoxLayout;
-		m_timeButtonStyle = "background-color: royalblue; color: white; font-size:12px; min-width:40px;";
-		m_subjectButtonStyle = "background-color: royalblue; color: white; font-size:12px; min-width:50px;";
+		m_timeButtonStyle = "background-color: #2D2E2D; color: white; font-size:12px; min-width:40px;";
+		m_subjectButtonStyle = "background-color: #2D2E2D; color: white; font-size:12px; min-width:50px;";
 
 		QVBoxLayout* vTimes = new QVBoxLayout;
 		m_timeRowLayout = new QHBoxLayout;
@@ -921,9 +916,14 @@ public:
 		}
 		
 		// 初始化所有单元格，为每个单元格创建按钮
+		// 加载图标并裁剪为只显示左边到中间的一半
+		QPixmap originalPixmap("./res/img/class_ic_seat@2x.png");
+		QPixmap croppedPixmap = originalPixmap.copy(0, 0, originalPixmap.width() / 2 - 9, originalPixmap.height());
+		QIcon seatIcon(croppedPixmap);
 		for (int row = 0; row < 8; ++row) {
 			for (int col = 0; col < 11; ++col) {
 				QPushButton* btn = new QPushButton("");
+				// 不在初始化时设置图标，只有座位按钮才设置图标
 				btn->setStyleSheet(
 					"QPushButton { "
 					"background-color: #dc3545; "
@@ -932,6 +932,7 @@ public:
 					"border-radius: 4px; "
 					"padding: 5px; "
 					"font-size: 12px; "
+					"text-align: center; "
 					"}"
 					"QPushButton:hover { "
 					"background-color: #c82333; "
@@ -959,29 +960,38 @@ public:
 			QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(0, col));
 			if (btn) {
 				btn->setProperty("isSeat", true);
+				btn->setIcon(seatIcon);
+				btn->setIconSize(QSize(50, 50)); // 设置图标大小
 			}
 		}
 		// 设置第1行列3座位（讲台左边）
 		QPushButton* btnCol3 = qobject_cast<QPushButton*>(seatTable->cellWidget(0, 3));
 		if (btnCol3) {
 			btnCol3->setProperty("isSeat", true);
+			btnCol3->setIcon(seatIcon);
+			btnCol3->setIconSize(QSize(50, 50)); // 设置图标大小
 		}
 		// 设置第1行列7座位（讲台右边）
 		QPushButton* btnCol7 = qobject_cast<QPushButton*>(seatTable->cellWidget(0, 7));
 		if (btnCol7) {
 			btnCol7->setProperty("isSeat", true);
+			btnCol7->setIcon(seatIcon);
+			btnCol7->setIconSize(QSize(50, 50)); // 设置图标大小
 		}
 		// 设置第1行右侧2个座位（列9-10）
 		for (int col = 9; col < 11; ++col) {
 			QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(0, col));
 			if (btn) {
 				btn->setProperty("isSeat", true);
+				btn->setIcon(seatIcon);
+				btn->setIconSize(QSize(50, 50)); // 设置图标大小
 			}
 		}
 		seatTable->setSpan(0, 4, 1, 3); // 合并第1行的列2-8作为中央过道
 		QPushButton* aisle1Btn = qobject_cast<QPushButton*>(seatTable->cellWidget(0, 2));
 		if (aisle1Btn) {
 			aisle1Btn->setEnabled(false);
+			aisle1Btn->setIcon(QIcon()); // 移除图标
 			aisle1Btn->setStyleSheet(
 				"QPushButton { "
 				"background-color: #f0f0f0; "
@@ -993,6 +1003,7 @@ public:
 	    aisle1Btn = qobject_cast<QPushButton*>(seatTable->cellWidget(0, 8));
 		if (aisle1Btn) {
 			aisle1Btn->setEnabled(false);
+			aisle1Btn->setIcon(QIcon()); // 移除图标
 			aisle1Btn->setStyleSheet(
 				"QPushButton { "
 				"background-color: #f0f0f0; "
@@ -1010,6 +1021,8 @@ public:
 				if (btn) {
 					btn->setText(""); // 可以显示座位号或学生姓名
 					btn->setProperty("isSeat", true);
+					btn->setIcon(seatIcon);
+					btn->setIconSize(QSize(50, 50)); // 设置图标大小
 				}
 			}
 			
@@ -1017,6 +1030,7 @@ public:
 			QPushButton* aisle1Btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, 2));
 			if (aisle1Btn) {
 				aisle1Btn->setEnabled(false);
+				aisle1Btn->setIcon(QIcon()); // 移除图标
 				aisle1Btn->setStyleSheet(
 					"QPushButton { "
 					"background-color: #f0f0f0; "
@@ -1031,6 +1045,8 @@ public:
 				if (btn) {
 					btn->setText("");
 					btn->setProperty("isSeat", true);
+					btn->setIcon(seatIcon);
+					btn->setIconSize(QSize(50, 50)); // 设置图标大小
 				}
 			}
 			
@@ -1038,6 +1054,7 @@ public:
 			QPushButton* aisle2Btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, 5));
 			if (aisle2Btn) {
 				aisle2Btn->setEnabled(false);
+				aisle2Btn->setIcon(QIcon()); // 移除图标
 				aisle2Btn->setStyleSheet(
 					"QPushButton { "
 					"background-color: #f0f0f0; "
@@ -1052,6 +1069,8 @@ public:
 				if (btn) {
 					btn->setText("");
 					btn->setProperty("isSeat", true);
+					btn->setIcon(seatIcon);
+					btn->setIconSize(QSize(50, 50)); // 设置图标大小
 				}
 			}
 			
@@ -1059,6 +1078,7 @@ public:
 			QPushButton* aisle3Btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, 8));
 			if (aisle3Btn) {
 				aisle3Btn->setEnabled(false);
+				aisle3Btn->setIcon(QIcon()); // 移除图标
 				aisle3Btn->setStyleSheet(
 					"QPushButton { "
 					"background-color: #f0f0f0; "
@@ -1073,17 +1093,20 @@ public:
 				if (btn) {
 					btn->setText("");
 					btn->setProperty("isSeat", true);
+					btn->setIcon(seatIcon);
+					btn->setIconSize(QSize(50, 50)); // 设置图标大小
 				}
 			}
 		}
 		
-		// 第1行的座位
+		// 第1行的座位（这部分代码与前面重复，但保留以确保一致性）
 		// 左侧2个座位：列0-1
 		for (int col = 0; col < 2; ++col) {
 			QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(0, col));
 			if (btn) {
 				btn->setText("");
 				btn->setProperty("isSeat", true);
+				// 图标已在前面设置，这里不需要重复设置
 			}
 		}
 		// 右侧2个座位：列9-10
@@ -1092,6 +1115,7 @@ public:
 			if (btn) {
 				btn->setText("");
 				btn->setProperty("isSeat", true);
+				// 图标已在前面设置，这里不需要重复设置
 			}
 		}
 		
@@ -1389,6 +1413,34 @@ public:
 		{
 			m_lblClass->setText(groupName);
 		}
+		
+		// 从班级群名称中提取班级信息（如"一年级三班的班级群" -> "三班"）
+		if (m_lblAvatar && isClassGroup && !groupName.isEmpty()) {
+			QString classText = groupName;
+			// 查找"年级"和"班"字的位置
+			int nianjiIndex = classText.indexOf(QString::fromUtf8(u8"年级"));
+			int banIndex = classText.indexOf(QString::fromUtf8(u8"班"));
+			
+			if (nianjiIndex >= 0 && banIndex > nianjiIndex) {
+				// 如果包含"年级"且"班"字在"年级"之后，取"年级"后面到"班"字之前的内容+"班"
+				// 例如："一年级三班的班级群" -> "三班"
+				// "年级"占2个字符，所以从 nianjiIndex + 2 开始，取 banIndex - (nianjiIndex + 2) 个字符
+				QString afterNianji = classText.mid(nianjiIndex + 2, banIndex - nianjiIndex - 2); // "年级"后面到"班"字之前（不包含"班"字）
+				classText = afterNianji + QString::fromUtf8(u8"班");
+			} else if (banIndex >= 0) {
+				// 如果不包含"年级"但包含"班"字，取"班"字前一个字符+"班"
+				if (banIndex > 0) {
+					classText = classText.mid(banIndex - 1, 2); // 取"班"字前一个字符和"班"字
+				} else {
+					// 如果"班"字在开头，只取"班"字
+					classText = QString::fromUtf8(u8"班");
+				}
+			} else {
+				// 如果没有"班"字，使用原名称
+				classText = groupName;
+			}
+			m_lblAvatar->setText(classText);
+		}
 		m_chatDlg->InitData(m_unique_group_id, iGroupOwner);
 		UserInfo userInfo = CommonInfo::GetData();
 		m_userId = userInfo.teacher_unique_id;
@@ -1610,7 +1662,7 @@ protected:
     {
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
-        painter.setBrush(QColor("#5C5C5C"));
+        painter.setBrush(QColor("#282A2B"));
         painter.setPen(Qt::NoPen);
 
         QPainterPath path;
@@ -1632,6 +1684,7 @@ private:
     }
 	CustomListDialog* customListDlg = NULL;
 	QLabel* m_lblClass = NULL;
+	QLabel* m_lblAvatar = NULL; // 显示班级文字（如"五班"）
 	QString m_groupName;
 	QString m_unique_group_id;
 	TAHttpHandler* m_taHttpHandler = NULL;
