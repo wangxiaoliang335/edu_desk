@@ -49,6 +49,7 @@
 #include <shellapi.h>
 #include <QRegularExpression>
 #include <QSet>
+#include <QMap>
 #include <string>
 #include <QProcess>
 #include <QThread>
@@ -93,6 +94,44 @@ class HeatmapViewDialog;
 //    QMap<QString, double> attributes; // 多个属性值（如"背诵"、"语文"等）
 //};
 //#endif
+
+// 临时房间信息结构
+struct TempRoomInfo {
+	QString room_id;
+	QString whip_url;
+	QString whep_url;
+	QString stream_name;
+	QString group_id;
+	QString owner_id;
+	QString owner_name;
+	QString owner_icon;
+};
+
+// 全局临时房间信息存储（群组ID -> 临时房间信息）
+// 用于在创建班级群时保存临时房间信息，即使 ScheduleDialog 还没有打开也能保存
+class TempRoomStorage {
+public:
+	static void saveTempRoomInfo(const QString& groupId, const TempRoomInfo& info) {
+		s_tempRooms[groupId] = info;
+		qDebug() << "已保存临时房间信息到全局存储，群组ID:" << groupId << "，房间ID:" << info.room_id;
+	}
+	
+	static TempRoomInfo getTempRoomInfo(const QString& groupId) {
+		return s_tempRooms.value(groupId, TempRoomInfo());
+	}
+	
+	static bool hasTempRoomInfo(const QString& groupId) {
+		return s_tempRooms.contains(groupId) && !s_tempRooms[groupId].room_id.isEmpty();
+	}
+	
+	static void removeTempRoomInfo(const QString& groupId) {
+		s_tempRooms.remove(groupId);
+		qDebug() << "已从全局存储中移除临时房间信息，群组ID:" << groupId;
+	}
+
+private:
+	static QMap<QString, TempRoomInfo> s_tempRooms;
+};
 
 class ClickableWidget : public QWidget
 {
@@ -424,6 +463,57 @@ public:
 		m_pWs = pWs;
 		m_chatDlg = new ChatDialog(this, m_pWs);
 		customListDlg = new CustomListDialog(m_classid, this);
+		
+			// 连接WebSocket消息信号，用于接收创建班级群和临时房间的消息
+			if (m_pWs) {
+				connect(m_pWs, &TaQTWebSocket::newMessage, this, [this](const QString& msg) {
+					// 解析JSON消息
+					QJsonParseError parseError;
+					QJsonDocument doc = QJsonDocument::fromJson(msg.toUtf8(), &parseError);
+					if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+						return; // 不是JSON对象，忽略
+					}
+					
+					QJsonObject rootObj = doc.object();
+					QString type = rootObj.value(QStringLiteral("type")).toString();
+					
+					// 处理创建班级群消息（type: "3"），服务器会自动创建临时房间
+					if (type == QStringLiteral("3")) {
+						QString groupId = rootObj.value(QStringLiteral("group_id")).toString();
+						QString groupName = rootObj.value(QStringLiteral("groupname")).toString();
+						
+						// 检查是否是当前群组
+						if (groupId == m_unique_group_id) {
+							qDebug() << "收到创建班级群消息，群组ID:" << groupId << "，群组名称:" << groupName;
+							
+							// 解析临时房间信息
+							if (rootObj.contains(QStringLiteral("temp_room")) && rootObj.value(QStringLiteral("temp_room")).isObject()) {
+								QJsonObject tempRoom = rootObj.value(QStringLiteral("temp_room")).toObject();
+								
+								m_roomId = tempRoom.value(QStringLiteral("room_id")).toString();
+								m_whipUrl = tempRoom.value(QStringLiteral("whip_url")).toString();
+								m_whepUrl = tempRoom.value(QStringLiteral("whep_url")).toString();
+								m_streamName = tempRoom.value(QStringLiteral("stream_name")).toString();
+								
+								qDebug() << "临时房间信息已更新：";
+								qDebug() << "  房间ID:" << m_roomId;
+								qDebug() << "  推流地址:" << m_whipUrl;
+								qDebug() << "  拉流地址:" << m_whepUrl;
+								qDebug() << "  流名称:" << m_streamName;
+							}
+						}
+					}
+					// 兼容旧格式：处理room_created消息
+					else if (type == QStringLiteral("room_created") || type == QStringLiteral("6")) {
+						QString roomId = rootObj.value(QStringLiteral("room_id")).toString();
+						if (!roomId.isEmpty()) {
+							m_roomId = roomId;
+							qDebug() << "收到房间创建成功消息，房间ID:" << m_roomId;
+						}
+					}
+				});
+			}
+			
         QVBoxLayout* mainLayout = new QVBoxLayout(this);
         mainLayout->setContentsMargins(20, 40, 20, 20);
         mainLayout->setSpacing(12);
@@ -1363,6 +1453,27 @@ public:
 			fetchSeatArrangementFromServer();
 			fetchCourseScheduleForDailyView();
 		}
+		
+		// 检查全局存储中是否已有临时房间信息（在创建班级群时保存的）
+		// 这样即使 ScheduleDialog 在创建班级群时还没有打开，也能获取到临时房间信息
+		if (!unique_group_id.isEmpty() && TempRoomStorage::hasTempRoomInfo(unique_group_id)) {
+			TempRoomInfo tempRoomInfo = TempRoomStorage::getTempRoomInfo(unique_group_id);
+			m_roomId = tempRoomInfo.room_id;
+			m_whipUrl = tempRoomInfo.whip_url;
+			m_whepUrl = tempRoomInfo.whep_url;
+			m_streamName = tempRoomInfo.stream_name;
+			
+			qDebug() << "从全局存储中读取到临时房间信息：";
+			qDebug() << "  群组ID:" << unique_group_id;
+			qDebug() << "  房间ID:" << m_roomId;
+			qDebug() << "  推流地址:" << m_whipUrl;
+			qDebug() << "  拉流地址:" << m_whepUrl;
+			qDebug() << "  流名称:" << m_streamName;
+		}
+		
+		// 注意：临时房间现在由服务器在创建班级群时自动创建
+		// 不再需要在这里调用 createTemporaryRoom()
+		// 临时房间信息会通过 WebSocket 消息（type: "3"）返回，或者从全局存储中读取
 	}
 
 	// 刷新成员列表（优先使用REST API从腾讯云IM获取最新成员列表）
@@ -1586,6 +1697,12 @@ private:
 	QMap<QString, QString> m_prepareClassCache; // 课前准备内容缓存（科目|时间 -> 内容）
 	QJsonArray m_prepareClassHistoryData; // 课前准备历史原始数据
 	
+	// 对讲房间相关
+	QString m_roomId; // 临时房间ID
+	QString m_whipUrl; // 推流地址
+	QString m_whepUrl; // 拉流地址
+	QString m_streamName; // 流名称
+	
 	// 课后评价相关
 	void showPostClassEvaluationDialog(const QString& subject); // 显示课后评价对话框
 	void sendPostClassEvaluationContent(const QString& subject, const QString& content); // 发送课后评价内容
@@ -1611,6 +1728,9 @@ private:
 	
 	// 从文件加载对讲界面HTML模板并替换数据
 	QString loadIntercomHtmlTemplate(const QString& escapedMembersJson);
+	
+	// 创建临时房间
+	void createTemporaryRoom();
 };
 
 // 实现排座方法
@@ -3190,8 +3310,28 @@ inline void ScheduleDialog::openIntercomWebPage()
 	};
 	// 添加班级群的唯一编号
 	dataObj["group_id"] = m_unique_group_id;
+	// 添加临时房间信息（如果已创建）
+	if (!m_roomId.isEmpty()) {
+		QJsonObject tempRoomObj;
+		tempRoomObj["room_id"] = m_roomId;
+		if (!m_whipUrl.isEmpty()) {
+			tempRoomObj["whip_url"] = m_whipUrl;
+		}
+		if (!m_whepUrl.isEmpty()) {
+			tempRoomObj["whep_url"] = m_whepUrl;
+		}
+		if (!m_streamName.isEmpty()) {
+			tempRoomObj["stream_name"] = m_streamName;
+		}
+		tempRoomObj["group_id"] = m_unique_group_id;
+		tempRoomObj["owner_id"] = currentUserId;
+		tempRoomObj["owner_name"] = currentUserName;
+		tempRoomObj["owner_icon"] = currentUserIcon;
+		dataObj["temp_room"] = tempRoomObj;
+	}
 	
 	qDebug() << "班级群唯一编号 (m_unique_group_id):" << m_unique_group_id;
+	qDebug() << "房间ID (m_roomId):" << m_roomId;
 	if (m_unique_group_id.isEmpty()) {
 		qWarning() << "警告：班级群唯一编号为空！";
 	}
@@ -3374,6 +3514,58 @@ inline void ScheduleDialog::openIntercomWebPage()
 	QString html = htmlTemplate.replace("{{DATA_PLACEHOLDER}}", escapedMembersJson);
 	
 	return html;
+}
+
+// 创建临时房间
+inline void ScheduleDialog::createTemporaryRoom()
+{
+	if (m_unique_group_id.isEmpty()) {
+		qWarning() << "警告：班级群唯一编号为空，无法创建临时房间！";
+		return;
+	}
+	
+	if (!m_pWs) {
+		qWarning() << "警告：WebSocket未连接，无法创建临时房间！";
+		return;
+	}
+	
+	// 生成房间ID（使用时间戳）
+	m_roomId = QString("room_%1").arg(QDateTime::currentMSecsSinceEpoch());
+	qDebug() << "生成房间ID:" << m_roomId;
+	
+	// 生成stream_url：使用班级群唯一编号作为stream参数
+	// 格式：https://47.100.126.194/rtc/v1/whep/?app=live&stream=<班级群的唯一编号>
+	QString streamUrl = QString("https://47.100.126.194/rtc/v1/whep/?app=live&stream=%1").arg(m_unique_group_id);
+	qDebug() << "生成stream_url:" << streamUrl;
+	
+	// 获取当前用户信息
+	UserInfo userInfo = CommonInfo::GetData();
+	QString ownerName = m_userName.isEmpty() ? userInfo.strName : m_userName;
+	if (ownerName.isEmpty()) {
+		ownerName = "用户";
+	}
+	
+	// 构建创建房间的消息
+	QJsonObject createRoomMessage;
+	createRoomMessage["type"] = "6";
+	createRoomMessage["invited_users"] = QJsonArray();  // 初始为空数组
+	createRoomMessage["stream_url"] = streamUrl;
+	createRoomMessage["owner_name"] = ownerName;
+	createRoomMessage["group_id"] = m_unique_group_id;  // 班级群的唯一编号
+	
+	QJsonDocument doc(createRoomMessage);
+	QString jsonString = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+	
+	qDebug() << "准备发送创建房间消息:";
+	qDebug() << "完整消息对象:" << jsonString;
+	qDebug() << "group_id字段值:" << m_unique_group_id;
+	
+	// 通过WebSocket发送消息（直接发送JSON格式，不通过群组）
+	// 注意：这里直接发送JSON，服务器应该能够处理
+	TaQTWebSocket::sendPrivateMessage(jsonString);
+	
+	qDebug() << "创建房间消息已发送，房间ID:" << m_roomId;
+	qDebug() << "发送的消息字符串:" << jsonString;
 }
 
 

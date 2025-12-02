@@ -15,6 +15,9 @@
 #include <QPixmap>
 #include <cstring>
 
+// 定义 TempRoomStorage 的静态成员变量
+QMap<QString, TempRoomInfo> TempRoomStorage::s_tempRooms;
+
 // RowItem 类实现
 RowItem::RowItem(const QString& text, QWidget* parent) : QFrame(parent)
 {
@@ -1060,6 +1063,8 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
         QJsonDocument uploadDoc(uploadData);
         QByteArray jsonData = uploadDoc.toJson(QJsonDocument::Compact);
         
+        const char* strJsonT = jsonData.toStdString().c_str();
+
         // 上传到服务器
         if (ths->m_httpHandler) {
             QString url = "http://47.100.126.194:5000/groups/sync";
