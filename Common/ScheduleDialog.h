@@ -775,6 +775,11 @@ public:
 			"}"
 		);
 
+		btnRandom->setIcon(QIcon(":/res/img/class_card_ic_random@2x.png"));
+		btnAnalyse->setIcon(QIcon(":/res/img/class_card_ic_breaking@2x.png"));
+		btnHeatmap->setIcon(QIcon(":/res/img/class_card_ic_hot@2x.png"));
+		btnArrange->setIcon(QIcon(":/res/img/class_card_ic_seat@2x.png"));
+
 		connect(btnMoreBottom, &QPushButton::clicked, this, [=]() {
 			if (customListDlg && customListDlg->isHidden())
 			{
