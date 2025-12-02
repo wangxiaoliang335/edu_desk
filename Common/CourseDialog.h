@@ -3,6 +3,7 @@
 #include <QDialog>
 #include <QPushButton>
 #include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QFileDialog>
 #include <QFile>
 #include <QTextStream>
@@ -15,6 +16,12 @@
 #include <QRegExp>
 #include <QUrl>
 #include <QUrlQuery>
+#include <QScreen>
+#include <QApplication>
+#include <QMoveEvent>
+#include <QShowEvent>
+#include <QMouseEvent>
+#include <QPoint>
 #include "CourseTableWidget.h"
 #include "TAHttpHandler.h"
 #include "QXlsx/header/xlsxdocument.h"
@@ -29,13 +36,42 @@ class CourseDialog : public QDialog
     Q_OBJECT
 public:
     explicit CourseDialog(QWidget* parent = nullptr)
-        : QDialog(parent), m_unique_group_id(""), m_classid("")
+        : QDialog(parent), m_unique_group_id(""), m_classid(""), m_dragging(false)
     {
+        // 移除标题栏
+        setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+        
         setWindowTitle(QStringLiteral("课程表"));
         resize(850, 650);
-        setStyleSheet("background-color:#f5d6c6;"); // 类似图片里的浅粉底色
+        // 修改为深灰色背景，白色文字
+        setStyleSheet("background-color:#2b2b2b; color: white;");
 
         auto* layout = new QVBoxLayout(this);
+        layout->setContentsMargins(10, 10, 10, 10);
+        layout->setSpacing(10);
+        
+        // 顶部栏：关闭按钮
+        QHBoxLayout* topLayout = new QHBoxLayout;
+        topLayout->addStretch();
+        
+        m_closeButton = new QPushButton("✕", this);
+        m_closeButton->setFixedSize(30, 30);
+        m_closeButton->setStyleSheet(
+            "QPushButton {"
+            "background-color: transparent;"
+            "color: white;"
+            "font-size: 18px;"
+            "font-weight: bold;"
+            "border: none;"
+            "}"
+            "QPushButton:hover {"
+            "background-color: #444;"
+            "border-radius: 15px;"
+            "}"
+        );
+        connect(m_closeButton, &QPushButton::clicked, this, &CourseDialog::close);
+        topLayout->addWidget(m_closeButton);
+        layout->addLayout(topLayout);
         auto* btnImport = new QPushButton(QStringLiteral("导入"));
         btnImport->setFixedSize(60, 28);
         btnImport->setStyleSheet(
@@ -63,10 +99,22 @@ public:
 
         m_table = new CourseTableWidget(this);
         m_table->setStyleSheet(
-            "QHeaderView::section{background-color:#2f3240;color:white;font-weight:bold;}"
-            "QTableWidget::item{border:1px solid lightgray;}"
+            "QHeaderView::section{background-color:#2b2b2b;color:white;font-weight:bold;}"
+            "QTableWidget{background-color:#2b2b2b;color:white;border:1px solid #444;}"
+            "QTableWidget::item{border:1px solid #444;color:white;}"
             "QTableWidget::item:selected{background-color:#3399ff;color:white;}"
         );
+        // 确保水平和垂直表头都使用背景色
+        if (m_table->horizontalHeader()) {
+            m_table->horizontalHeader()->setStyleSheet(
+                "QHeaderView::section{background-color:#2b2b2b;color:white;font-weight:bold;border:1px solid #444;}"
+            );
+        }
+        if (m_table->verticalHeader()) {
+            m_table->verticalHeader()->setStyleSheet(
+                "QHeaderView::section{background-color:#2b2b2b;color:white;font-weight:bold;border:1px solid #444;}"
+            );
+        }
         layout->addWidget(m_table, 1);
 
         connect(btnImport, &QPushButton::clicked, this, &CourseDialog::onImport);
@@ -119,6 +167,78 @@ public:
     void setClassId(const QString& classId) {
         m_classid = classId;
         fetchCourseSchedule();
+    }
+
+protected:
+    void moveEvent(QMoveEvent* event) override {
+        QDialog::moveEvent(event);
+        checkWindowVisibility();
+    }
+    
+    void showEvent(QShowEvent* event) override {
+        QDialog::showEvent(event);
+        checkWindowVisibility();
+    }
+    
+    void mousePressEvent(QMouseEvent* event) override {
+        if (event->button() == Qt::LeftButton) {
+            QWidget* child = childAt(event->pos());
+            // 如果点击的是关闭按钮，不处理拖拽
+            if (child == m_closeButton) {
+                QDialog::mousePressEvent(event);
+                return;
+            }
+            // 如果点击的是表格或其他可交互控件，不处理拖拽
+            if (child && (qobject_cast<QPushButton*>(child) || 
+                          qobject_cast<CourseTableWidget*>(child) ||
+                          child->parent() == m_table)) {
+                QDialog::mousePressEvent(event);
+                return;
+            }
+            // 其他情况允许拖拽（主要是窗口空白区域和顶部区域）
+            m_dragging = true;
+            m_dragStartPosition = event->globalPos() - frameGeometry().topLeft();
+            event->accept();
+        }
+        QDialog::mousePressEvent(event);
+    }
+    
+    void mouseMoveEvent(QMouseEvent* event) override {
+        if (m_dragging && (event->buttons() & Qt::LeftButton)) {
+            move(event->globalPos() - m_dragStartPosition);
+            event->accept();
+        }
+        QDialog::mouseMoveEvent(event);
+    }
+    
+    void mouseReleaseEvent(QMouseEvent* event) override {
+        if (event->button() == Qt::LeftButton) {
+            m_dragging = false;
+            event->accept();
+        }
+        QDialog::mouseReleaseEvent(event);
+    }
+
+private:
+    void checkWindowVisibility() {
+        // 检查窗口是否移出屏幕
+        QRect windowRect = geometry();
+        QList<QScreen*> screens = QApplication::screens();
+        
+        bool isVisibleOnAnyScreen = false;
+        for (QScreen* screen : screens) {
+            QRect screenGeometry = screen->geometry();
+            // 检查窗口是否与任何屏幕有交集
+            if (windowRect.intersects(screenGeometry)) {
+                isVisibleOnAnyScreen = true;
+                break;
+            }
+        }
+        
+        // 如果窗口完全移出所有屏幕，则隐藏
+        if (!isVisibleOnAnyScreen && isVisible()) {
+            hide();
+        }
     }
 
 private slots:
@@ -517,6 +637,9 @@ private:
     CourseTableWidget* m_table{};
     TAHttpHandler* m_httpHandler{};
     TAHttpHandler* m_fetchHandler{};
+    QPushButton* m_closeButton{}; // 关闭按钮
+    bool m_dragging; // 是否正在拖拽
+    QPoint m_dragStartPosition; // 拖拽起始位置
     QString m_unique_group_id; // 群组ID
     QString m_classid; // 班级ID
     

@@ -74,8 +74,8 @@ public:
             item->setForeground(QBrush(Qt::white));           // 白色文字
         }
         else {
-            item->setBackground(QBrush(Qt::white));
-            item->setForeground(QBrush(Qt::black));
+            item->setBackground(QBrush(QColor(43, 43, 43)));   // 深灰色背景 #2b2b2b
+            item->setForeground(QBrush(Qt::white));           // 白色文字
         }
     }
 
