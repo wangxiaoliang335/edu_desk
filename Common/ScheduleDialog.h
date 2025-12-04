@@ -164,7 +164,7 @@ public:
 		setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
 		// 座位区域：10列×121像素=1210像素宽，6行×50像素=300像素高
 		// 窗口大小：宽度1238（1251×0.99），高度669（676×0.99）
-        resize(1238, 669);
+        resize(1448, 669);
         m_cornerRadius = 16;
         updateMask();
         setStyleSheet("QDialog { background-color: #282A2B; color: white; border: 1px solid #5C5C5C; font-weight: bold; } "
@@ -1390,6 +1390,8 @@ public:
 	void importSeatFromCsv(const QString& filePath); // 从CSV导入座位表
 	void fillSeatTableFromData(const QList<QStringList>& dataRows); // 将数据填充到座位表
 	void uploadSeatTableToServer(); // 上传座位表到服务器
+	// 设置座位按钮的文本和图标：有文本时不显示图标，无文本时显示图标
+	void setSeatButtonTextAndIcon(QPushButton* btn, const QString& text);
 	void fetchSeatArrangementFromServer(); // 从服务器获取座位表
 	void fetchCourseScheduleForDailyView();
 	
@@ -1791,6 +1793,28 @@ private:
 	void createTemporaryRoom();
 };
 
+// 设置座位按钮的文本和图标：有文本时不显示图标，无文本时显示图标
+inline void ScheduleDialog::setSeatButtonTextAndIcon(QPushButton* btn, const QString& text)
+{
+	if (!btn) return;
+	
+	btn->setText(text);
+	
+	// 如果有文本，不显示图标；如果没有文本，显示图标
+	if (!text.isEmpty()) {
+		btn->setIcon(QIcon()); // 移除图标
+	} else {
+		// 如果没有文本，显示图标（仅对座位按钮）
+		if (btn->property("isSeat").toBool()) {
+			QPixmap originalPixmap("./res/img/class_ic_seat@2x.png");
+			QPixmap croppedPixmap = originalPixmap.copy(0, 0, originalPixmap.width() / 2 - 9, originalPixmap.height());
+			QIcon seatIcon(croppedPixmap);
+			btn->setIcon(seatIcon);
+			btn->setIconSize(QSize(50, 50));
+		}
+	}
+}
+
 // 实现排座方法
 inline void ScheduleDialog::arrangeSeats(const QList<StudentInfo>& students, const QString& method)
 {
@@ -1958,15 +1982,17 @@ inline void ScheduleDialog::arrangeSeats(const QList<StudentInfo>& students, con
 	for (QPushButton* btn : seatButtons) {
 		if (studentIndex < arrangedStudents.size()) {
 			const StudentInfo& student = arrangedStudents[studentIndex];
-			btn->setText(student.name); // 显示学生姓名
 			btn->setProperty("studentId", QVariant(student.id)); // 设置学号属性
 			btn->setProperty("studentName", QVariant(student.name));
+			// 使用辅助函数设置文本和图标
+			setSeatButtonTextAndIcon(btn, student.name);
 			qDebug() << "分配座位:" << student.name << "到按钮";
 			studentIndex++;
 		} else {
-			btn->setText("");
 			btn->setProperty("studentId", QVariant(""));
 			btn->setProperty("studentName", QVariant(""));
+			// 使用辅助函数设置文本和图标（空文本会显示图标）
+			setSeatButtonTextAndIcon(btn, "");
 		}
 	}
 	
@@ -2409,9 +2435,10 @@ inline void ScheduleDialog::fillSeatTableFromData(const QList<QStringList>& data
 		for (int col = 0; col < 11; ++col) {
 			QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
 			if (btn && btn->property("isSeat").toBool()) {
-				btn->setText("");
 				btn->setProperty("studentId", QVariant());
 				btn->setProperty("studentName", QVariant());
+				// 使用辅助函数设置文本和图标（空文本会显示图标）
+				setSeatButtonTextAndIcon(btn, "");
 			}
 		}
 	}
@@ -2483,11 +2510,12 @@ inline void ScheduleDialog::fillSeatTableFromData(const QList<QStringList>& data
 					QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(0, seatTableCol));
 					if (btn && btn->property("isSeat").toBool()) {
 						QPair<QString, QString> student = parseStudentInfo(cellText);
-						btn->setText(cellText);
 						btn->setProperty("studentName", student.first);
 						if (!student.second.isEmpty()) {
 							btn->setProperty("studentId", student.second);
 						}
+						// 使用辅助函数设置文本和图标
+						setSeatButtonTextAndIcon(btn, cellText);
 						btn->update();
 					}
 					seatIndex++;
@@ -2507,11 +2535,12 @@ inline void ScheduleDialog::fillSeatTableFromData(const QList<QStringList>& data
 					QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(seatTableRow, col));
 					if (btn && btn->property("isSeat").toBool()) {
 						QPair<QString, QString> student = parseStudentInfo(actualRowData[dataIndex]);
-						btn->setText(actualRowData[dataIndex]);
 						btn->setProperty("studentName", student.first);
 						if (!student.second.isEmpty()) {
 							btn->setProperty("studentId", student.second);
 						}
+						// 使用辅助函数设置文本和图标
+						setSeatButtonTextAndIcon(btn, actualRowData[dataIndex]);
 						btn->update();
 					}
 				}
@@ -2524,11 +2553,12 @@ inline void ScheduleDialog::fillSeatTableFromData(const QList<QStringList>& data
 					QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(seatTableRow, col));
 					if (btn && btn->property("isSeat").toBool()) {
 						QPair<QString, QString> student = parseStudentInfo(actualRowData[dataIndex]);
-						btn->setText(actualRowData[dataIndex]);
 						btn->setProperty("studentName", student.first);
 						if (!student.second.isEmpty()) {
 							btn->setProperty("studentId", student.second);
 						}
+						// 使用辅助函数设置文本和图标
+						setSeatButtonTextAndIcon(btn, actualRowData[dataIndex]);
 						btn->update();
 					}
 				}
@@ -2541,11 +2571,12 @@ inline void ScheduleDialog::fillSeatTableFromData(const QList<QStringList>& data
 					QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(seatTableRow, col));
 					if (btn && btn->property("isSeat").toBool()) {
 						QPair<QString, QString> student = parseStudentInfo(actualRowData[dataIndex]);
-						btn->setText(actualRowData[dataIndex]);
 						btn->setProperty("studentName", student.first);
 						if (!student.second.isEmpty()) {
 							btn->setProperty("studentId", student.second);
 						}
+						// 使用辅助函数设置文本和图标
+						setSeatButtonTextAndIcon(btn, actualRowData[dataIndex]);
 						btn->update();
 					}
 				}
@@ -2558,11 +2589,12 @@ inline void ScheduleDialog::fillSeatTableFromData(const QList<QStringList>& data
 					QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(seatTableRow, col));
 					if (btn && btn->property("isSeat").toBool()) {
 						QPair<QString, QString> student = parseStudentInfo(actualRowData[dataIndex]);
-						btn->setText(actualRowData[dataIndex]);
 						btn->setProperty("studentName", student.first);
 						if (!student.second.isEmpty()) {
 							btn->setProperty("studentId", student.second);
 						}
+						// 使用辅助函数设置文本和图标
+						setSeatButtonTextAndIcon(btn, actualRowData[dataIndex]);
 						btn->update();
 					}
 				}
@@ -2606,9 +2638,10 @@ inline void ScheduleDialog::fetchSeatArrangementFromServer()
 			for (int col = 0; col < 11; ++col) {
 				QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
 				if (btn && btn->property("isSeat").toBool()) {
-					btn->setText("");
 					btn->setProperty("studentId", QVariant());
 					btn->setProperty("studentName", QVariant());
+					// 使用辅助函数设置文本和图标（空文本会显示图标）
+					setSeatButtonTextAndIcon(btn, "");
 				}
 			}
 		}
@@ -2658,9 +2691,10 @@ inline void ScheduleDialog::fetchSeatArrangementFromServer()
 					}
 				}
 				
-				btn->setText(seatLabel);
 				btn->setProperty("studentName", name.isEmpty() ? seatLabel : name);
 				btn->setProperty("studentId", studentId);
+				// 使用辅助函数设置文本和图标
+				setSeatButtonTextAndIcon(btn, seatLabel);
 				btn->update();
 				filled++;
 			}
@@ -2886,11 +2920,46 @@ inline void ScheduleDialog::applyDailyScheduleToButtons(const QStringList& times
 		}
 	}
 
-	// 按时间字符串排序（格式如 "07:20", "08:00", "12:00" 等）
-	// 将时间字符串转换为分钟数进行比较，确保正确排序
-	auto timeToMinutes = [](const QString& timeStr) -> int {
+	// 从时间字符串中提取时间用于排序的辅助函数（内联定义，供timeToMinutes使用）
+	auto extractTimeForSorting = [](const QString& timeText) -> QString {
+		if (timeText.isEmpty()) return "";
+		
+		// 先统一将全角冒号转换为半角冒号
+		QString normalizedText = timeText;
+		normalizedText.replace(QStringLiteral("："), QStringLiteral(":"));
+		
+		// 匹配时间范围格式：如 "7:00-7:40" 或 "早读 7:00-7:40" 或 "午休 11:10-13:30"
+		QRegExp timeRangePattern("(\\d{1,2})\\s*:\\s*(\\d{2})\\s*-\\s*(\\d{1,2})\\s*:\\s*(\\d{2})");
+		if (timeRangePattern.indexIn(normalizedText) != -1) {
+			QString hour = timeRangePattern.cap(1);  // 提取开始时间的小时部分，如"11"
+			QString min = timeRangePattern.cap(2);   // 提取开始时间的分钟部分，如"10"
+			// 返回开始时间用于排序，格式化为 HH:MM（如"11:10"），确保排序正确
+			return QString("%1:%2").arg(hour.toInt(), 2, 10, QChar('0')).arg(min);
+		}
+		
+		// 匹配单个时间格式：如 "7:00" 或 "早读 7:00"
+		QRegExp singleTimePattern("(\\d{1,2})\\s*:\\s*(\\d{2})");
+		if (singleTimePattern.indexIn(normalizedText) != -1) {
+			QString hour = singleTimePattern.cap(1);
+			QString min = singleTimePattern.cap(2);
+			// 格式化为 HH:MM
+			return QString("%1:%2").arg(hour.toInt(), 2, 10, QChar('0')).arg(min);
+		}
+		
+		return "";
+	};
+
+	// 按时间字符串排序（格式如 "07:20", "08:00", "12:00" 或 "午休 11：10-13：30" 等）
+	// 先将时间字符串提取出时间部分，再转换为分钟数进行比较，确保正确排序
+	auto timeToMinutes = [&extractTimeForSorting](const QString& timeStr) -> int {
 		if (timeStr.isEmpty()) return 9999; // 空时间排在最后
-		QStringList parts = timeStr.split(':');
+		
+		// 先从时间字符串中提取时间（如从"午休 11：10-13：30"中提取"11:10"）
+		QString extractedTime = extractTimeForSorting(timeStr);
+		if (extractedTime.isEmpty()) return 9999; // 无法提取时间，排在最后
+		
+		// 将提取的时间转换为分钟数
+		QStringList parts = extractedTime.split(':');
 		if (parts.size() < 2) return 9999;
 		bool ok1, ok2;
 		int hours = parts[0].toInt(&ok1);
@@ -3006,22 +3075,66 @@ inline void ScheduleDialog::applyDailyScheduleToButtons(const QStringList& times
 	}
 }
 
+// 从时间字符串中提取时间用于排序（如"早读 7:00-7:40"提取"7:00"）
+inline QString extractTimeForSorting(const QString& timeText) {
+	if (timeText.isEmpty()) return "";
+	
+	// 先统一将全角冒号转换为半角冒号
+	QString normalizedText = timeText;
+	normalizedText.replace(QStringLiteral("："), QStringLiteral(":"));
+	
+	// 匹配时间范围格式：如 "7:00-7:40" 或 "早读 7:00-7:40" 或 "早读 早读 7:00-7:40"
+	// 提取开始时间（第一个时间）用于排序，如从"早读 7:00-7:40"中提取"7:00"
+	QRegExp timeRangePattern("(\\d{1,2})\\s*:\\s*(\\d{2})\\s*-\\s*(\\d{1,2})\\s*:\\s*(\\d{2})");
+	if (timeRangePattern.indexIn(normalizedText) != -1) {
+		QString hour = timeRangePattern.cap(1);  // 提取开始时间的小时部分，如"7"
+		QString min = timeRangePattern.cap(2);   // 提取开始时间的分钟部分，如"00"
+		// 返回开始时间用于排序，格式化为 HH:MM（如"07:00"），确保排序正确
+		return QString("%1:%2").arg(hour.toInt(), 2, 10, QChar('0')).arg(min);
+	}
+	
+	// 匹配单个时间格式：如 "7:00" 或 "早读 7:00"
+	QRegExp singleTimePattern("(\\d{1,2})\\s*:\\s*(\\d{2})");
+	if (singleTimePattern.indexIn(normalizedText) != -1) {
+		QString hour = singleTimePattern.cap(1);
+		QString min = singleTimePattern.cap(2);
+		// 格式化为 HH:MM
+		return QString("%1:%2").arg(hour.toInt(), 2, 10, QChar('0')).arg(min);
+	}
+	
+	return "";
+}
+
 inline QMap<QString, QString> ScheduleDialog::extractHighlightTimes(const QStringList& times, const QStringList& subjects) const
 {
-	QMap<QString, QString> result;
-	result.insert(QStringLiteral("晨读"), QStringLiteral("07:20"));
-	result.insert(QStringLiteral("午饭"), QStringLiteral("12:00"));
-	result.insert(QStringLiteral("午休"), QStringLiteral("12:40"));
-	result.insert(QStringLiteral("晚自习"), QStringLiteral("19:00"));
+	// 移除硬编码的默认值，以服务器下发的为准
+	QStringList specialSubjects = { QStringLiteral("晨读"), QStringLiteral("午饭"), QStringLiteral("午休"), QStringLiteral("晚自习") };
 
+	// 先收集所有数据到列表中
+	QList<QPair<QString, QString>> items;
 	int count = qMin(times.size(), subjects.size());
 	for (int i = 0; i < count; ++i) {
 		const QString subject = subjects[i];
 		const QString time = times[i];
-		if (result.contains(subject) && !time.isEmpty()) {
-			result[subject] = time;
+		// 只提取服务器下发的特殊科目时间，不设置默认值
+		if (specialSubjects.contains(subject) && !time.isEmpty()) {
+			items.append(qMakePair(subject, time));
 		}
 	}
+	
+	// 按照提取的时间进行排序
+	std::sort(items.begin(), items.end(), [](const QPair<QString, QString>& a, const QPair<QString, QString>& b) {
+		QString timeA = extractTimeForSorting(a.second);
+		QString timeB = extractTimeForSorting(b.second);
+		return timeA < timeB;
+	});
+	
+	// 转换为QMap返回（虽然QMap会按键排序，但我们已经按时间排序了，调用方会使用排序后的列表）
+	QMap<QString, QString> result;
+	for (const auto& item : items) {
+		result[item.first] = item.second;
+	}
+	
 	return result;
 }
 
@@ -3043,21 +3156,22 @@ inline void ScheduleDialog::updateSpecialSubjects(const QMap<QString, QString>& 
 		return;
 	}
 
-	QStringList order = { QStringLiteral("晨读"), QStringLiteral("午饭"), QStringLiteral("午休"), QStringLiteral("晚自习") };
-	QStringList keys;
-	for (const QString& key : order) {
-		if (highlights.contains(key)) {
-			keys.append(key);
-		}
-	}
+	// 按照时间排序显示，而不是使用固定顺序
+	QList<QPair<QString, QString>> sortedItems;
 	for (auto it = highlights.constBegin(); it != highlights.constEnd(); ++it) {
-		if (!keys.contains(it.key())) {
-			keys.append(it.key());
-		}
+		sortedItems.append(qMakePair(it.key(), it.value()));
 	}
+	
+	// 按照提取的时间进行排序
+	std::sort(sortedItems.begin(), sortedItems.end(), [](const QPair<QString, QString>& a, const QPair<QString, QString>& b) {
+		QString timeA = extractTimeForSorting(a.second);
+		QString timeB = extractTimeForSorting(b.second);
+		return timeA < timeB;
+	});
 
 	bool first = true;
-	for (const QString& subject : keys) {
+	for (const auto& item : sortedItems) {
+		const QString& subject = item.first;
 		if (!first) {
 			QLabel* sep = new QLabel("   |   ");
 			sep->setStyleSheet("color: white; font-size: 12px;");
@@ -3089,28 +3203,19 @@ inline QStringList ScheduleDialog::defaultSubjectsForWeekday(int weekday) const
 inline QStringList ScheduleDialog::defaultTimesForSubjects(const QStringList& subjects) const
 {
 	QStringList slotDefaults = { "07:20","08:00","08:45","09:35","10:25","12:00","12:40","14:00","14:45","15:35","17:00","19:00","20:30" };
-	QString morningRead = "07:20";
-	QString lunchTime = "12:00";
-	QString napTime = "12:40";
-	QString tutoringTime = "17:00";
-	QString eveningStudyTime = "19:00";
+	// 移除硬编码的特殊科目时间，以服务器下发的为准
+	QString tutoringTime = "17:00"; // 课服时间保留，因为不在移除列表中
 
 	QStringList times;
 	times.reserve(subjects.size());
 	for (int i = 0; i < subjects.size(); ++i) {
 		QString subject = subjects[i];
 		QString slotTime = slotDefaults.value(i, "--:--");
-		if (subject == "晨读") {
-			slotTime = morningRead;
-		} else if (subject == "午饭") {
-			slotTime = lunchTime;
-		} else if (subject == "午休") {
-			slotTime = napTime;
-		} else if (subject == "课服") {
+		// 移除晨读、午饭、午休、晚自习的硬编码时间设置
+		if (subject == "课服") {
 			slotTime = tutoringTime;
-		} else if (subject == "晚自习") {
-			slotTime = eveningStudyTime;
 		}
+		// 其他科目使用默认时间，特殊科目（晨读、午饭、午休、晚自习）也使用默认时间，由服务器数据覆盖
 		times.append(slotTime);
 	}
 	return times;
@@ -3915,3 +4020,4 @@ inline void ScheduleDialog::sendPostClassEvaluationContent(const QString& subjec
 	
 	QMessageBox::information(this, QString::fromUtf8(u8"成功"), QString::fromUtf8(u8"课后评价内容已发送到群组！"));
 }
+
