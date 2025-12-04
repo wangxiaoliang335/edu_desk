@@ -116,7 +116,7 @@ ModalDialog::ModalDialog(QWidget* parent)
     closeButton->hide();
     connect(closeButton, &QPushButton::clicked, this, &QDialog::reject);
 
-    QHBoxLayout* titleLayout = new QHBoxLayout;
+    QHBoxLayout* titleLayout = new QHBoxLayout(this);
     
     titleLayout->addWidget(titleLabel);
     titleLayout->addSpacing(152);
@@ -136,11 +136,11 @@ ModalDialog::ModalDialog(QWidget* parent)
     phoneIcon->setPixmap(QPixmap(":/icons/phone.png").scaled(16, 16, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     phoneIcon->setFixedSize(16, 16);
     phoneIcon->setStyleSheet("background: transparent;");
-    QHBoxLayout* phoneLayout = new QHBoxLayout;
+    QHBoxLayout* phoneLayout = new QHBoxLayout(this);
     phoneLayout->setContentsMargins(8, 0, 8, 0);
     phoneLayout->addWidget(phoneIcon);
     phoneLayout->addWidget(phoneEdit);
-    QWidget* phoneWidget = new QWidget;
+    QWidget* phoneWidget = new QWidget(this);
     phoneWidget->setLayout(phoneLayout);
     phoneWidget->setStyleSheet("background-color: rgba(255,255,255,0.08); border-radius:6px;");
 
@@ -164,13 +164,13 @@ ModalDialog::ModalDialog(QWidget* parent)
     );
     getCodeButton->setCursor(Qt::PointingHandCursor);
 
-    QHBoxLayout* codeLayout = new QHBoxLayout;
+    QHBoxLayout* codeLayout = new QHBoxLayout(this);
     codeLayout->setContentsMargins(8, 0, 8, 0);
     codeLayout->addWidget(codeIcon);
     codeLayout->addWidget(codeEdit);
     codeLayout->addSpacing(5);
     codeLayout->addWidget(getCodeButton);
-    QWidget* codeWidget = new QWidget;
+    QWidget* codeWidget = new QWidget(this);
     codeWidget->setLayout(codeLayout);
     codeWidget->setStyleSheet("background-color: rgba(255,255,255,0.08); border-radius:6px;");
 
@@ -192,7 +192,7 @@ ModalDialog::ModalDialog(QWidget* parent)
     resetPwdLabel->setTextInteractionFlags(Qt::TextBrowserInteraction);
     resetPwdLabel->setStyleSheet("color: white; font-size:12px;");
 
-    QHBoxLayout* bottomLayout = new QHBoxLayout;
+    QHBoxLayout* bottomLayout = new QHBoxLayout(this);
     bottomLayout->addWidget(registerLabel);
     bottomLayout->addStretch();
     bottomLayout->addWidget(resetPwdLabel);

@@ -612,8 +612,8 @@ public:
 		});
 
 		// 顶部：头像 + 班级信息 + 功能按钮 + 更多
-		QHBoxLayout* topLayout = new QHBoxLayout;
-		m_lblAvatar = new QLabel(); // 改为普通QLabel，用于显示班级文字
+		QHBoxLayout* topLayout = new QHBoxLayout(this);
+		m_lblAvatar = new QLabel(this); // 改为普通QLabel，用于显示班级文字
 		m_lblAvatar->setFixedSize(50, 50);
 		m_lblAvatar->setAlignment(Qt::AlignCenter); // 文字居中
 		m_lblAvatar->setStyleSheet("background-color: #4169E1; color: white; border:1px solid #4169E1; text-align:center; font-size:14px; font-weight:bold; border-radius: 8px;");
@@ -622,16 +622,16 @@ public:
 		font.setWeight(QFont::Bold);
 		m_lblAvatar->setFont(font);
 
-		m_lblClass = new QLabel("");
-		QPushButton* btnEdit = new QPushButton("✎");
+		m_lblClass = new QLabel("", this);
+		QPushButton* btnEdit = new QPushButton("✎", this);
 		btnEdit->setFixedSize(24, 24);
 
 	// 班级群功能按钮（普通群不显示）
-	QPushButton* btnSeat = new QPushButton("座次表");
-	QPushButton* btnCam = new QPushButton("摄像头");
-	btnTalk = new QPushButton("按住开始对讲");
-	QPushButton* btnMsg = new QPushButton("通知");
-	QPushButton* btnTask = new QPushButton("作业");
+	QPushButton* btnSeat = new QPushButton("座次表", this);
+	QPushButton* btnCam = new QPushButton("摄像头", this);
+	btnTalk = new QPushButton("按住开始对讲", this);
+	QPushButton* btnMsg = new QPushButton("通知", this);
+	QPushButton* btnTask = new QPushButton("作业", this);
 	QString greenStyle = "background-color: #2D2E2D; color: white; padding: 4px 8px; border: none;";
 	btnSeat->setStyleSheet(greenStyle);
 	btnCam->setStyleSheet(greenStyle);
@@ -650,7 +650,7 @@ public:
 	m_btnMsg = btnMsg;
 	m_btnTask = btnTask;
 
-		QPushButton* btnMore = new QPushButton("...");
+		QPushButton* btnMore = new QPushButton("...", this);
 		btnMore->setFixedSize(48, 24);
 		btnMore->setText("...");
 		btnMore->setStyleSheet(
@@ -702,17 +702,17 @@ public:
 		connectHomeworkButton(btnTask);
 
 		// 时间 + 科目行
-		QHBoxLayout* timeLayout = new QHBoxLayout;
+		QHBoxLayout* timeLayout = new QHBoxLayout(this);
 		m_timeButtonStyle = "background-color: #2D2E2D; color: white; font-size:12px; min-width:40px;";
 		m_subjectButtonStyle = "background-color: #2D2E2D; color: white; font-size:12px; min-width:50px;";
 
-		QVBoxLayout* vTimes = new QVBoxLayout;
-		m_timeRowLayout = new QHBoxLayout;
-		m_subjectRowLayout = new QHBoxLayout;
-		m_specialSubjectRowLayout = new QHBoxLayout;
+		QVBoxLayout* vTimes = new QVBoxLayout(this);
+		m_timeRowLayout = new QHBoxLayout(this);
+		m_subjectRowLayout = new QHBoxLayout(this);
+		m_specialSubjectRowLayout = new QHBoxLayout(this);
 		vTimes->addLayout(m_timeRowLayout);
 		vTimes->addLayout(m_subjectRowLayout);
-		QHBoxLayout* specialRowsLayout = new QHBoxLayout;
+		QHBoxLayout* specialRowsLayout = new QHBoxLayout(this);
 		specialRowsLayout->setSpacing(4);
 		specialRowsLayout->addLayout(m_specialSubjectRowLayout);
 		specialRowsLayout->addStretch();
@@ -735,11 +735,11 @@ public:
 		line->setStyleSheet("color: red; border: 1px solid red;");
 		mainLayout->addWidget(line);
 
-		QHBoxLayout* timeIndicatorLayout = new QHBoxLayout;
+		QHBoxLayout* timeIndicatorLayout = new QHBoxLayout(this);
 		timeIndicatorLayout->setSpacing(8);
-		QLabel* lblArrow = new QLabel("↓");
+		QLabel* lblArrow = new QLabel("↓", this);
 		lblArrow->setStyleSheet("color: white; font-weight: bold;");
-		QLabel* lblTime = new QLabel("12:10");
+		QLabel* lblTime = new QLabel("12:10", this);
 		lblTime->setAlignment(Qt::AlignCenter);
 		lblTime->setFixedSize(60, 25);
 		lblTime->setStyleSheet("background-color: pink; color:red; font-weight:bold;");
@@ -750,15 +750,15 @@ public:
 
 
 		// ===== 新增中排按钮 =====
-		QHBoxLayout* middleBtnLayout = new QHBoxLayout;
+		QHBoxLayout* middleBtnLayout = new QHBoxLayout(this);
 		//QString greenStyle = "background-color: green; color: white; padding: 4px 8px;";
 
-		QPushButton* btnRandom = new QPushButton("随机点名");
-		QPushButton* btnAnalyse = new QPushButton("分断");
-		QPushButton* btnHeatmap = new QPushButton("热力图");
-		QPushButton* btnArrange = new QPushButton("排座");
-		QPushButton* btnImportSeat = new QPushButton("导入学生信息");
-		QPushButton* btnMoreBottom = new QPushButton("...");
+		QPushButton* btnRandom = new QPushButton("随机点名", this);
+		QPushButton* btnAnalyse = new QPushButton("分断", this);
+		QPushButton* btnHeatmap = new QPushButton("热力图", this);
+		QPushButton* btnArrange = new QPushButton("排座", this);
+		QPushButton* btnImportSeat = new QPushButton("导入学生信息", this);
+		QPushButton* btnMoreBottom = new QPushButton("...", this);
 		btnMoreBottom->setFixedSize(48, 24);
 		btnMoreBottom->setText("...");
 		btnMoreBottom->setStyleSheet(
@@ -798,7 +798,7 @@ public:
 		btnImportSeat->setStyleSheet(greenStyle);
 
 		// 作业展示按钮（班级端快捷按钮）
-		QPushButton* btnHomeworkView = new QPushButton("作业");
+		QPushButton* btnHomeworkView = new QPushButton("作业", this);
 		btnHomeworkView->setStyleSheet(greenStyle);
 		connect(btnHomeworkView, &QPushButton::clicked, this, [this]() {
 			showHomeworkViewDialog();
@@ -854,12 +854,12 @@ public:
 			typeDialog->resize(300, 150);
 			
 			QVBoxLayout* typeLayout = new QVBoxLayout(typeDialog);
-			QLabel* lblTitle = new QLabel("请选择热力图类型：");
+			QLabel* lblTitle = new QLabel("请选择热力图类型：", typeDialog);
 			typeLayout->addWidget(lblTitle);
 			
-			QPushButton* btnSegment = new QPushButton("分段图1（每一段一种颜色）");
-			QPushButton* btnGradient = new QPushButton("热力图2（颜色渐变）");
-			QPushButton* btnCancel = new QPushButton("取消");
+			QPushButton* btnSegment = new QPushButton("分段图1（每一段一种颜色）", typeDialog);
+			QPushButton* btnGradient = new QPushButton("热力图2（颜色渐变）", typeDialog);
+			QPushButton* btnCancel = new QPushButton("取消", typeDialog);
 			
 			typeLayout->addWidget(btnSegment);
 			typeLayout->addWidget(btnGradient);
@@ -882,8 +882,8 @@ public:
 		});
 
 		// ===== 讲台区域 =====
-		QHBoxLayout* podiumLayout = new QHBoxLayout;
-		QPushButton* btnPodium = new QPushButton("讲台");
+		QHBoxLayout* podiumLayout = new QHBoxLayout(this);
+		QPushButton* btnPodium = new QPushButton("讲台", this);
 		btnPodium->setStyleSheet(greenStyle);
 		btnPodium->setFixedHeight(30);
 		btnPodium->setFixedWidth(80);
@@ -897,7 +897,7 @@ public:
 		// 第1行：4个座位（过道两侧各2个）
 		// 第2-8行：每行8个座位（4个数据块，每个2列，中间有3个过道）
 		// 总共60个座位
-		seatTable = new QTableWidget(8, 11); // 8行，11列（包含过道列）
+		seatTable = new QTableWidget(8, 11, this); // 8行，11列（包含过道列）
 		seatTable->horizontalHeader()->setVisible(false);
 		seatTable->verticalHeader()->setVisible(false);
 		seatTable->setStyleSheet(
@@ -927,7 +927,7 @@ public:
 		QIcon seatIcon(croppedPixmap);
 		for (int row = 0; row < 8; ++row) {
 			for (int col = 0; col < 11; ++col) {
-				QPushButton* btn = new QPushButton("");
+				QPushButton* btn = new QPushButton("", this);
 				// 不在初始化时设置图标，只有座位按钮才设置图标
 				btn->setStyleSheet(
 					"QPushButton { "
@@ -1140,27 +1140,27 @@ public:
 		seatTable->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); // 禁用水平滚动条
 		
 		// 创建水平布局使seatTable居中
-		QHBoxLayout* seatTableLayout = new QHBoxLayout;
+		QHBoxLayout* seatTableLayout = new QHBoxLayout(this);
 		seatTableLayout->addStretch();
 		seatTableLayout->addWidget(seatTable);
 		seatTableLayout->addStretch();
 		mainLayout->addLayout(seatTableLayout);
 
 		// 红框消息输入栏
-		QHBoxLayout* inputLayout = new QHBoxLayout;
+		QHBoxLayout* inputLayout = new QHBoxLayout(this);
 
-		QPushButton* btnVoice = new QPushButton("🔊");
+		QPushButton* btnVoice = new QPushButton("🔊", this);
 		btnVoice->setFixedSize(30, 30);
 
-		QLineEdit* editMessage = new QLineEdit();
+		QLineEdit* editMessage = new QLineEdit(this);
 		editMessage->setPlaceholderText("请输入消息...");
 		editMessage->setMinimumHeight(30);
 		editMessage->setEnabled(false);
 
-		QPushButton* btnEmoji = new QPushButton("😊");
+		QPushButton* btnEmoji = new QPushButton("😊", this);
 		btnEmoji->setFixedSize(30, 30);
 
-		QPushButton* btnPlus = new QPushButton("➕");
+		QPushButton* btnPlus = new QPushButton("➕", this);
 		btnPlus->setFixedSize(30, 30);
 
 		inputLayout->addStretch(1);
@@ -1187,7 +1187,7 @@ public:
 		mainLayout->addWidget(inputWidget);
 
 		// 黄色圆圈数字
-		QLabel* lblNum = new QLabel("3");
+		QLabel* lblNum = new QLabel("3", this);
 		lblNum->setAlignment(Qt::AlignCenter);
 		lblNum->setFixedSize(30, 30);
 		lblNum->setStyleSheet("background-color: yellow; color: red; font-weight: bold; font-size: 16px; border-radius: 15px;");
@@ -2848,8 +2848,8 @@ inline void ScheduleDialog::ensureDailyScheduleButtons(int count)
 		return;
 	}
 
-	auto createButton = [](const QString& style) -> QPushButton* {
-		QPushButton* btn = new QPushButton("");
+	auto createButton = [this](const QString& style) -> QPushButton* {
+		QPushButton* btn = new QPushButton("", this);
 		btn->setStyleSheet(style);
 		return btn;
 	};
@@ -3173,12 +3173,12 @@ inline void ScheduleDialog::updateSpecialSubjects(const QMap<QString, QString>& 
 	for (const auto& item : sortedItems) {
 		const QString& subject = item.first;
 		if (!first) {
-			QLabel* sep = new QLabel("   |   ");
+			QLabel* sep = new QLabel("   |   ", this);
 			sep->setStyleSheet("color: white; font-size: 12px;");
 			m_specialSubjectRowLayout->addWidget(sep);
 		}
 		QString display = QStringLiteral("%1 %2").arg(subject, highlights.value(subject));
-		QLabel* lbl = new QLabel(display);
+		QLabel* lbl = new QLabel(display, this);
 		lbl->setStyleSheet("color: white; font-size: 12px;");
 		m_specialSubjectRowLayout->addWidget(lbl);
 		first = false;
@@ -3792,7 +3792,7 @@ inline void ScheduleDialog::showPrepareClassDialog(const QString& subject, const
 	mainLayout->setContentsMargins(20, 20, 20, 20);
 	
 	// 提示文字
-	QLabel* lblPrompt = new QLabel(QString::fromUtf8(u8"请输入课前准备内容"));
+	QLabel* lblPrompt = new QLabel(QString::fromUtf8(u8"请输入课前准备内容"), dlg);
 	lblPrompt->setStyleSheet("color: white; font-size: 14px;");
 	mainLayout->addWidget(lblPrompt);
 	
@@ -3807,17 +3807,17 @@ inline void ScheduleDialog::showPrepareClassDialog(const QString& subject, const
 	mainLayout->addWidget(textEdit, 1);
 	
 	// 按钮布局
-	QHBoxLayout* btnLayout = new QHBoxLayout;
+	QHBoxLayout* btnLayout = new QHBoxLayout(dlg);
 	btnLayout->addStretch();
 	
-	QPushButton* btnCancel = new QPushButton(QString::fromUtf8(u8"取消"));
+	QPushButton* btnCancel = new QPushButton(QString::fromUtf8(u8"取消"), dlg);
 	btnCancel->setFixedSize(80, 35);
 	btnCancel->setStyleSheet(
 		"QPushButton { background-color: #4a4a4a; color: white; }"
 		"QPushButton:hover { background-color: #5a5a5a; }"
 	);
 	
-	QPushButton* btnConfirm = new QPushButton(QString::fromUtf8(u8"确定"));
+	QPushButton* btnConfirm = new QPushButton(QString::fromUtf8(u8"确定"), dlg);
 	btnConfirm->setFixedSize(80, 35);
 	btnConfirm->setStyleSheet(
 		"QPushButton { background-color: #0078d4; color: white; }"
@@ -3936,7 +3936,7 @@ inline void ScheduleDialog::showPostClassEvaluationDialog(const QString& subject
 	mainLayout->setContentsMargins(20, 20, 20, 20);
 	
 	// 提示文字
-	QLabel* lblPrompt = new QLabel(QString::fromUtf8(u8"请输入课后评价内容"));
+	QLabel* lblPrompt = new QLabel(QString::fromUtf8(u8"请输入课后评价内容"), dlg);
 	lblPrompt->setStyleSheet("color: white; font-size: 14px;");
 	mainLayout->addWidget(lblPrompt);
 	
@@ -3947,17 +3947,17 @@ inline void ScheduleDialog::showPostClassEvaluationDialog(const QString& subject
 	mainLayout->addWidget(textEdit, 1);
 	
 	// 按钮布局
-	QHBoxLayout* btnLayout = new QHBoxLayout;
+	QHBoxLayout* btnLayout = new QHBoxLayout(dlg);
 	btnLayout->addStretch();
 	
-	QPushButton* btnCancel = new QPushButton(QString::fromUtf8(u8"取消"));
+	QPushButton* btnCancel = new QPushButton(QString::fromUtf8(u8"取消"), dlg);
 	btnCancel->setFixedSize(80, 35);
 	btnCancel->setStyleSheet(
 		"QPushButton { background-color: #4a4a4a; color: white; }"
 		"QPushButton:hover { background-color: #5a5a5a; }"
 	);
 	
-	QPushButton* btnConfirm = new QPushButton(QString::fromUtf8(u8"确定"));
+	QPushButton* btnConfirm = new QPushButton(QString::fromUtf8(u8"确定"), dlg);
 	btnConfirm->setFixedSize(80, 35);
 	btnConfirm->setStyleSheet(
 		"QPushButton { background-color: #0078d4; color: white; }"
