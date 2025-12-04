@@ -870,6 +870,10 @@ private:
         wsMessage["classid"] = classUniqueId;
         wsMessage["schoolid"] = userinfo.schoolId;
         wsMessage["is_class_group"] = 1;  // 1=班级群
+        // 班级群唯一ID = 班级唯一ID + "01"
+        QString classGroupUniqueId = classUniqueId + "01";
+        wsMessage["group_id"] = classGroupUniqueId;
+        qDebug() << "创建班级群 - 班级唯一ID:" << classUniqueId << "，班级群唯一ID:" << classGroupUniqueId;
 
         // ========== 群组详细信息（可选） ==========
         wsMessage["face_url"] = "/images/img_group.png";

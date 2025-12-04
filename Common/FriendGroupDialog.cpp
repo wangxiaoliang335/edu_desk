@@ -432,6 +432,28 @@ FriendGroupDialog::FriendGroupDialog(QWidget* parent, TaQTWebSocket* pWs)
                             // 读取 is_class_group 字段（默认为1，表示班级群）
                             bool isClassGroup = groupObj.contains("is_class_group") ? (groupObj["is_class_group"].toInt() == 1) : true;
                             
+                            // 解析并保存临时房间信息（如果有）
+                            if (groupObj.contains("temp_room") && groupObj["temp_room"].isObject()) {
+                                QJsonObject tempRoomObj = groupObj["temp_room"].toObject();
+                                TempRoomInfo tempRoomInfo;
+                                tempRoomInfo.room_id = tempRoomObj["room_id"].toString();
+                                tempRoomInfo.whip_url = tempRoomObj["publish_url"].toString();  // 推流地址
+                                tempRoomInfo.whep_url = tempRoomObj["play_url"].toString();     // 拉流地址
+                                tempRoomInfo.stream_name = tempRoomObj["stream_name"].toString();
+                                tempRoomInfo.group_id = groupId;
+                                tempRoomInfo.owner_id = tempRoomObj["owner_id"].toString();
+                                tempRoomInfo.owner_name = tempRoomObj["owner_name"].toString();
+                                tempRoomInfo.owner_icon = tempRoomObj["owner_icon"].toString();
+                                
+                                // 保存到全局存储
+                                TempRoomStorage::saveTempRoomInfo(groupId, tempRoomInfo);
+                                
+                                qDebug() << "从服务器获取到临时房间信息，群组ID:" << groupId;
+                                qDebug() << "  房间ID:" << tempRoomInfo.room_id;
+                                qDebug() << "  推流地址:" << tempRoomInfo.whip_url;
+                                qDebug() << "  拉流地址:" << tempRoomInfo.whep_url;
+                            }
+                            
                             addClassNode(groupName, groupId, classid, true, isClassGroup);
                             addGroupTreeNode(groupName, groupId, classid, true, isClassGroup);
                             if (!classid.isEmpty())
@@ -473,6 +495,28 @@ FriendGroupDialog::FriendGroupDialog(QWidget* parent, TaQTWebSocket* pWs)
                             
                             // 读取 is_class_group 字段（默认为1，表示班级群）
                             bool isClassGroup = groupObj.contains("is_class_group") ? (groupObj["is_class_group"].toInt() == 1) : true;
+                            
+                            // 解析并保存临时房间信息（如果有）
+                            if (groupObj.contains("temp_room") && groupObj["temp_room"].isObject()) {
+                                QJsonObject tempRoomObj = groupObj["temp_room"].toObject();
+                                TempRoomInfo tempRoomInfo;
+                                tempRoomInfo.room_id = tempRoomObj["room_id"].toString();
+                                tempRoomInfo.whip_url = tempRoomObj["publish_url"].toString();  // 推流地址
+                                tempRoomInfo.whep_url = tempRoomObj["play_url"].toString();     // 拉流地址
+                                tempRoomInfo.stream_name = tempRoomObj["stream_name"].toString();
+                                tempRoomInfo.group_id = groupId;
+                                tempRoomInfo.owner_id = tempRoomObj["owner_id"].toString();
+                                tempRoomInfo.owner_name = tempRoomObj["owner_name"].toString();
+                                tempRoomInfo.owner_icon = tempRoomObj["owner_icon"].toString();
+                                
+                                // 保存到全局存储
+                                TempRoomStorage::saveTempRoomInfo(groupId, tempRoomInfo);
+                                
+                                qDebug() << "从服务器获取到临时房间信息，群组ID:" << groupId;
+                                qDebug() << "  房间ID:" << tempRoomInfo.room_id;
+                                qDebug() << "  推流地址:" << tempRoomInfo.whip_url;
+                                qDebug() << "  拉流地址:" << tempRoomInfo.whep_url;
+                            }
                             
                             addClassNode(groupName, groupId, classid, false, isClassGroup);
                             addGroupTreeNode(groupName, groupId, classid, false, isClassGroup);
@@ -614,6 +658,28 @@ FriendGroupDialog::FriendGroupDialog(QWidget* parent, TaQTWebSocket* pWs)
                                 displayName = groupObj.value("group_name").toString();
                             }
                             
+                            // 解析并保存临时房间信息（如果有）
+                            if (groupObj.contains("temp_room") && groupObj["temp_room"].isObject()) {
+                                QJsonObject tempRoomObj = groupObj["temp_room"].toObject();
+                                TempRoomInfo tempRoomInfo;
+                                tempRoomInfo.room_id = tempRoomObj["room_id"].toString();
+                                tempRoomInfo.whip_url = tempRoomObj["publish_url"].toString();  // 推流地址
+                                tempRoomInfo.whep_url = tempRoomObj["play_url"].toString();     // 拉流地址
+                                tempRoomInfo.stream_name = tempRoomObj["stream_name"].toString();
+                                tempRoomInfo.group_id = unique_group_id;
+                                tempRoomInfo.owner_id = tempRoomObj["owner_id"].toString();
+                                tempRoomInfo.owner_name = tempRoomObj["owner_name"].toString();
+                                tempRoomInfo.owner_icon = tempRoomObj["owner_icon"].toString();
+                                
+                                // 保存到全局存储
+                                TempRoomStorage::saveTempRoomInfo(unique_group_id, tempRoomInfo);
+                                
+                                qDebug() << "从服务器获取到临时房间信息（groups），群组ID:" << unique_group_id;
+                                qDebug() << "  房间ID:" << tempRoomInfo.room_id;
+                                qDebug() << "  推流地址:" << tempRoomInfo.whip_url;
+                                qDebug() << "  拉流地址:" << tempRoomInfo.whep_url;
+                            }
+                            
                             addClassNode(displayName, unique_group_id, classid, true, isClassGroup);
                             addGroupTreeNode(displayName, unique_group_id, classid, true, isClassGroup);
                         }
@@ -666,6 +732,28 @@ FriendGroupDialog::FriendGroupDialog(QWidget* parent, TaQTWebSocket* pWs)
                             QString displayName = groupObj.value("nickname").toString();
                             if (displayName.isEmpty()) {
                                 displayName = groupObj.value("group_name").toString();
+                            }
+                            
+                            // 解析并保存临时房间信息（如果有）
+                            if (groupObj.contains("temp_room") && groupObj["temp_room"].isObject()) {
+                                QJsonObject tempRoomObj = groupObj["temp_room"].toObject();
+                                TempRoomInfo tempRoomInfo;
+                                tempRoomInfo.room_id = tempRoomObj["room_id"].toString();
+                                tempRoomInfo.whip_url = tempRoomObj["publish_url"].toString();  // 推流地址
+                                tempRoomInfo.whep_url = tempRoomObj["play_url"].toString();     // 拉流地址
+                                tempRoomInfo.stream_name = tempRoomObj["stream_name"].toString();
+                                tempRoomInfo.group_id = unique_group_id;
+                                tempRoomInfo.owner_id = tempRoomObj["owner_id"].toString();
+                                tempRoomInfo.owner_name = tempRoomObj["owner_name"].toString();
+                                tempRoomInfo.owner_icon = tempRoomObj["owner_icon"].toString();
+                                
+                                // 保存到全局存储
+                                TempRoomStorage::saveTempRoomInfo(unique_group_id, tempRoomInfo);
+                                
+                                qDebug() << "从服务器获取到临时房间信息（joingroups），群组ID:" << unique_group_id;
+                                qDebug() << "  房间ID:" << tempRoomInfo.room_id;
+                                qDebug() << "  推流地址:" << tempRoomInfo.whip_url;
+                                qDebug() << "  拉流地址:" << tempRoomInfo.whep_url;
                             }
                             
                             addClassNode(displayName, unique_group_id, classid, false, isClassGroup);
@@ -941,7 +1029,8 @@ void FriendGroupDialog::InitData()
         }
     }
 
-    GetGroupJoinedList();
+    //GetGroupJoinedList(); //客户端不用从腾讯服务器获取群列表了
+
     if (m_httpHandler)
     {
         UserInfo userInfo = CommonInfo::GetData();
@@ -1043,6 +1132,7 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
             QJsonObject selfInfo = group[kTIMGroupBaseInfoSelfInfo].toObject();
             QJsonObject memberInfo;
             memberInfo["user_id"] = userId;
+            memberInfo["user_name"] = userInfo.strName;
             memberInfo["readed_seq"] = group[kTIMGroupBaseInfoReadedSeq].toInt();
             memberInfo["msg_flag"] = group[kTIMGroupBaseInfoMsgFlag].toInt();
             memberInfo["join_time"] = selfInfo[kTIMGroupSelfInfoJoinTime].toInt();

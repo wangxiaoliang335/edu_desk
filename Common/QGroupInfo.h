@@ -165,6 +165,7 @@ protected:
     QPushButton* m_closeButton = nullptr; // 关闭按钮
     bool m_dragging = false; // 是否正在拖动
     QPoint m_dragStartPos; // 拖动起始位置
+    bool m_initialized = false; // 是否已经初始化
 };
 
 

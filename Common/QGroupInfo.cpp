@@ -27,6 +27,11 @@ QGroupInfo::QGroupInfo(QWidget* parent)
 
 void QGroupInfo::initData(QString groupName, QString groupNumberId, QString classid)
 {
+    // 如果已经初始化过了，直接返回
+    if (m_initialized) {
+        return;
+    }
+    
     setWindowTitle("班级管理");
     // 设置无边框窗口
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
@@ -298,6 +303,9 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, QString clas
     connect(m_btnExit, &QPushButton::clicked, this, &QGroupInfo::onExitGroupClicked);
     // 连接解散群聊按钮的点击事件
     connect(m_btnDismiss, &QPushButton::clicked, this, &QGroupInfo::onDismissGroupClicked);
+    
+    // 标记为已初始化
+    m_initialized = true;
 }
 
 void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> groupMemberInfo)
