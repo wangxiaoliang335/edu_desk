@@ -28,6 +28,8 @@
 #include <QAudioFormat>
 #include <QIODevice>
 #include <QTimer>
+#include <QMediaPlayer>
+#include <QAudioOutput>
 #include <qprogressbar.h>
 #include <QPoint>
 #include <QBrush>
@@ -500,6 +502,12 @@ public:
 								qDebug() << "  推流地址:" << m_whipUrl;
 								qDebug() << "  拉流地址:" << m_whepUrl;
 								qDebug() << "  流名称:" << m_streamName;
+								
+								// 如果页面已打开，开始拉流（注释：拉流在HTML页面上进行）
+								//if (!m_whepUrl.isEmpty() && !m_isPullingStream) {
+								//	qDebug() << "房间创建成功，开始拉流，拉流地址:" << m_whepUrl;
+								//	startPullStream();
+								//}
 							}
 						}
 					}
@@ -509,6 +517,16 @@ public:
 						if (!roomId.isEmpty()) {
 							m_roomId = roomId;
 							qDebug() << "收到房间创建成功消息，房间ID:" << m_roomId;
+							
+							// 如果消息中包含拉流地址，也尝试拉流（注释：拉流在HTML页面上进行）
+							//QString whepUrl = rootObj.value(QStringLiteral("whep_url")).toString();
+							//if (!whepUrl.isEmpty()) {
+							//	m_whepUrl = whepUrl;
+							//	if (!m_isPullingStream) {
+							//		qDebug() << "收到拉流地址，开始拉流:" << m_whepUrl;
+							//		startPullStream();
+							//	}
+							//}
 						}
 					}
 				});
@@ -1791,6 +1809,16 @@ private:
 	
 	// 创建临时房间
 	void createTemporaryRoom();
+	
+	// 开始拉流（WHEP）
+	void startPullStream();
+	
+	// 停止拉流
+	void stopPullStream();
+	
+	// 拉流相关成员变量
+	QMediaPlayer* m_pullStreamPlayer = nullptr;
+	bool m_isPullingStream = false;
 };
 
 // 设置座位按钮的文本和图标：有文本时不显示图标，无文本时显示图标
@@ -3579,6 +3607,13 @@ inline void ScheduleDialog::openIntercomWebPage()
 	
 	if (opened) {
 		qDebug() << "成功使用QDesktopServices打开HTML文件";
+		// 页面打开成功后，如果已有拉流地址，开始拉流（注释：拉流在HTML页面上进行）
+		//QTimer::singleShot(1000, this, [this]() {
+		//	if (!m_whepUrl.isEmpty() && !m_isPullingStream) {
+		//		qDebug() << "页面已打开，开始拉流，拉流地址:" << m_whepUrl;
+		//		startPullStream();
+		//	}
+		//});
 		return;
 	}
 	
@@ -3589,6 +3624,13 @@ inline void ScheduleDialog::openIntercomWebPage()
 		qDebug() << "尝试使用explorer打开文件:" << nativePath;
 		if (QProcess::startDetached("explorer", QStringList() << nativePath)) {
 			qDebug() << "成功使用explorer打开HTML文件";
+			// 页面打开成功后，如果已有拉流地址，开始拉流（注释：拉流在HTML页面上进行）
+			//QTimer::singleShot(1000, this, [this]() {
+			//	if (!m_whepUrl.isEmpty() && !m_isPullingStream) {
+			//		qDebug() << "页面已打开，开始拉流，拉流地址:" << m_whepUrl;
+			//		startPullStream();
+			//	}
+			//});
 			return;
 		}
 		
@@ -3603,6 +3645,13 @@ inline void ScheduleDialog::openIntercomWebPage()
 		qDebug() << "完整命令: cmd /c start \"\" \"" << nativePath << "\"";
 		if (QProcess::startDetached("cmd", cmdArgs)) {
 			qDebug() << "成功使用cmd start命令打开HTML文件";
+			// 页面打开成功后，如果已有拉流地址，开始拉流（注释：拉流在HTML页面上进行）
+			//QTimer::singleShot(1000, this, [this]() {
+			//	if (!m_whepUrl.isEmpty() && !m_isPullingStream) {
+			//		qDebug() << "页面已打开，开始拉流，拉流地址:" << m_whepUrl;
+			//		startPullStream();
+			//	}
+			//});
 			return;
 		}
 		
@@ -3613,6 +3662,13 @@ inline void ScheduleDialog::openIntercomWebPage()
 		rundllArgs << "shell32.dll,ShellExec_RunDLL" << nativePath;
 		if (QProcess::startDetached("rundll32.exe", rundllArgs)) {
 			qDebug() << "成功使用rundll32打开HTML文件";
+			// 页面打开成功后，如果已有拉流地址，开始拉流（注释：拉流在HTML页面上进行）
+			//QTimer::singleShot(1000, this, [this]() {
+			//	if (!m_whepUrl.isEmpty() && !m_isPullingStream) {
+			//		qDebug() << "页面已打开，开始拉流，拉流地址:" << m_whepUrl;
+			//		startPullStream();
+			//	}
+			//});
 			return;
 		}
 	#endif
@@ -3730,6 +3786,77 @@ inline void ScheduleDialog::createTemporaryRoom()
 	qDebug() << "创建房间消息已发送，房间ID:" << m_roomId;
 	qDebug() << "发送的消息字符串:" << jsonString;
 }
+
+// 开始拉流（WHEP）- 注释：拉流在HTML页面上进行，不在C++代码中
+/*
+inline void ScheduleDialog::startPullStream()
+{
+	if (m_whepUrl.isEmpty()) {
+		qWarning() << "拉流地址为空，无法开始拉流";
+		return;
+	}
+	
+	if (m_isPullingStream) {
+		qDebug() << "已经在拉流中，无需重复开始";
+		return;
+	}
+	
+	qDebug() << "开始拉流，拉流地址:" << m_whepUrl;
+	
+	// 创建媒体播放器
+	if (!m_pullStreamPlayer) {
+		m_pullStreamPlayer = new QMediaPlayer(this);
+		QAudioOutput* audioOutput = new QAudioOutput(this);
+		m_pullStreamPlayer->setAudioOutput(audioOutput);
+		
+		// 连接信号
+		connect(m_pullStreamPlayer, &QMediaPlayer::mediaStatusChanged, this, [this](QMediaPlayer::MediaStatus status) {
+			if (status == QMediaPlayer::LoadedMedia) {
+				qDebug() << "拉流媒体已加载";
+			} else if (status == QMediaPlayer::BufferingMedia) {
+				qDebug() << "拉流正在缓冲";
+			} else if (status == QMediaPlayer::BufferedMedia) {
+				qDebug() << "拉流缓冲完成";
+			} else if (status == QMediaPlayer::EndOfMedia) {
+				qDebug() << "拉流播放结束";
+			}
+		});
+		
+		connect(m_pullStreamPlayer, &QMediaPlayer::errorOccurred, this, [this](QMediaPlayer::Error error, const QString& errorString) {
+			qWarning() << "拉流播放错误:" << error << errorString;
+			// 如果播放失败，尝试使用其他方法
+			if (error == QMediaPlayer::ResourceError || error == QMediaPlayer::FormatError) {
+				qWarning() << "QMediaPlayer不支持WHEP协议，可能需要使用WebRTC或其他方法";
+			}
+		});
+	}
+	
+	// 设置媒体源并播放
+	QUrl mediaUrl(m_whepUrl);
+	m_pullStreamPlayer->setSource(mediaUrl);
+	m_pullStreamPlayer->play();
+	
+	m_isPullingStream = true;
+	qDebug() << "拉流已开始";
+}
+
+// 停止拉流
+inline void ScheduleDialog::stopPullStream()
+{
+	if (!m_isPullingStream) {
+		return;
+	}
+	
+	qDebug() << "停止拉流";
+	
+	if (m_pullStreamPlayer) {
+		m_pullStreamPlayer->stop();
+	}
+	
+	m_isPullingStream = false;
+	qDebug() << "拉流已停止";
+}
+*/
 
 
 // 热力图相关方法的实现在 ScheduleDialog_Heatmap.cpp 中

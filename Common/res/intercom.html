@@ -355,6 +355,8 @@
 		const iceServers = [{ urls: ['stun:stun.l.google.com:19302'] }];
 		let publishPc = null; // 推送音频的 PeerConnection
 		let publishStream = null; // 推流方媒体流
+		let subscribePc = null; // 拉流的 PeerConnection
+		let subscribeStream = null; // 拉流方媒体流
 		let roomInfo = null; // 房间信息
 		
 		function appendStatusMessage(message, type = 'info') {
@@ -459,6 +461,12 @@
 				}
 				
 				// 如果房间ID已从C++传入，更新房间信息；否则等待服务器返回room_created消息
+				console.log('🔍 [WebSocket] 检查房间信息:');
+				console.log('   - roomId:', roomId);
+				console.log('   - whepUrl:', whepUrl);
+				console.log('   - whipUrl:', whipUrl);
+				console.log('   - streamName:', streamName);
+				
 				if (roomId) {
 					console.log('✅ [WebSocket] 房间ID已从C++传入');
 					console.log('   - 房间ID:', roomId);
@@ -475,6 +483,15 @@
 					};
 					// 在页面上显示房间信息
 					appendStatusMessage(`✅ 房间已创建，ID: ${roomId}。`, 'success');
+					
+					// 房间创建成功后，开始拉流
+					if (whepUrl) {
+						console.log('🎧 [拉流] 房间已创建，开始拉流...');
+						startPullStream(whepUrl);
+					} else {
+						console.warn('⚠️ [拉流] 拉流地址为空，无法开始拉流');
+						appendStatusMessage('⚠️ 拉流地址为空，无法开始拉流', 'warning');
+					}
 				} else {
 					console.log('⚠️ [WebSocket] 房间ID未传入，等待服务器返回room_created消息');
 				}
@@ -553,6 +570,168 @@
 					console.log("✅ ICE候选收集完成");
 				}
 			};
+		}
+		
+		// 开始拉流（参考推流的方式，通过WebSocket发送offer）
+		async function startPullStream(whepUrl) {
+			if (!whepUrl) {
+				console.error('❌ [拉流] 拉流地址为空');
+				appendStatusMessage('❌ 拉流地址为空，无法开始拉流', 'error');
+				return;
+			}
+			
+			if (!roomInfo) {
+				console.error('❌ [拉流] 房间信息为空');
+				appendStatusMessage('❌ 房间信息为空，无法开始拉流', 'error');
+				return;
+			}
+			
+			if (!ws || ws.readyState !== WebSocket.OPEN) {
+				console.error('❌ [拉流] WebSocket未连接');
+				appendStatusMessage('❌ WebSocket未连接，无法开始拉流', 'error');
+				return;
+			}
+			
+			if (subscribePc) {
+				console.log('⚠️ [拉流] 已经在拉流中，先停止之前的拉流');
+				stopPullStream();
+			}
+			
+			console.log('========== 开始拉流 ==========');
+			console.log('🎧 [拉流] 开始拉流，拉流地址:', whepUrl);
+			appendStatusMessage('🎧 正在开始拉流...', 'info');
+			
+			try {
+				// 创建拉流的 PeerConnection
+				subscribePc = new RTCPeerConnection({ iceServers });
+				subscribeStream = null;
+				
+				// 设置ICE candidate处理
+				setupIceCandidate(subscribePc);
+				console.log('✅ [拉流] ICE candidate 处理已设置');
+				
+				// 监听连接状态变化
+				subscribePc.onconnectionstatechange = () => {
+					console.log('📡 [拉流] 连接状态:', subscribePc.connectionState);
+					if (subscribePc.connectionState === 'connected') {
+						console.log('✅ [拉流] 拉流连接成功');
+						appendStatusMessage('✅ 拉流连接成功', 'success');
+					} else if (subscribePc.connectionState === 'failed' || subscribePc.connectionState === 'disconnected') {
+						console.error('❌ [拉流] 拉流连接失败或断开');
+						appendStatusMessage(`❌ 拉流连接${subscribePc.connectionState}`, 'error');
+					}
+				};
+				
+				// 监听接收到的媒体流
+				subscribePc.ontrack = (event) => {
+					console.log('🎧 [拉流] 收到音频流');
+					subscribeStream = event.streams[0];
+					
+					// 创建音频元素并播放
+					const audioElement = document.createElement('audio');
+					audioElement.srcObject = subscribeStream;
+					audioElement.autoplay = true;
+					audioElement.controls = false;
+					audioElement.style.display = 'none';
+					document.body.appendChild(audioElement);
+					
+					console.log('✅ [拉流] 音频流已开始播放');
+					appendStatusMessage('✅ 音频流已开始播放', 'success');
+				};
+				
+				// 创建 offer（参考推流的方式）
+				console.log('📤 [拉流] 正在创建 SDP offer...');
+				const offer = await subscribePc.createOffer({
+					offerToReceiveAudio: true,
+					offerToReceiveVideo: false
+				});
+				console.log('✅ [拉流] SDP offer 创建成功');
+				console.log('   - Offer类型:', offer.type);
+				console.log('   - SDP长度:', offer.sdp ? offer.sdp.length : 0);
+				
+				await subscribePc.setLocalDescription(offer);
+				console.log('✅ [拉流] 本地描述已设置');
+				console.log('   - LocalDescription类型:', subscribePc.localDescription.type);
+				console.log('   - ConnectionState:', subscribePc.connectionState);
+				
+				// 构建流名称（优先使用 stream_name，否则使用 room_id）
+				const streamName = roomInfo.stream_name || roomInfo.room_id;
+				console.log('📤 [拉流] 准备发送拉流请求到服务器...');
+				console.log('   - 流名称:', streamName);
+				console.log('   - 房间ID:', roomInfo.room_id);
+				console.log('   - 群组ID:', roomInfo.group_id);
+				
+				// 通过 WebSocket 发送 offer 到服务器，服务器转发给 SRS（参考推流的方式）
+				const message = {
+					type: "srs_play_offer",
+					sdp: subscribePc.localDescription.sdp,
+					stream_name: streamName,
+					room_id: roomInfo.room_id,
+					group_id: roomInfo.group_id
+				};
+				
+				ws.send(JSON.stringify(message));
+				console.log('✅ [拉流] 拉流 offer 已发送到服务器');
+				console.log('   - 消息类型:', message.type);
+				console.log('   - 流名称:', message.stream_name);
+				console.log('   - 房间ID:', message.room_id);
+				console.log('   - 群组ID:', message.group_id);
+				console.log('   - SDP长度:', message.sdp ? message.sdp.length : 0);
+				
+				// 在页面上显示发送信息
+				appendStatusMessage(`📤 正在发送拉流请求... Stream: ${streamName}`, 'info');
+				console.log('========== 拉流请求已发送，等待服务器响应 ==========');
+				
+			} catch (error) {
+				console.error('========== 拉流失败 ==========');
+				console.error('❌ [拉流失败] 错误详情:');
+				console.error('   - 错误类型:', error.name);
+				console.error('   - 错误消息:', error.message);
+				console.error('   - 错误堆栈:', error.stack);
+				console.error('   - 完整错误:', error);
+				
+				appendStatusMessage(`❌ 拉流失败: ${error.message}`, 'error');
+				console.log('========== 拉流失败处理完成 ==========');
+				
+				// 清理资源
+				if (subscribePc) {
+					subscribePc.close();
+					subscribePc = null;
+				}
+			}
+		}
+		
+		// 停止拉流
+		function stopPullStream() {
+			if (!subscribePc) {
+				return;
+			}
+			
+			console.log('🛑 [拉流] 停止拉流');
+			appendStatusMessage('🛑 正在停止拉流...', 'info');
+			
+			// 停止媒体流
+			if (subscribeStream) {
+				subscribeStream.getTracks().forEach(track => track.stop());
+				subscribeStream = null;
+			}
+			
+			// 关闭 PeerConnection
+			subscribePc.close();
+			subscribePc = null;
+			
+			// 移除音频元素
+			const audioElements = document.querySelectorAll('audio[srcObject]');
+			audioElements.forEach(audio => {
+				if (audio.srcObject === subscribeStream) {
+					audio.pause();
+					audio.srcObject = null;
+					audio.remove();
+				}
+			});
+			
+			console.log('✅ [拉流] 拉流已停止');
+			appendStatusMessage('✅ 拉流已停止', 'info');
 		}
 		
 		// 预先获取麦克风权限（在页面加载时调用，避免按住按钮时弹出权限对话框）
@@ -848,18 +1027,26 @@
 							// 在页面上显示成功信息
 							appendStatusMessage(`✅ 房间创建成功，ID: ${message.room_id}`, 'success');
 							
+							// 房间创建成功后，开始拉流
+							if (message.whep_url) {
+								console.log('🎧 [拉流] 房间创建成功，开始拉流...');
+								startPullStream(message.whep_url);
+							}
+							
 							// 房间创建成功后，不再自动开始推流，等待用户按下按钮
 							console.log('🎤 房间创建成功，等待用户按下"按住开始对讲"按钮...');
 						}
 						break;
 					case "srs_answer":
-						// 收到服务器转发的 SRS answer（推流）
-						console.log('========== 收到推流 Answer ==========');
-						console.log('📥 [推流Answer] 收到服务器返回的 SRS answer');
+						// 收到服务器转发的 SRS answer（可能是推流或拉流）
+						console.log('========== 收到 SRS Answer ==========');
+						console.log('📥 [SRS Answer] 收到服务器返回的 SRS answer');
 						console.log('   - action:', message.action);
 						console.log('   - 是否有SDP:', !!message.sdp);
 						console.log('   - publishPc状态:', publishPc ? publishPc.connectionState : 'null');
+						console.log('   - subscribePc状态:', subscribePc ? subscribePc.connectionState : 'null');
 						
+						// 处理推流 answer
 						if (message.action === 'publish' && message.sdp && publishPc) {
 							console.log('📥 [推流Answer] 正在设置远程描述...');
 							publishPc.setRemoteDescription({
@@ -888,11 +1075,42 @@
 								appendStatusMessage(`❌ 设置 answer 失败: ${error.message}`, 'error');
 								console.log('========== 推流失败处理完成 ==========');
 							});
+						}
+						// 处理拉流 answer
+						else if (message.action === 'play' && message.sdp && subscribePc) {
+							console.log('📥 [拉流Answer] 正在设置远程描述...');
+							subscribePc.setRemoteDescription({
+								type: 'answer',
+								sdp: message.sdp
+							}).then(() => {
+								console.log('========== 拉流成功 ==========');
+								console.log('✅ [拉流成功] 拉流连接建立成功！');
+								console.log('   - ConnectionState:', subscribePc.connectionState);
+								console.log('   - IceConnectionState:', subscribePc.iceConnectionState);
+								console.log('   - 远程描述类型:', subscribePc.remoteDescription ? subscribePc.remoteDescription.type : 'null');
+								console.log('   - 本地描述类型:', subscribePc.localDescription ? subscribePc.localDescription.type : 'null');
+								
+								// 在页面上显示成功信息
+								appendStatusMessage('✅ 拉流连接建立成功！', 'success');
+								console.log('========== 拉流成功处理完成 ==========');
+							}).catch(error => {
+								console.error('========== 拉流失败：设置Answer失败 ==========');
+								console.error('❌ [拉流失败] 设置 answer 失败:');
+								console.error('   - 错误类型:', error.name);
+								console.error('   - 错误消息:', error.message);
+								console.error('   - 错误堆栈:', error.stack);
+								console.error('   - 完整错误:', error);
+								
+								// 在页面上显示错误信息
+								appendStatusMessage(`❌ 设置拉流 answer 失败: ${error.message}`, 'error');
+								console.log('========== 拉流失败处理完成 ==========');
+							});
 						} else {
-							console.warn('⚠️ [推流Answer] 消息格式不正确或 publishPc 不存在');
+							console.warn('⚠️ [SRS Answer] 消息格式不正确或对应的 PeerConnection 不存在');
 							console.warn('   - action:', message.action);
 							console.warn('   - 是否有SDP:', !!message.sdp);
 							console.warn('   - publishPc:', publishPc);
+							console.warn('   - subscribePc:', subscribePc);
 						}
 						break;
 					case "srs_error":
@@ -928,15 +1146,26 @@
 						console.log('类型值:', message.type);
 						console.log('完整消息:', message);
 						
-						// 显示所有收到的消息
-						appendStatusMessage(`📨 收到消息: ${JSON.stringify(message)}`, 'info');
+						// 过滤掉不需要显示的消息类型
+						const ignoredMessageTypes = [
+							'unread_notifications',  // 未读通知
+							'prepare_class_history', // 课前准备历史
+							// 可以在这里添加其他不需要显示的消息类型
+						];
+						
+						if (!ignoredMessageTypes.includes(message.type)) {
+							// 只显示不在过滤列表中的消息
+							appendStatusMessage(`📨 收到消息: ${JSON.stringify(message)}`, 'info');
+						} else {
+							console.log(`🔇 [消息过滤] 已过滤消息类型: ${message.type}`);
+						}
 				}
 			} else {
 				console.log('⚠️ 消息没有type字段:');
 				console.log('完整消息:', message);
 				
-				// 显示没有type的消息
-				appendStatusMessage(`⚠️ 收到无类型消息: ${JSON.stringify(message)}`, 'warn');
+				// 不显示没有type的消息（通常这些消息也不重要）
+				// appendStatusMessage(`⚠️ 收到无类型消息: ${JSON.stringify(message)}`, 'warn');
 			}
 			
 			console.log('========================================');
@@ -1113,6 +1342,12 @@
 			console.log('应用数据:', appData);
 			console.log('当前用户:', currentUser);
 			
+			// 检查是否有房间信息，如果有则尝试开始拉流（延迟执行，确保WebSocket连接后再拉流）
+			if (appData.temp_room && appData.temp_room.whep_url) {
+				console.log('🔍 [页面加载] 检测到拉流地址，将在WebSocket连接后开始拉流');
+				console.log('   - 拉流地址:', appData.temp_room.whep_url);
+			}
+			
 			// 渲染参与者列表
 			renderParticipants();
 			
@@ -1136,6 +1371,9 @@
 				publishStream.getTracks().forEach(t => t.stop());
 				publishStream = null;
 			}
+			
+			// 停止拉流
+			stopPullStream();
 			
 			// 关闭WebSocket连接
 			if (ws) {
