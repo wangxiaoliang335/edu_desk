@@ -22,6 +22,13 @@
 #include "MidtermGradeDialog.h"
 #include "StudentPhysiqueDialog.h"
 #include "xlsxdocument.h"
+#include <QRegularExpression>
+#include <QMap>
+#include <QDebug>
+
+// 前向声明
+class ScheduleDialog;
+struct SeatInfo;
 
 class CustomListDialog : public QDialog
 {
@@ -264,6 +271,9 @@ private slots:
 
         // 根据表格类型导入数据
         if (isMidtermGrade) {
+            // 比对并更新姓名（以座位表为准）
+            updateNamesFromSeatInfo(headers, dataRows);
+            
             if (!m_midtermGradeDlg) {
                 m_midtermGradeDlg = new MidtermGradeDialog(m_classid, this);
             }
@@ -497,6 +507,13 @@ private:
         file.close();
         return true;
     }
+    
+    // 比对并更新姓名（以座位表为准）
+    void updateNamesFromSeatInfo(const QStringList& headers, QList<QStringList>& dataRows);
+    
+    // 从字符串中提取纯姓名（去掉数字部分）
+    // 例如："姜凯文13-5/14" -> "姜凯文"
+    QString extractPureName(const QString& nameStr);
 
 private:
     QPushButton* addRow(QVBoxLayout *parentLayout, const QString &text)

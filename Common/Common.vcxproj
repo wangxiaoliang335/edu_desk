@@ -167,6 +167,7 @@
     <QtMoc Include="HeatmapSegmentDialog.h" />
     <QtMoc Include="HeatmapViewDialog.h" />
     <QtMoc Include="RandomCallDialog.h" />
+    <QtMoc Include="RandomCallMessageDialog.h" />
     <QtMoc Include="StudentAttributeDialog.h" />
     <QtMoc Include="HomeworkEditDialog.h" />
     <QtMoc Include="HomeworkViewDialog.h" />
@@ -205,6 +206,8 @@
     <ClCompile Include="FriendGroupDialog.cpp" />
     <ClCompile Include="NormalGroupDialog.cpp" />
     <ClCompile Include="GenerateTestUserSig.cpp" />
+    <ClCompile Include="CustomListDialog.cpp" />
+    <ClCompile Include="RandomCallMessageDialog.cpp" />
     <ClCompile Include="MidtermGradeDialog.cpp" />
     <ClCompile Include="HeatmapSegmentDialog.cpp" />
     <ClCompile Include="HeatmapViewDialog.cpp" />

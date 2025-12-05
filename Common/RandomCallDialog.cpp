@@ -1,5 +1,6 @@
 #include "RandomCallDialog.h"
 #include "StudentAttributeDialog.h"
+#include "RandomCallMessageDialog.h"
 #include <QInputDialog>
 #include <QTimer>
 #include <QGraphicsEffect>
@@ -19,7 +20,7 @@ RandomCallDialog::RandomCallDialog(QWidget* parent)
 {
     // 设置无边框窗口
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
-    setStyleSheet("background-color: #e0f0ff;");
+    setStyleSheet("background-color: rgb(85, 85, 85);");
     resize(500, 350); // 还原为原始大小
 
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
@@ -350,8 +351,13 @@ void RandomCallDialog::onAnimationFinished()
             // 高亮选中的学生
             highlightStudent(selectedStudentId, true);
             
-            QMessageBox::information(this, "随机点名", 
-                QString("选中学生: %1 (学号: %2)").arg(m_participants[randomIndex].name).arg(selectedStudentId));
+            // 使用自定义消息对话框
+            RandomCallMessageDialog* msgDlg = new RandomCallMessageDialog(this);
+            msgDlg->setTitle("随机点名");
+            msgDlg->setMessage(QString("选中学生: %1 (学号: %2)").arg(m_participants[randomIndex].name).arg(selectedStudentId));
+            msgDlg->setTitleBarColor(QColor(85, 85, 85));  // RGB(85, 85, 85)
+            msgDlg->setBackgroundColor(QColor(85, 85, 85));  // RGB(85, 85, 85)
+            msgDlg->exec();
         }
         return;
     }

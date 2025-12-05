@@ -109,6 +109,19 @@ struct TempRoomInfo {
 	QString owner_icon;
 };
 
+// 座位信息结构
+struct SeatInfo {
+	int row;                    // 行索引（0-based）
+	int col;                    // 列索引（0-based）
+	QString studentName;        // 学生姓名
+	QString studentId;          // 学号
+	QString seatLabel;          // 座位标签（显示文本）
+	
+	SeatInfo() : row(-1), col(-1) {}
+	SeatInfo(int r, int c, const QString& name, const QString& id, const QString& label)
+		: row(r), col(c), studentName(name), studentId(id), seatLabel(label) {}
+};
+
 // 全局临时房间信息存储（群组ID -> 临时房间信息）
 // 用于在创建班级群时保存临时房间信息，即使 ScheduleDialog 还没有打开也能保存
 class TempRoomStorage {
@@ -1430,6 +1443,9 @@ public:
 	void fetchSeatArrangementFromServer(); // 从服务器获取座位表
 	void fetchCourseScheduleForDailyView();
 	
+	// 获取座位信息列表（用于比对和更新姓名）
+	QList<SeatInfo> getSeatInfoList() const { return m_seatInfoList; }
+	
 	// 热力图相关方法
 	void showSegmentDialog(); // 显示分段区间设置对话框
 	void showGradientHeatmap(); // 显示渐变热力图
@@ -1800,6 +1816,7 @@ private:
 	QTableWidget* seatTable = nullptr; // 座位表格
 	ArrangeSeatDialog* arrangeSeatDlg = nullptr; // 排座对话框
 	QList<StudentInfo> m_students; // 学生数据
+	QList<SeatInfo> m_seatInfoList; // 座位表信息列表
 	
 	// 热力图相关
 	class HeatmapSegmentDialog* heatmapSegmentDlg = nullptr; // 分段区间对话框
@@ -2744,6 +2761,9 @@ inline void ScheduleDialog::fetchSeatArrangementFromServer()
 			
 			clearSeats();
 			
+			// 清空座位信息列表
+			m_seatInfoList.clear();
+			
 			int filled = 0;
 			for (const QJsonValue& seatValue : seatsArray) {
 				if (!seatValue.isObject()) continue;
@@ -2769,7 +2789,12 @@ inline void ScheduleDialog::fetchSeatArrangementFromServer()
 					}
 				}
 				
-				btn->setProperty("studentName", name.isEmpty() ? seatLabel : name);
+				// 保存到结构体
+				QString finalName = name.isEmpty() ? seatLabel : name;
+				SeatInfo seatInfo(rowIdx, colIdx, finalName, studentId, seatLabel);
+				m_seatInfoList.append(seatInfo);
+				
+				btn->setProperty("studentName", finalName);
 				btn->setProperty("studentId", studentId);
 				// 使用辅助函数设置文本和图标
 				setSeatButtonTextAndIcon(btn, seatLabel);

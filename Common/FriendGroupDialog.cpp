@@ -93,8 +93,7 @@ void FriendGroupDialog::setupFriendTree()
     m_classRootItem->setExpanded(true);
     m_teacherRootItem->setExpanded(true);
 
-    connect(m_friendTree, &QTreeWidget::itemActivated, this, &FriendGroupDialog::handleFriendItemActivated);
-    connect(m_friendTree, &QTreeWidget::itemClicked, this, &FriendGroupDialog::handleFriendItemActivated);
+    connect(m_friendTree, &QTreeWidget::itemDoubleClicked, this, &FriendGroupDialog::handleFriendItemActivated);
 }
 
 void FriendGroupDialog::clearFriendTree()
@@ -250,8 +249,7 @@ void FriendGroupDialog::setupGroupTree()
 
     gLayout->addWidget(m_groupTree);
 
-    connect(m_groupTree, &QTreeWidget::itemActivated, this, &FriendGroupDialog::handleGroupItemActivated);
-    connect(m_groupTree, &QTreeWidget::itemClicked, this, &FriendGroupDialog::handleGroupItemActivated);
+    connect(m_groupTree, &QTreeWidget::itemDoubleClicked, this, &FriendGroupDialog::handleGroupItemActivated);
 }
 
 void FriendGroupDialog::clearGroupTree()
