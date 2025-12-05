@@ -125,12 +125,32 @@ void FriendGroupDialog::updateFriendCounts()
 
 void FriendGroupDialog::addClassNode(const QString& displayName, const QString& groupId, const QString& classid, bool iGroupOwner, bool isClassGroup)
 {
+    // 在"好友"标签页下，"班级"节点只显示班级（非班级群）
+    // 班级群应该只在"群聊"标签页下显示
+    if (isClassGroup) {
+        return; // 班级群不添加到好友树的"班级"节点
+    }
+    
     if (!m_classRootItem || groupId.isEmpty())
         return;
+    
+    // 更严格的验证：只有通过 fetchClassesByPrefix 获取的班级才应该显示
+    // 如果 classid 为空，说明这不是一个真正的班级，不应该添加到"班级"节点
+    // 另外，如果 groupId 和 classid 不相等，说明这是群组而不是班级
+    if (classid.isEmpty() || classid != groupId) {
+        return; // 不是真正的班级，不添加到好友树的"班级"节点
+    }
+    
     if (m_classItemMap.contains(groupId))
         return;
 
     QString title = displayName.trimmed().isEmpty() ? QStringLiteral("未命名班级") : displayName.trimmed();
+    
+    // 额外的验证：确保显示名称不是空的或无效的
+    if (title.isEmpty() || title.length() < 2) {
+        return; // 名称太短，可能是无效数据
+    }
+    
     QTreeWidgetItem* item = new QTreeWidgetItem(m_classRootItem);
     item->setText(0, title);
     item->setData(0, Qt::UserRole, QStringLiteral("class"));
@@ -1044,6 +1064,11 @@ void FriendGroupDialog::InitData()
         groupUrl += "teacher_unique_id=";
         groupUrl += userInfo.teacher_unique_id;
         m_httpHandler->get(groupUrl);
+        
+        // 获取班级列表并显示在"好友"标签页下的"班级"节点中
+        if (!userInfo.schoolId.isEmpty()) {
+            fetchClassesByPrefix(userInfo.schoolId);
+        }
     }
 }
 
@@ -1357,4 +1382,79 @@ void FriendGroupDialog::processPrepareClassHistoryMessage(const QJsonObject& roo
             dlg->setPrepareClassHistory(it.value());
         }
     }
+}
+
+void FriendGroupDialog::fetchClassesByPrefix(const QString& schoolId)
+{
+    if (schoolId.isEmpty()) return;
+
+    QString prefix = schoolId;
+    if (prefix.length() != 6 || !prefix.toInt()) {
+        qWarning() << "学校ID格式错误，应为6位数字:" << prefix;
+        return;
+    }
+
+    QJsonObject jsonObj;
+    jsonObj["prefix"] = prefix;
+    QJsonDocument doc(jsonObj);
+    QByteArray reqData = doc.toJson(QJsonDocument::Compact);
+
+    QNetworkAccessManager* manager = new QNetworkAccessManager(this);
+    QNetworkRequest request(QUrl("http://47.100.126.194:5000/getClassesByPrefix"));
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    QNetworkReply* reply = manager->post(request, reqData);
+    
+    connect(reply, &QNetworkReply::finished, this, [this, reply, manager]() {
+        if (reply->error() == QNetworkReply::NoError) {
+            QByteArray response_data = reply->readAll();
+            QJsonDocument respDoc = QJsonDocument::fromJson(response_data);
+            if (respDoc.isObject()) {
+                QJsonObject root = respDoc.object();
+                QJsonObject dataObj = root.value("data").toObject();
+                int code = dataObj.value("code").toInt();
+                QString message = dataObj.value("message").toString();
+                if (code != 200) {
+                    qWarning() << "获取班级列表失败:" << message;
+                    reply->deleteLater();
+                    manager->deleteLater();
+                    return;
+                }
+                QJsonArray classes = dataObj.value("classes").toArray();
+                
+                // 将班级列表添加到好友树的"班级"节点中
+                for (const QJsonValue& val : classes) {
+                    QJsonObject cls = val.toObject();
+                    QString stage = cls.value("school_stage").toString();
+                    QString grade = cls.value("grade").toString();
+                    QString className = cls.value("class_name").toString();
+                    QString classCode = cls.value("class_code").toString();
+                    
+                    // 验证班级代码不为空
+                    if (classCode.isEmpty()) {
+                        continue;
+                    }
+                    
+                    // 只显示已经加入的班级（在 m_setClassId 中的），跳过未加入的班级
+                    if (m_setClassId.find(classCode) == m_setClassId.end()) {
+                        continue; // 未加入的班级不显示
+                    }
+
+                    // 展示名称：学段+年级+班名 或 仅班名
+                    QString display = className.isEmpty() ? (grade.isEmpty() ? stage : (stage + grade)) : (stage + grade + className);
+                    
+                    // 验证显示名称不为空且长度合理
+                    if (display.trimmed().isEmpty() || display.trimmed().length() < 2) {
+                        continue;
+                    }
+                    
+                    // 添加到好友树的"班级"节点中（isClassGroup = false，因为这是班级，不是班级群）
+                    addClassNode(display, classCode, classCode, false, false);
+                }
+            }
+        } else {
+            qWarning() << "网络错误:" << reply->errorString();
+        }
+        reply->deleteLater();
+        manager->deleteLater();
+    });
 }

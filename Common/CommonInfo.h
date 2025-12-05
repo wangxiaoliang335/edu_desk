@@ -21,6 +21,7 @@ struct GroupMemberInfo {
     QString member_id;
     QString member_name;
     QString member_role;
+    bool is_voice_enabled;  // 是否开启语音
 };
 
 // StudentInfo 结构体在 ScheduleDialog.h 中定义，这里使用条件编译避免重复定义

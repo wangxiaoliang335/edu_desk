@@ -12,6 +12,13 @@
 #include <QIODevice>
 #include <QFileInfo>
 #include <QTimer>
+#include <QMouseEvent>
+#include <QResizeEvent>
+#include <QShowEvent>
+#include <QPoint>
+#include <QCursor>
+#include <QRect>
+#include <QDesktopWidget>
 #include "MidtermGradeDialog.h"
 #include "StudentPhysiqueDialog.h"
 #include "xlsxdocument.h"
@@ -22,18 +29,42 @@ class CustomListDialog : public QDialog
 public:
     CustomListDialog(QString classid, QWidget *parent = nullptr) : QDialog(parent)
     {
+        // 去掉标题栏，但保持窗口属性
+        // 使用 Dialog 标志确保窗口可以正常显示
+        setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
         setWindowTitle("列表管理");
         resize(300, 200);
-        setStyleSheet("background-color: #f5f5f5;");
+        setStyleSheet("background-color: #808080;");
+        
+        // 确保窗口可以显示
+        setAttribute(Qt::WA_DeleteOnClose, false);
+        
+        // 启用鼠标跟踪以检测鼠标进入/离开
+        setMouseTracking(true);
 
         m_classid = classid;
 
         m_midtermGradeDlg = new MidtermGradeDialog(classid, this);
         m_studentPhysiqueDlg = new StudentPhysiqueDialog(this);
 
+        // 创建关闭按钮
+        m_btnClose = new QPushButton("X", this);
+        m_btnClose->setFixedSize(30, 30);
+        m_btnClose->setStyleSheet(
+            "QPushButton { background-color: orange; color: white; font-weight:bold; font-size: 14px; border: 1px solid #555; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #cc6600; }"
+        );
+        m_btnClose->hide(); // 初始隐藏
+        connect(m_btnClose, &QPushButton::clicked, this, &QDialog::close);
+        
+        // 为关闭按钮安装事件过滤器，确保鼠标在按钮上时不会隐藏
+        m_btnClose->installEventFilter(this);
+
         QVBoxLayout *mainLayout = new QVBoxLayout(this);
         mainLayout->setSpacing(15);
         mainLayout->setAlignment(Qt::AlignTop | Qt::AlignHCenter);
+        // 增加顶部边距，为关闭按钮留出空间（关闭按钮高度30，位置y=5，所以顶部至少需要40）
+        mainLayout->setContentsMargins(10, 40, 10, 10);
 
         // 添加两行列表项
         QPushButton* btnMidterm = addRow(mainLayout, "期中成绩单");
@@ -75,6 +106,99 @@ public:
 
         // 连接"+"按钮点击事件，导入Excel表格
         connect(btnAdd, &QPushButton::clicked, this, &CustomListDialog::onImportExcel);
+    }
+    
+protected:
+    // 重写鼠标事件以实现窗口拖动
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        if (event->button() == Qt::LeftButton) {
+            m_dragPosition = event->globalPos() - frameGeometry().topLeft();
+            event->accept();
+        }
+    }
+    
+    void mouseMoveEvent(QMouseEvent *event) override
+    {
+        if (event->buttons() & Qt::LeftButton && !m_dragPosition.isNull()) {
+            move(event->globalPos() - m_dragPosition);
+            event->accept();
+        }
+    }
+    
+    // 鼠标进入窗口时显示关闭按钮
+    void enterEvent(QEvent *event) override
+    {
+        if (m_btnClose) {
+            m_btnClose->show();
+        }
+        QDialog::enterEvent(event);
+    }
+    
+    // 鼠标离开窗口时隐藏关闭按钮
+    void leaveEvent(QEvent *event) override
+    {
+        // 检查鼠标是否真的离开了窗口（包括关闭按钮）
+        QPoint globalPos = QCursor::pos();
+        QRect widgetRect = QRect(mapToGlobal(QPoint(0, 0)), size());
+        if (!widgetRect.contains(globalPos) && m_btnClose) {
+            // 如果鼠标不在窗口内，检查是否在关闭按钮上
+            QRect btnRect = QRect(m_btnClose->mapToGlobal(QPoint(0, 0)), m_btnClose->size());
+            if (!btnRect.contains(globalPos)) {
+                m_btnClose->hide();
+            }
+        }
+        QDialog::leaveEvent(event);
+    }
+    
+    // 事件过滤器，处理关闭按钮的鼠标事件
+    bool eventFilter(QObject *obj, QEvent *event) override
+    {
+        if (obj == m_btnClose) {
+            if (event->type() == QEvent::Enter) {
+                // 鼠标进入关闭按钮时确保显示
+                m_btnClose->show();
+            } else if (event->type() == QEvent::Leave) {
+                // 鼠标离开关闭按钮时，检查是否还在窗口内
+                QPoint globalPos = QCursor::pos();
+                QRect widgetRect = QRect(mapToGlobal(QPoint(0, 0)), size());
+                if (!widgetRect.contains(globalPos)) {
+                    m_btnClose->hide();
+                }
+            }
+        }
+        return QDialog::eventFilter(obj, event);
+    }
+    
+    // 窗口大小改变时更新关闭按钮位置
+    void resizeEvent(QResizeEvent *event) override
+    {
+        if (m_btnClose) {
+            m_btnClose->move(width() - 35, 5);
+        }
+        QDialog::resizeEvent(event);
+    }
+    
+    // 窗口显示时更新关闭按钮位置
+    void showEvent(QShowEvent *event) override
+    {
+        if (m_btnClose) {
+            m_btnClose->move(width() - 35, 5);
+        }
+        
+        // 确保窗口位置在屏幕可见区域内
+        QRect screenGeometry = QApplication::desktop()->availableGeometry();
+        QRect windowGeometry = geometry();
+        
+        // 如果窗口完全在屏幕外，移动到屏幕中央
+        if (!screenGeometry.intersects(windowGeometry)) {
+            move(screenGeometry.center() - QPoint(windowGeometry.width() / 2, windowGeometry.height() / 2));
+        }
+        
+        // 确保窗口显示在最前面
+        raise();
+        activateWindow();
+        QDialog::showEvent(event);
     }
 
 private slots:
@@ -405,4 +529,6 @@ private:
     MidtermGradeDialog* m_midtermGradeDlg = nullptr;
     StudentPhysiqueDialog* m_studentPhysiqueDlg = nullptr;
     QString m_classid;
+    QPushButton* m_btnClose = nullptr; // 关闭按钮
+    QPoint m_dragPosition; // 用于窗口拖动
 };

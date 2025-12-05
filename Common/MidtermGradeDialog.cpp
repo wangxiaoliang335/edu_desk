@@ -26,15 +26,34 @@
 
 MidtermGradeDialog::MidtermGradeDialog(QString classid, QWidget* parent) : QDialog(parent)
 {
+    // 去掉标题栏
+    setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
     setWindowTitle("期中成绩表");
     resize(1200, 800);
-    setStyleSheet("background-color: #f5f5dc; font-size:14px;");
+    setStyleSheet("background-color: #808080; font-size:14px;");
+    
+    // 启用鼠标跟踪以检测鼠标进入/离开
+    setMouseTracking(true);
 
     m_classid = classid;
 
+    // 创建关闭按钮
+    m_btnClose = new QPushButton("X", this);
+    m_btnClose->setFixedSize(30, 30);
+    m_btnClose->setStyleSheet(
+        "QPushButton { background-color: orange; color: white; font-weight:bold; font-size: 14px; border: 1px solid #555; border-radius: 4px; }"
+        "QPushButton:hover { background-color: #cc6600; }"
+    );
+    m_btnClose->hide(); // 初始隐藏
+    connect(m_btnClose, &QPushButton::clicked, this, &QDialog::close);
+    
+    // 为关闭按钮安装事件过滤器，确保鼠标在按钮上时不会隐藏
+    m_btnClose->installEventFilter(this);
+
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     mainLayout->setSpacing(10);
-    mainLayout->setContentsMargins(15, 15, 15, 15);
+    // 增加顶部边距，为关闭按钮留出空间（关闭按钮高度30，位置y=5，所以顶部至少需要40）
+    mainLayout->setContentsMargins(15, 40, 15, 15);
 
     // 标题
     QLabel* lblTitle = new QLabel("期中成绩表");
@@ -99,34 +118,7 @@ MidtermGradeDialog::MidtermGradeDialog(QString classid, QWidget* parent) : QDial
     mainLayout->addWidget(textDescription);
 
     // 表格
-    table = new QTableWidget(6, 8); // 初始6行，8列（学号、姓名、语文、数学、英语、总分 + 2个空白列）
-    QStringList headers = { "学号", "姓名", "语文", "数学", "英语", "总分", "", "" };
-    table->setHorizontalHeaderLabels(headers);
-
-    // 表格样式
-    table->setStyleSheet(
-        "QTableWidget { background-color: white; gridline-color: #ddd; }"
-        "QTableWidget::item { padding: 5px; }"
-        "QHeaderView::section { background-color: #4169e1; color: white; font-weight: bold; padding: 8px; }"
-    );
-    table->setAlternatingRowColors(true);
-    table->setStyleSheet(table->styleSheet() + 
-        "QTableWidget { alternate-background-color: #e6f3ff; }"
-    );
-
-    table->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::SelectedClicked);
-    table->setSelectionBehavior(QAbstractItemView::SelectItems);
-    table->setSelectionMode(QAbstractItemView::SingleSelection);
-    table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-
-    // 初始化表格数据
-    for (int row = 0; row < table->rowCount(); ++row) {
-        for (int col = 0; col < table->columnCount(); ++col) {
-            QTableWidgetItem* item = new QTableWidgetItem("");
-            item->setTextAlignment(Qt::AlignCenter);
-            table->setItem(row, col, item);
-        }
-    }
+    table = new MidtermGradeTableWidget(this); // 使用自定义表格控件
 
     // 添加示例数据
     if (table->item(0, 2)) table->item(0, 2)->setText("100");
@@ -910,5 +902,99 @@ void MidtermGradeDialog::showCellComment(int row, int column)
             item->setBackground(QBrush()); // 恢复默认
         }
     }
+}
+
+// 重写鼠标事件以实现窗口拖动
+void MidtermGradeDialog::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton) {
+        m_dragPosition = event->globalPos() - frameGeometry().topLeft();
+        event->accept();
+    }
+}
+
+void MidtermGradeDialog::mouseMoveEvent(QMouseEvent *event)
+{
+    if (event->buttons() & Qt::LeftButton && !m_dragPosition.isNull()) {
+        move(event->globalPos() - m_dragPosition);
+        event->accept();
+    }
+}
+
+// 鼠标进入窗口时显示关闭按钮
+void MidtermGradeDialog::enterEvent(QEvent *event)
+{
+    if (m_btnClose) {
+        m_btnClose->show();
+    }
+    QDialog::enterEvent(event);
+}
+
+// 鼠标离开窗口时隐藏关闭按钮
+void MidtermGradeDialog::leaveEvent(QEvent *event)
+{
+    // 检查鼠标是否真的离开了窗口（包括关闭按钮）
+    QPoint globalPos = QCursor::pos();
+    QRect widgetRect = QRect(mapToGlobal(QPoint(0, 0)), size());
+    if (!widgetRect.contains(globalPos) && m_btnClose) {
+        // 如果鼠标不在窗口内，检查是否在关闭按钮上
+        QRect btnRect = QRect(m_btnClose->mapToGlobal(QPoint(0, 0)), m_btnClose->size());
+        if (!btnRect.contains(globalPos)) {
+            m_btnClose->hide();
+        }
+    }
+    QDialog::leaveEvent(event);
+}
+
+// 事件过滤器，处理关闭按钮的鼠标事件
+bool MidtermGradeDialog::eventFilter(QObject *obj, QEvent *event)
+{
+    if (obj == m_btnClose) {
+        if (event->type() == QEvent::Enter) {
+            // 鼠标进入关闭按钮时确保显示
+            m_btnClose->show();
+        } else if (event->type() == QEvent::Leave) {
+            // 鼠标离开关闭按钮时，检查是否还在窗口内
+            QPoint globalPos = QCursor::pos();
+            QRect widgetRect = QRect(mapToGlobal(QPoint(0, 0)), size());
+            if (!widgetRect.contains(globalPos)) {
+                m_btnClose->hide();
+            }
+        }
+    }
+    return QDialog::eventFilter(obj, event);
+}
+
+// 窗口大小改变时更新关闭按钮位置
+void MidtermGradeDialog::resizeEvent(QResizeEvent *event)
+{
+    if (m_btnClose) {
+        m_btnClose->move(width() - 35, 5);
+    }
+    QDialog::resizeEvent(event);
+}
+
+// 窗口显示时更新关闭按钮位置
+void MidtermGradeDialog::showEvent(QShowEvent *event)
+{
+    if (m_btnClose) {
+        m_btnClose->move(width() - 35, 5);
+        // 窗口显示时也显示关闭按钮
+        m_btnClose->show();
+    }
+    
+    // 确保窗口位置在屏幕可见区域内
+    QRect screenGeometry = QApplication::desktop()->availableGeometry();
+    QRect windowGeometry = geometry();
+    
+    // 如果窗口完全在屏幕外，移动到屏幕中央
+    if (!screenGeometry.intersects(windowGeometry)) {
+        move(screenGeometry.center() - QPoint(windowGeometry.width() / 2, windowGeometry.height() / 2));
+    }
+    
+    // 确保窗口显示在最前面
+    raise();
+    activateWindow();
+    QDialog::showEvent(event);
 }
 

@@ -36,11 +36,13 @@ public:
         leftLayout->setContentsMargins(5, 5, 5, 5);
 
         leftComboBox = new QComboBox;
+        leftComboBox->setEditable(false); // 设置为不可编辑，确保显示选中的项
         leftComboBox->setStyleSheet(
-            "QComboBox { background-color: white; border: 1px solid #ccc; padding: 8px; min-width: 120px; }"
+            "QComboBox { background-color: white; border: 1px solid #ccc; padding: 8px; min-width: 120px; color: black; }"
             "QComboBox::drop-down { border: none; }"
-            "QComboBox::item { padding: 8px; }"
-            "QComboBox::item:selected { background-color: #ff8c00; color: white; }"
+            "QComboBox QAbstractItemView { background-color: white; selection-background-color: #ff8c00; color: black; }"
+            "QComboBox QAbstractItemView::item { padding: 8px; color: black; }"
+            "QComboBox QAbstractItemView::item:selected { background-color: #ff8c00; color: white; }"
         );
 
         // 添加左侧选项
@@ -49,6 +51,7 @@ public:
 
         // 默认选择"不分组"（索引1）
         leftComboBox->setCurrentIndex(1);
+        leftComboBox->update(); // 强制更新显示
 
         leftLayout->addWidget(leftComboBox);
         listLayout->addWidget(leftFrame);
@@ -61,15 +64,18 @@ public:
         rightLayout->setContentsMargins(5, 5, 5, 5);
 
         rightComboBox = new QComboBox;
+        rightComboBox->setEditable(false); // 设置为不可编辑，确保显示选中的项
         rightComboBox->setStyleSheet(
-            "QComboBox { background-color: white; border: 1px solid #ccc; padding: 8px; min-width: 120px; }"
+            "QComboBox { background-color: white; border: 1px solid #ccc; padding: 8px; min-width: 120px; color: black; }"
             "QComboBox::drop-down { border: none; }"
-            "QComboBox::item { padding: 8px; }"
-            "QComboBox::item:selected { background-color: #ff8c00; color: white; }"
+            "QComboBox QAbstractItemView { background-color: white; selection-background-color: #ff8c00; color: black; }"
+            "QComboBox QAbstractItemView::item { padding: 8px; color: black; }"
+            "QComboBox QAbstractItemView::item:selected { background-color: #ff8c00; color: white; }"
         );
 
         // 初始化右侧下拉框（默认显示"不分组"的选项）
         updateRightList(false);
+        rightComboBox->update(); // 强制更新显示
 
         rightLayout->addWidget(rightComboBox);
         listLayout->addWidget(rightFrame);

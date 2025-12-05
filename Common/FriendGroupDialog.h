@@ -28,6 +28,9 @@
 #include "ImSDK/includes/TIMCloud.h"
 #include "CommonInfo.h"
 #include <QMap>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
 
 class ScheduleDialog;
 
@@ -141,4 +144,5 @@ private:
     void handleGroupItemActivated(QTreeWidgetItem* item);
     void openScheduleForGroup(const QString& groupName, const QString& unique_group_id, const QString& classid, bool iGroupOwner, bool isClassGroup);
     void processPrepareClassHistoryMessage(const QJsonObject& rootObj);
+    void fetchClassesByPrefix(const QString& schoolId);
 };
