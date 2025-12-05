@@ -27,6 +27,11 @@ class MemberKickDialog; // 前向声明
 #include <QResizeEvent>
 #include <QEvent>
 #include <QIcon>
+#include <QPainter>
+#include <QPaintEvent>
+#include <QPixmap>
+#include <QFont>
+#include <QFontMetrics>
 #include "CommonInfo.h"
 #include "CourseDialog.h"
 #include "ImSDK/includes/TIMCloud.h"
@@ -38,6 +43,41 @@ class MemberKickDialog; // 前向声明
 class ClassTeacherDialog;
 class ClassTeacherDelDialog;
 class FriendSelectDialog;
+
+// 开启对讲控件（自绘）
+class IntercomControlWidget : public QWidget {
+    Q_OBJECT
+public:
+    explicit IntercomControlWidget(QWidget* parent = nullptr);
+    ~IntercomControlWidget();
+    
+    // 设置开关状态
+    void setIntercomEnabled(bool enabled);
+    bool isIntercomEnabled() const { return m_enabled; }
+    
+signals:
+    void intercomToggled(bool enabled); // 开关状态改变信号
+    void buttonClicked(); // 按钮点击信号
+    
+protected:
+    void paintEvent(QPaintEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
+    
+private:
+    bool m_enabled; // 开关状态
+    bool m_buttonPressed; // 按钮是否被按下
+    
+    // 绘制辅助函数
+    void drawBackground(QPainter& painter);
+    void drawButton(QPainter& painter);
+    void drawToggleSwitch(QPainter& painter);
+    
+    // 计算区域
+    QRect getButtonRect() const;
+    QRect getSwitchRect() const;
+};
+
 class FriendButton : public QPushButton {
     Q_OBJECT
 public:
@@ -163,9 +203,13 @@ protected:
     QPushButton* m_btnDismiss = nullptr; // 解散群聊按钮
     QPushButton* m_btnExit = nullptr; // 退出群聊按钮
     QPushButton* m_closeButton = nullptr; // 关闭按钮
+    IntercomControlWidget* m_intercomWidget = nullptr; // 对讲控件
     bool m_dragging = false; // 是否正在拖动
     QPoint m_dragStartPos; // 拖动起始位置
     bool m_initialized = false; // 是否已经初始化
+    
+    // 根据当前用户的 is_voice_enabled 更新对讲开关状态
+    void updateIntercomState();
 };
 
 

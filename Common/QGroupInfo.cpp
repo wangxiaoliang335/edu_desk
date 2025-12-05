@@ -4,6 +4,137 @@
 #include "FriendSelectDialog.h"
 #include "MemberKickDialog.h"
 
+// ==================== IntercomControlWidget 实现 ====================
+
+IntercomControlWidget::IntercomControlWidget(QWidget* parent)
+    : QWidget(parent)
+    , m_enabled(false)
+    , m_buttonPressed(false)
+{
+    setFixedHeight(50); // 设置固定高度
+    setMinimumWidth(200);
+}
+
+IntercomControlWidget::~IntercomControlWidget()
+{
+}
+
+void IntercomControlWidget::setIntercomEnabled(bool enabled)
+{
+    if (m_enabled != enabled) {
+        m_enabled = enabled;
+        update(); // 触发重绘
+        emit intercomToggled(enabled);
+    }
+}
+
+void IntercomControlWidget::paintEvent(QPaintEvent* event)
+{
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing); // 抗锯齿
+    
+    // 绘制背景
+    drawBackground(painter);
+    
+    // 绘制"开启对讲"按钮
+    drawButton(painter);
+    
+    // 绘制开关
+    drawToggleSwitch(painter);
+}
+
+void IntercomControlWidget::drawBackground(QPainter& painter)
+{
+    // 绘制背景色 #555555
+    painter.fillRect(rect(), QColor(0x55, 0x55, 0x55));
+}
+
+void IntercomControlWidget::drawButton(QPainter& painter)
+{
+    QRect btnRect = getButtonRect();
+    
+    // 绘制按钮背景（蓝色）
+    QColor btnColor = m_buttonPressed ? QColor(0, 100, 200) : QColor(0, 120, 255); // 按下时颜色稍深
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QBrush(btnColor));
+    painter.drawRoundedRect(btnRect, 5, 5); // 圆角矩形
+    
+    // 绘制按钮文字
+    painter.setPen(QColor(255, 255, 255)); // 白色文字
+    QFont btnFont = painter.font();
+    btnFont.setPointSize(12);
+    btnFont.setBold(true);
+    painter.setFont(btnFont);
+    painter.drawText(btnRect, Qt::AlignCenter, "开启对讲");
+}
+
+void IntercomControlWidget::drawToggleSwitch(QPainter& painter)
+{
+    QRect switchRect = getSwitchRect();
+    
+    // 开关背景（灰色或绿色）
+    QColor bgColor = m_enabled ? QColor(76, 175, 80) : QColor(200, 200, 200); // 开启时绿色，关闭时灰色
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QBrush(bgColor));
+    painter.drawRoundedRect(switchRect, switchRect.height() / 2, switchRect.height() / 2);
+    
+    // 开关滑块（圆形）
+    int sliderSize = switchRect.height() - 4;
+    int sliderX = m_enabled ? (switchRect.right() - sliderSize - 2) : (switchRect.left() + 2);
+    int sliderY = switchRect.top() + 2;
+    
+    painter.setBrush(QBrush(QColor(255, 255, 255))); // 白色滑块
+    painter.drawEllipse(sliderX, sliderY, sliderSize, sliderSize);
+}
+
+QRect IntercomControlWidget::getButtonRect() const
+{
+    int btnWidth = 100;
+    int btnHeight = 35;
+    int btnX = 10;
+    int btnY = (height() - btnHeight) / 2;
+    return QRect(btnX, btnY, btnWidth, btnHeight);
+}
+
+QRect IntercomControlWidget::getSwitchRect() const
+{
+    int switchWidth = 50;
+    int switchHeight = 25;
+    int switchX = getButtonRect().right() + 20;
+    int switchY = (height() - switchHeight) / 2;
+    return QRect(switchX, switchY, switchWidth, switchHeight);
+}
+
+void IntercomControlWidget::mousePressEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton) {
+        QRect btnRect = getButtonRect();
+        QRect switchRect = getSwitchRect();
+        
+        if (btnRect.contains(event->pos())) {
+            // 点击了按钮
+            m_buttonPressed = true;
+            update();
+            emit buttonClicked();
+        } else if (switchRect.contains(event->pos())) {
+            // 点击了开关
+            setIntercomEnabled(!m_enabled);
+        }
+    }
+    QWidget::mousePressEvent(event);
+}
+
+void IntercomControlWidget::mouseReleaseEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton) {
+        m_buttonPressed = false;
+        update();
+    }
+    QWidget::mouseReleaseEvent(event);
+}
+
+// ==================== QGroupInfo 实现 ====================
+
 // 解散群聊回调数据结构
 struct DismissGroupCallbackData {
     QGroupInfo* dlg;
@@ -268,14 +399,17 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, QString clas
     subjectLayout->addWidget(editSubject);
     mainLayout->addWidget(groupSubject);
 
-    // 开启对讲(开关)
-    QHBoxLayout* talkLayout = new QHBoxLayout;
-    QLabel* lblTalk = new QLabel("开启对讲", this);
-    QCheckBox* chkTalk = new QCheckBox(this);
-    talkLayout->addWidget(lblTalk);
-    talkLayout->addStretch();
-    talkLayout->addWidget(chkTalk);
-    mainLayout->addLayout(talkLayout);
+    // 开启对讲(使用自定义自绘控件)
+    m_intercomWidget = new IntercomControlWidget(this);
+    connect(m_intercomWidget, &IntercomControlWidget::intercomToggled, this, [](bool enabled) {
+        qDebug() << "对讲开关状态:" << (enabled ? "开启" : "关闭");
+        // 这里可以添加对讲功能的开启/关闭逻辑
+    });
+    connect(m_intercomWidget, &IntercomControlWidget::buttonClicked, this, []() {
+        qDebug() << "开启对讲按钮被点击";
+        // 这里可以添加对讲按钮的点击逻辑
+    });
+    mainLayout->addWidget(m_intercomWidget);
 
     // 解散群聊 / 退出群聊
     // 如果按钮已经存在，先删除它们（防止重复创建）
@@ -317,7 +451,8 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
         for (int i = 0; i < groupMemberInfo.size(); ++i) {
             if (m_groupMemberInfo[i].member_id != groupMemberInfo[i].member_id ||
                 m_groupMemberInfo[i].member_name != groupMemberInfo[i].member_name ||
-                m_groupMemberInfo[i].member_role != groupMemberInfo[i].member_role) {
+                m_groupMemberInfo[i].member_role != groupMemberInfo[i].member_role ||
+                m_groupMemberInfo[i].is_voice_enabled != groupMemberInfo[i].is_voice_enabled) {
                 isSame = false;
                 break;
             }
@@ -463,6 +598,8 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
     if (m_groupMemberInfo.isEmpty()) {
         qDebug() << "成员列表为空，不显示任何成员";
         updateButtonStates();
+        // 根据当前用户的 is_voice_enabled 更新对讲开关状态
+        updateIntercomState();
         return;
     }
 
@@ -590,6 +727,9 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
     
     // 更新按钮状态（根据当前用户是否是群主）
     updateButtonStates();
+    
+    // 根据当前用户的 is_voice_enabled 更新对讲开关状态
+    updateIntercomState();
 
     // 刷新整个对话框
     this->update();
@@ -835,6 +975,32 @@ void QGroupInfo::InitGroupMember()
 
     // 更新按钮状态（根据当前用户是否是群主）
     updateButtonStates();
+    
+    // 根据当前用户的 is_voice_enabled 更新对讲开关状态
+    updateIntercomState();
+}
+
+void QGroupInfo::updateIntercomState()
+{
+    if (!m_intercomWidget) return;
+    
+    // 获取当前用户信息
+    UserInfo userInfo = CommonInfo::GetData();
+    QString currentUserId = userInfo.teacher_unique_id;
+    
+    // 在成员列表中查找当前用户
+    bool isVoiceEnabled = false;
+    for (const auto& member : m_groupMemberInfo) {
+        if (member.member_id == currentUserId) {
+            isVoiceEnabled = member.is_voice_enabled;
+            break;
+        }
+    }
+    
+    // 根据 is_voice_enabled 设置开关状态
+    m_intercomWidget->setIntercomEnabled(isVoiceEnabled);
+    
+    qDebug() << "更新对讲开关状态，当前用户ID:" << currentUserId << "，is_voice_enabled:" << isVoiceEnabled;
 }
 
 void QGroupInfo::updateButtonStates()
@@ -1279,6 +1445,9 @@ void QGroupInfo::fetchGroupMemberListFromREST(const QString& groupId)
                     memberInfo.member_name = memberInfo.member_id;
                 }
                 
+                // 初始化 is_voice_enabled（REST API 可能不包含此字段，默认为 false）
+                memberInfo.is_voice_enabled = true;
+                
                 memberList.append(memberInfo);
             }
             
@@ -1292,8 +1461,11 @@ void QGroupInfo::fetchGroupMemberListFromREST(const QString& groupId)
                 bool found = false;
                 for (GroupMemberInfo& existingMember : m_groupMemberInfo) {
                     if (existingMember.member_id == newMember.member_id) {
-                        // 成员已存在，只更新角色信息（保留原有的成员名称）
+                        // 成员已存在，更新角色信息（保留原有的成员名称和 is_voice_enabled）
                         existingMember.member_role = newMember.member_role;
+                        // 注意：REST API 获取的成员信息中 is_voice_enabled 被初始化为 false
+                        // 如果原有成员信息中有正确的 is_voice_enabled 值，应该保留原有值
+                        // 这里不更新 is_voice_enabled，保留服务器返回的原始值
                         found = true;
                         break;
                     }
@@ -1308,6 +1480,9 @@ void QGroupInfo::fetchGroupMemberListFromREST(const QString& groupId)
             
             // 刷新UI（使用更新后的完整成员列表）
             InitGroupMember(m_groupNumberId, m_groupMemberInfo);
+            
+            // 根据当前用户的 is_voice_enabled 更新对讲开关状态
+            updateIntercomState();
             
             qDebug() << "成功更新群成员列表，原有" << existingCount << "个成员，新增" 
                      << newCount << "个成员，当前共" << m_groupMemberInfo.size() << "个成员";

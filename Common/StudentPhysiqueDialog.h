@@ -30,6 +30,11 @@
 #include <QTimer>
 #include <QApplication>
 #include <QScreen>
+#include <QResizeEvent>
+#include <QShowEvent>
+#include <QPoint>
+#include <QRect>
+#include <QDesktopWidget>
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QNetworkReply>
@@ -37,6 +42,8 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <algorithm>
+#include <QDebug>
+#include "StudentPhysiqueTableWidget.h"
 
 // 单元格注释窗口
 class CellCommentWidget : public QWidget
@@ -120,13 +127,38 @@ class StudentPhysiqueDialog : public QDialog
 public:
     StudentPhysiqueDialog(QWidget* parent = nullptr) : QDialog(parent)
     {
+        // 去掉标题栏
+        setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
         setWindowTitle("学生体质统计表");
         resize(1200, 800);
-        setStyleSheet("background-color: #f5f5dc; font-size:14px;");
+        setStyleSheet("background-color: #808080; font-size:14px;");
+        
+        // 启用鼠标跟踪以检测鼠标进入/离开
+        setMouseTracking(true);
+
+        // 创建关闭按钮
+        m_btnClose = new QPushButton("X", this);
+        m_btnClose->setFixedSize(30, 30);
+        m_btnClose->setStyleSheet(
+            "QPushButton { background-color: orange; color: white; font-weight:bold; font-size: 14px; border: 1px solid #555; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #cc6600; }"
+        );
+        // 设置初始位置（窗口宽度1200，按钮在右上角）
+        m_btnClose->move(1200 - 35, 5);
+        // 初始显示，用于调试
+        m_btnClose->show();
+        m_btnClose->raise();
+        // 确保按钮在最上层，不被其他控件遮挡
+        m_btnClose->setAttribute(Qt::WA_TransparentForMouseEvents, false);
+        connect(m_btnClose, &QPushButton::clicked, this, &QDialog::close);
+        
+        // 为关闭按钮安装事件过滤器，确保鼠标在按钮上时不会隐藏
+        m_btnClose->installEventFilter(this);
 
         QVBoxLayout* mainLayout = new QVBoxLayout(this);
         mainLayout->setSpacing(10);
-        mainLayout->setContentsMargins(15, 15, 15, 15);
+        // 增加顶部边距，为关闭按钮留出空间（关闭按钮高度30，位置y=5，所以顶部至少需要40）
+        mainLayout->setContentsMargins(15, 40, 15, 15);
 
         // 标题
         QLabel* lblTitle = new QLabel("小组积分表");
@@ -184,28 +216,7 @@ public:
         // 表格
         // 固定列：小组(0)、学号(1)、姓名(2)、总分(总分数-2)、小组总分(总分数-1)
         // 可添加列在姓名后插入
-        table = new QTableWidget(6, 10); // 初始6行，10列（小组、学号、姓名、早读、课堂发言、纪律、作业、背诵、总分、小组总分）
-        QStringList headers = { "小组", "学号", "姓名", "早读", "课堂发言", "纪律", "作业", "背诵", "总分", "小组总分" };
-        table->setHorizontalHeaderLabels(headers);
-
-        // 表格样式
-        table->setStyleSheet(
-            "QTableWidget { background-color: white; gridline-color: #ddd; }"
-            "QTableWidget::item { padding: 5px; }"
-            "QHeaderView::section { background-color: #4169e1; color: white; font-weight: bold; padding: 8px; }"
-        );
-        table->setAlternatingRowColors(true);
-        table->setStyleSheet(table->styleSheet() + 
-            "QTableWidget { alternate-background-color: #e6f3ff; }"
-        );
-
-        table->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::SelectedClicked);
-        table->setSelectionBehavior(QAbstractItemView::SelectItems);
-        table->setSelectionMode(QAbstractItemView::SingleSelection);
-        table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-        
-        // 禁止列移动
-        table->horizontalHeader()->setSectionsMovable(false);
+        table = new StudentPhysiqueTableWidget(this); // 使用自定义表格控件
 
         // 固定列索引（不能删除的列）
         // 小组(0)、学号(1)、姓名(2)、总分(总分数-2)、小组总分(总分数-1)
@@ -347,6 +358,203 @@ public:
         // 重新合并小组单元格并更新总分
         mergeGroupCells();
         updateAllTotals();
+    }
+
+protected:
+    // 重写鼠标事件以实现窗口拖动
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        if (event->button() == Qt::LeftButton) {
+            m_dragPosition = event->globalPos() - frameGeometry().topLeft();
+            event->accept();
+        }
+    }
+    
+    void mouseMoveEvent(QMouseEvent *event) override
+    {
+        if (event->buttons() & Qt::LeftButton && !m_dragPosition.isNull()) {
+            move(event->globalPos() - m_dragPosition);
+            event->accept();
+        }
+    }
+    
+    // 鼠标进入窗口时显示关闭按钮
+    void enterEvent(QEvent *event) override
+    {
+        if (m_btnClose) {
+            m_btnClose->show();
+        }
+        QDialog::enterEvent(event);
+    }
+    
+    // 鼠标离开窗口时隐藏关闭按钮
+    void leaveEvent(QEvent *event) override
+    {
+        // 检查鼠标是否真的离开了窗口（包括关闭按钮）
+        QPoint globalPos = QCursor::pos();
+        QRect widgetRect = QRect(mapToGlobal(QPoint(0, 0)), size());
+        if (!widgetRect.contains(globalPos) && m_btnClose) {
+            // 如果鼠标不在窗口内，检查是否在关闭按钮上
+            QRect btnRect = QRect(m_btnClose->mapToGlobal(QPoint(0, 0)), m_btnClose->size());
+            if (!btnRect.contains(globalPos)) {
+                m_btnClose->hide();
+            }
+        }
+        QDialog::leaveEvent(event);
+    }
+    
+    // 事件过滤器，处理关闭按钮的鼠标事件
+    bool eventFilter(QObject *obj, QEvent *event) override
+    {
+        // 先处理关闭按钮的事件
+        if (obj == m_btnClose) {
+            if (event->type() == QEvent::Enter) {
+                // 鼠标进入关闭按钮时确保显示
+                m_btnClose->show();
+            } else if (event->type() == QEvent::Leave) {
+                // 鼠标离开关闭按钮时，检查是否还在窗口内
+                // 注意：不要在这里隐藏按钮，让 leaveEvent 来处理
+                // 这样可以避免窗口刚显示时按钮被立即隐藏
+            }
+            // 不返回 true，让事件继续传播，这样按钮可以正常响应点击等事件
+            return false;
+        }
+        
+        // 处理表格的事件（原有的逻辑）
+        if (obj == table) {
+            if (event->type() == QEvent::MouseMove) {
+                QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+                QTableWidgetItem* item = table->itemAt(mouseEvent->pos());
+                if (item) {
+                    int row = item->row();
+                    int col = item->column();
+                    
+                    // 检查是否是跨列注释的起始单元格
+                    int spanCols = item->data(Qt::UserRole + 1).toInt();
+                    if (spanCols > 1) {
+                        // 这是跨列注释的起始单元格
+                        QString comment = item->data(Qt::UserRole).toString();
+                        if (!comment.isEmpty() || true) { // 即使没有注释也显示窗口
+                            QRect cellRect = table->visualItemRect(item);
+                            // 计算跨列的宽度
+                            int totalWidth = 0;
+                            for (int i = 0; i < spanCols && col + i < table->columnCount(); ++i) {
+                                totalWidth += table->columnWidth(col + i);
+                            }
+                            cellRect.setWidth(totalWidth);
+                            
+                            commentWidget->showComment(comment, cellRect, table, spanCols);
+                            commentWidget->cancelHide();
+                        }
+                    } else {
+                        // 检查是否是跨列注释的一部分
+                        bool isInSpan = false;
+                        QString comment = "";
+                        int spanCols2 = 0;
+                        for (int c = 0; c < col; ++c) {
+                            QTableWidgetItem* checkItem = table->item(row, c);
+                            if (checkItem) {
+                                int sc = checkItem->data(Qt::UserRole + 1).toInt();
+                                if (sc > 1 && c + sc > col) {
+                                    // 当前单元格在跨列注释范围内
+                                    isInSpan = true;
+                                    comment = checkItem->data(Qt::UserRole).toString();
+                                    spanCols2 = sc;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (isInSpan) {
+                            QTableWidgetItem* startItem = table->item(row, col - 1);
+                            for (int c = col - 1; c >= 0; --c) {
+                                QTableWidgetItem* checkItem = table->item(row, c);
+                                if (checkItem) {
+                                    int sc = checkItem->data(Qt::UserRole + 1).toInt();
+                                    if (sc > 1) {
+                                        startItem = checkItem;
+                                        comment = checkItem->data(Qt::UserRole).toString();
+                                        spanCols2 = sc;
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            if (startItem) {
+                                QRect cellRect = table->visualItemRect(startItem);
+                                int startCol = table->column(startItem);
+                                int totalWidth = 0;
+                                for (int i = 0; i < spanCols2 && startCol + i < table->columnCount(); ++i) {
+                                    totalWidth += table->columnWidth(startCol + i);
+                                }
+                                cellRect.setWidth(totalWidth);
+                                commentWidget->showComment(comment, cellRect, table, spanCols2);
+                                commentWidget->cancelHide();
+                            }
+                        } else {
+                            // 单单元格注释
+                            QString comment = item->data(Qt::UserRole).toString();
+                            QRect cellRect = table->visualItemRect(item);
+                            commentWidget->showComment(comment, cellRect, table, 1);
+                            commentWidget->cancelHide();
+                        }
+                    }
+                } else {
+                    commentWidget->hideWithDelay(500);
+                }
+            } else if (event->type() == QEvent::Leave) {
+                // 鼠标离开表格时，延迟隐藏注释窗口
+                commentWidget->hideWithDelay(1000);
+            }
+        }
+        return QDialog::eventFilter(obj, event);
+    }
+    
+    // 窗口大小改变时更新关闭按钮位置
+    void resizeEvent(QResizeEvent *event) override
+    {
+        if (m_btnClose) {
+            m_btnClose->move(width() - 35, 5);
+        }
+        QDialog::resizeEvent(event);
+    }
+    
+    // 窗口显示时更新关闭按钮位置
+    void showEvent(QShowEvent *event) override
+    {
+        if (m_btnClose) {
+            m_btnClose->move(width() - 35, 5);
+            // 窗口显示时也显示关闭按钮
+            m_btnClose->show();
+            // 确保按钮在最上层
+            m_btnClose->raise();
+        }
+        
+        // 确保窗口位置在屏幕可见区域内
+        QRect screenGeometry = QApplication::desktop()->availableGeometry();
+        QRect windowGeometry = geometry();
+        
+        // 如果窗口完全在屏幕外，移动到屏幕中央
+        if (!screenGeometry.intersects(windowGeometry)) {
+            move(screenGeometry.center() - QPoint(windowGeometry.width() / 2, windowGeometry.height() / 2));
+        }
+        
+        // 确保窗口显示在最前面
+        raise();
+        activateWindow();
+        
+        // 调试：确保关闭按钮始终显示
+        if (m_btnClose) {
+            // 重新设置位置和显示
+            m_btnClose->move(width() - 35, 5);
+            m_btnClose->show();
+            m_btnClose->raise();
+            m_btnClose->setVisible(true);
+            m_btnClose->update(); // 强制更新
+            qDebug() << "StudentPhysiqueDialog - 关闭按钮位置:" << m_btnClose->pos() << "窗口大小:" << size() << "按钮可见:" << m_btnClose->isVisible() << "按钮父窗口:" << m_btnClose->parent();
+        }
+        
+        QDialog::showEvent(event);
     }
 
 private slots:
@@ -853,98 +1061,6 @@ private slots:
         }
     }
 
-protected:
-    bool eventFilter(QObject* obj, QEvent* event) override
-    {
-        if (obj == table) {
-            if (event->type() == QEvent::MouseMove) {
-                QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
-                QTableWidgetItem* item = table->itemAt(mouseEvent->pos());
-                if (item) {
-                    int row = item->row();
-                    int col = item->column();
-                    
-                    // 检查是否是跨列注释的起始单元格
-                    int spanCols = item->data(Qt::UserRole + 1).toInt();
-                    if (spanCols > 1) {
-                        // 这是跨列注释的起始单元格
-                        QString comment = item->data(Qt::UserRole).toString();
-                        if (!comment.isEmpty() || true) { // 即使没有注释也显示窗口
-                            QRect cellRect = table->visualItemRect(item);
-                            // 计算跨列的宽度
-                            int totalWidth = 0;
-                            for (int i = 0; i < spanCols && col + i < table->columnCount(); ++i) {
-                                totalWidth += table->columnWidth(col + i);
-                            }
-                            cellRect.setWidth(totalWidth);
-                            
-                            commentWidget->showComment(comment, cellRect, table, spanCols);
-                            commentWidget->cancelHide();
-                        }
-                    } else {
-                        // 检查是否是跨列注释的一部分
-                        bool isInSpan = false;
-                        QString comment = "";
-                        int spanCols2 = 0;
-                        for (int c = 0; c < col; ++c) {
-                            QTableWidgetItem* checkItem = table->item(row, c);
-                            if (checkItem) {
-                                int sc = checkItem->data(Qt::UserRole + 1).toInt();
-                                if (sc > 1 && c + sc > col) {
-                                    // 当前单元格在跨列注释范围内
-                                    isInSpan = true;
-                                    comment = checkItem->data(Qt::UserRole).toString();
-                                    spanCols2 = sc;
-                                    break;
-                                }
-                            }
-                        }
-                        
-                        if (isInSpan) {
-                            QTableWidgetItem* startItem = table->item(row, col - 1);
-                            for (int c = col - 1; c >= 0; --c) {
-                                QTableWidgetItem* checkItem = table->item(row, c);
-                                if (checkItem) {
-                                    int sc = checkItem->data(Qt::UserRole + 1).toInt();
-                                    if (sc > 1) {
-                                        startItem = checkItem;
-                                        comment = checkItem->data(Qt::UserRole).toString();
-                                        spanCols2 = sc;
-                                        break;
-                                    }
-                                }
-                            }
-                            
-                            if (startItem) {
-                                QRect cellRect = table->visualItemRect(startItem);
-                                int startCol = table->column(startItem);
-                                int totalWidth = 0;
-                                for (int i = 0; i < spanCols2 && startCol + i < table->columnCount(); ++i) {
-                                    totalWidth += table->columnWidth(startCol + i);
-                                }
-                                cellRect.setWidth(totalWidth);
-                                commentWidget->showComment(comment, cellRect, table, spanCols2);
-                                commentWidget->cancelHide();
-                            }
-                        } else {
-                            // 单单元格注释
-                            QString comment = item->data(Qt::UserRole).toString();
-                            QRect cellRect = table->visualItemRect(item);
-                            commentWidget->showComment(comment, cellRect, table, 1);
-                            commentWidget->cancelHide();
-                        }
-                    }
-                } else {
-                    commentWidget->hideWithDelay(500);
-                }
-            } else if (event->type() == QEvent::Leave) {
-                // 鼠标离开表格时，延迟隐藏注释窗口
-                commentWidget->hideWithDelay(1000);
-            }
-        }
-        return QDialog::eventFilter(obj, event);
-    }
-
 private:
     void initializeTableData()
     {
@@ -1289,7 +1405,7 @@ private:
     }
 
 private:
-    QTableWidget* table;
+    StudentPhysiqueTableWidget* table;
     QTextEdit* textDescription;
     QPushButton* btnAddRow;
     QPushButton* btnDeleteColumn;
@@ -1304,4 +1420,6 @@ private:
     int nameColumnIndex; // 姓名列索引
     int groupColumnIndex; // 小组列索引
     CellCommentWidget* commentWidget = nullptr; // 注释窗口
+    QPushButton* m_btnClose = nullptr; // 关闭按钮
+    QPoint m_dragPosition; // 用于窗口拖动
 };

@@ -374,10 +374,17 @@ public:
 									}
 								}
 								
+								// 获取 is_voice_enabled 字段
+								bool is_voice_enabled = false;
+								if (memberObj.contains("is_voice_enabled")) {
+									is_voice_enabled = memberObj["is_voice_enabled"].toInt();
+								}
+								
 								GroupMemberInfo groupMemInfo;
 								groupMemInfo.member_id = member_id;
 								groupMemInfo.member_name = member_name;
 								groupMemInfo.member_role = member_role;
+								groupMemInfo.is_voice_enabled = is_voice_enabled;
 								m_groupMemberInfo.append(groupMemInfo);
 							}
 
@@ -386,6 +393,9 @@ public:
 							{
 								m_groupInfo->InitGroupMember(group_id, m_groupMemberInfo);
 							}
+							
+							// 根据当前用户的 is_voice_enabled 更新对讲按钮状态
+							updateBtnTalkState();
 						}
 						else if (dataObj["joingroups"].isArray())
 						{
@@ -575,6 +585,9 @@ public:
 						m_groupInfo->InitGroupMember(groupId, m_groupMemberInfo);
 					}
 					
+					// 根据当前用户的 is_voice_enabled 更新对讲按钮状态
+					updateBtnTalkState();
+					
 					// 可选：重新从服务器获取成员列表以确保数据同步
 					if (m_httpHandler && !m_unique_group_id.isEmpty()) {
 						QUrl url("http://47.100.126.194:5000/groups/members");
@@ -691,9 +704,13 @@ public:
 				// 使用 ScheduleDialog 的成员列表数据来初始化 QGroupInfo 的好友列表
 				if (!m_groupMemberInfo.isEmpty() && !m_unique_group_id.isEmpty()) {
 					m_groupInfo->InitGroupMember(m_unique_group_id, m_groupMemberInfo);
+					// 根据当前用户的 is_voice_enabled 更新对讲按钮状态
+					updateBtnTalkState();
 				} else {
 					// 如果数据为空，尝试使用无参数版本（使用 QGroupInfo 自己的数据）
 					m_groupInfo->InitGroupMember();
+					// 根据当前用户的 is_voice_enabled 更新对讲按钮状态
+					updateBtnTalkState();
 				}
 				m_groupInfo->show();
 			}
@@ -1700,6 +1717,39 @@ private:
 	QPoint m_dragStartPos; // 拖动起始位置
 	QPushButton* closeButton = nullptr; // 关闭按钮
     int m_cornerRadius = 16;
+	
+	// 根据当前用户的 is_voice_enabled 更新对讲按钮状态
+	void updateBtnTalkState() {
+		if (!btnTalk) return;
+		
+		// 获取当前用户信息
+		UserInfo userInfo = CommonInfo::GetData();
+		QString currentUserId = userInfo.teacher_unique_id;
+		
+		// 在成员列表中查找当前用户
+		bool isVoiceEnabled = false;
+		for (const auto& member : m_groupMemberInfo) {
+			if (member.member_id == currentUserId) {
+				isVoiceEnabled = member.is_voice_enabled;
+				break;
+			}
+		}
+		
+		// 根据 is_voice_enabled 设置按钮启用状态
+		btnTalk->setEnabled(isVoiceEnabled);
+		
+		// 如果禁用，可以设置灰色样式提示用户
+		if (!isVoiceEnabled) {
+			btnTalk->setStyleSheet("background-color: #555555; color: #999999; padding: 4px 8px; border: none;");
+			btnTalk->setToolTip("您没有开启语音权限，无法使用对讲功能");
+		} else {
+			// 恢复原来的样式
+			btnTalk->setStyleSheet("background-color: #2D2E2D; color: white; padding: 4px 8px; border: none;");
+			btnTalk->setToolTip("");
+		}
+		
+		qDebug() << "更新对讲按钮状态，当前用户ID:" << currentUserId << "，is_voice_enabled:" << isVoiceEnabled;
+	}
 
     void updateMask()
     {
@@ -3488,6 +3538,7 @@ inline void ScheduleDialog::openIntercomWebPage()
 		memberObj["id"] = member.member_id;  // 唯一编号
 		memberObj["name"] = member.member_name;  // 名字
 		memberObj["role"] = member.member_role;  // 角色（可选）
+		memberObj["is_voice_enabled"] = member.is_voice_enabled;  // 是否开启语音
 		membersArray.append(memberObj);
 	}
 	

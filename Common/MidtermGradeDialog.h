@@ -32,6 +32,14 @@
 #include <algorithm>
 #include <QTimer>
 #include <QApplication>
+#include <QMouseEvent>
+#include <QResizeEvent>
+#include <QShowEvent>
+#include <QPoint>
+#include <QCursor>
+#include <QRect>
+#include <QDesktopWidget>
+#include "MidtermGradeTableWidget.h"
 
 // 前向声明
 //class ScheduleDialog;
@@ -44,6 +52,26 @@ public:
     
     // 导入Excel数据
     void importData(const QStringList& headers, const QList<QStringList>& dataRows);
+
+protected:
+    // 重写鼠标事件以实现窗口拖动
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    
+    // 鼠标进入窗口时显示关闭按钮
+    void enterEvent(QEvent *event) override;
+    
+    // 鼠标离开窗口时隐藏关闭按钮
+    void leaveEvent(QEvent *event) override;
+    
+    // 事件过滤器，处理关闭按钮的鼠标事件
+    bool eventFilter(QObject *obj, QEvent *event) override;
+    
+    // 窗口大小改变时更新关闭按钮位置
+    void resizeEvent(QResizeEvent *event) override;
+    
+    // 窗口显示时更新关闭按钮位置
+    void showEvent(QShowEvent *event) override;
 
 private slots:
     void onAddRow();
@@ -65,7 +93,7 @@ private:
     void showCellComment(int row, int column);
 
 private:
-    QTableWidget* table;
+    MidtermGradeTableWidget* table;
     QTextEdit* textDescription;
     QPushButton* btnAddRow;
     QPushButton* btnDeleteColumn;
@@ -81,4 +109,6 @@ private:
     QSet<int> fixedColumns; // 固定列索引集合（不能删除的列）
     int nameColumnIndex; // 姓名列索引
     QString m_classid;
+    QPushButton* m_btnClose = nullptr; // 关闭按钮
+    QPoint m_dragPosition; // 用于窗口拖动
 };
