@@ -639,56 +639,159 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
     qDebug() << "插入位置计算：+ 按钮索引:" << plusButtonIndex << "，- 按钮索引:" << minusButtonIndex << "，最终插入位置:" << insertIndex;
     
     // 使用之前找到的 buttonParent（应该是 groupFriends）
+    // 第一步：先添加群主
     for (auto iter : m_groupMemberInfo)
     {
-        FriendButton* circleBtn = nullptr;
         if (iter.member_role == "群主")
         {
-            circleBtn = new FriendButton("", buttonParent);
+            FriendButton* circleBtn = new FriendButton("", buttonParent);
             // FriendButton 构造函数已设置 setFixedSize(50, 50)，这里确保尺寸正确
             circleBtn->setFixedSize(50, 50);
             circleBtn->setMinimumSize(50, 50);
             circleBtn->setStyleSheet(redStyle); // 群主用红色圆圈
+            
+            // 设置成员角色
+            circleBtn->setMemberRole(iter.member_role);
+            
+            // 只有当前用户是群主时，才启用右键菜单
+            circleBtn->setContextMenuEnabled(isOwner);
+            
+            // 接收右键菜单信号，传递成员ID
+            QString memberId = iter.member_id;
+            connect(circleBtn, &FriendButton::setLeaderRequested, this, [this, memberId]() {
+                onSetLeaderRequested(memberId);
+            });
+            connect(circleBtn, &FriendButton::cancelLeaderRequested, this, [this, memberId]() {
+                onCancelLeaderRequested(memberId);
+            });
+            
+            // 设置按钮文本（完整成员名字）
+            circleBtn->setText(iter.member_name);
+            circleBtn->setProperty("member_id", iter.member_id);
+            
+            // 确保按钮可见并显示
+            circleBtn->setVisible(true);
+            circleBtn->show();
+            
+            // 在 + 按钮之前插入成员圆圈
+            circlesLayout->insertWidget(insertIndex, circleBtn);
+            insertIndex++; // 更新插入位置
+            
+            qDebug() << "添加群主按钮:" << iter.member_name << "，角色:" << iter.member_role 
+                     << "，插入位置:" << (insertIndex - 1) << "，按钮尺寸:" << circleBtn->size() 
+                     << "，是否可见:" << circleBtn->isVisible() << "，父窗口:" << circleBtn->parent();
+            break; // 只添加第一个群主
         }
-        else
+    }
+    
+    // 第二步：添加班级按钮（文本较长，字体小一点，分成两行显示）
+    if (!m_groupName.isEmpty())
+    {
+        FriendButton* classBtn = new FriendButton("", buttonParent);
+        // 班级按钮保持50x50的尺寸，文本分成两行显示
+        classBtn->setFixedSize(50, 50);
+        classBtn->setMinimumSize(50, 50);
+        // 班级按钮使用蓝色样式，但字体较小，支持多行文本
+        // 使用样式表设置文本对齐和换行
+        QString classStyle = "background-color:blue; border-radius:25px; color:white; font-weight:bold; font-size:9px; text-align:center;";
+        classBtn->setStyleSheet(classStyle);
+        
+        // 从班级名称中提取班级部分（去掉"的班级群"后缀）
+        QString classText = m_groupName;
+        // 如果包含"的班级群"，则只取前面的部分
+        int suffixIndex = classText.indexOf(QString::fromUtf8(u8"的班级群"));
+        if (suffixIndex >= 0) {
+            classText = classText.left(suffixIndex); // 只取"的班级群"之前的部分
+        }
+        
+        // 将班级名称分成两行显示
+        // 尝试在合适的位置插入换行符
+        // 如果包含"年级"，在"年级"后换行
+        int nianjiIndex = classText.indexOf(QString::fromUtf8(u8"年级"));
+        if (nianjiIndex >= 0 && nianjiIndex < classText.length() - 2) {
+            // 在"年级"后插入换行符
+            classText.insert(nianjiIndex + 2, "\n");
+        } else {
+            // 如果没有"年级"，尝试在中间位置换行
+            int midPos = classText.length() / 2;
+            // 查找合适的分割点（避免在字符中间分割）
+            for (int i = midPos; i < classText.length() - 1; ++i) {
+                if (classText[i] == QChar::fromLatin1(' ') || 
+                    classText[i] == QChar::fromLatin1('的') ||
+                    classText[i] == QChar::fromLatin1('班')) {
+                    classText.insert(i + 1, "\n");
+                    break;
+                }
+            }
+            // 如果没找到合适的分割点，就在中间位置强制换行
+            if (!classText.contains("\n") && classText.length() > 4) {
+                midPos = classText.length() / 2;
+                classText.insert(midPos, "\n");
+            }
+        }
+        
+        // 设置班级文本（分成两行）
+        classBtn->setText(classText);
+        classBtn->setProperty("is_class_button", true); // 标记为班级按钮
+        
+        // 禁用右键菜单
+        classBtn->setContextMenuEnabled(false);
+        
+        // 确保按钮可见并显示
+        classBtn->setVisible(true);
+        classBtn->show();
+        
+        // 在群主之后插入班级按钮
+        circlesLayout->insertWidget(insertIndex, classBtn);
+        insertIndex++; // 更新插入位置
+        
+        qDebug() << "添加班级按钮:" << m_groupName 
+                 << "，插入位置:" << (insertIndex - 1) << "，按钮尺寸:" << classBtn->size() 
+                 << "，是否可见:" << classBtn->isVisible() << "，父窗口:" << classBtn->parent();
+    }
+    
+    // 第三步：添加其他成员（非群主）
+    for (auto iter : m_groupMemberInfo)
+    {
+        if (iter.member_role != "群主")
         {
-            circleBtn = new FriendButton("", buttonParent);
+            FriendButton* circleBtn = new FriendButton("", buttonParent);
             // FriendButton 构造函数已设置 setFixedSize(50, 50)，这里确保尺寸正确
             circleBtn->setFixedSize(50, 50);
             circleBtn->setMinimumSize(50, 50);
             circleBtn->setStyleSheet(blueStyle); // 其他成员用蓝色圆圈
+            
+            // 设置成员角色
+            circleBtn->setMemberRole(iter.member_role);
+            
+            // 只有当前用户是群主时，才启用右键菜单
+            circleBtn->setContextMenuEnabled(isOwner);
+            
+            // 接收右键菜单信号，传递成员ID
+            QString memberId = iter.member_id;
+            connect(circleBtn, &FriendButton::setLeaderRequested, this, [this, memberId]() {
+                onSetLeaderRequested(memberId);
+            });
+            connect(circleBtn, &FriendButton::cancelLeaderRequested, this, [this, memberId]() {
+                onCancelLeaderRequested(memberId);
+            });
+            
+            // 设置按钮文本（完整成员名字）
+            circleBtn->setText(iter.member_name);
+            circleBtn->setProperty("member_id", iter.member_id);
+            
+            // 确保按钮可见并显示
+            circleBtn->setVisible(true);
+            circleBtn->show();
+            
+            // 在 + 按钮之前插入成员圆圈
+            circlesLayout->insertWidget(insertIndex, circleBtn);
+            insertIndex++; // 更新插入位置
+            
+            qDebug() << "添加成员按钮:" << iter.member_name << "，角色:" << iter.member_role 
+                     << "，插入位置:" << (insertIndex - 1) << "，按钮尺寸:" << circleBtn->size() 
+                     << "，是否可见:" << circleBtn->isVisible() << "，父窗口:" << circleBtn->parent();
         }
-        
-        // 设置成员角色
-        circleBtn->setMemberRole(iter.member_role);
-        
-        // 只有当前用户是群主时，才启用右键菜单
-        circleBtn->setContextMenuEnabled(isOwner);
-        
-        // 接收右键菜单信号，传递成员ID
-        QString memberId = iter.member_id;
-        connect(circleBtn, &FriendButton::setLeaderRequested, this, [this, memberId]() {
-            onSetLeaderRequested(memberId);
-        });
-        connect(circleBtn, &FriendButton::cancelLeaderRequested, this, [this, memberId]() {
-            onCancelLeaderRequested(memberId);
-        });
-        
-        // 设置按钮文本（完整成员名字）
-        circleBtn->setText(iter.member_name);
-        circleBtn->setProperty("member_id", iter.member_id);
-        
-        // 确保按钮可见并显示
-        circleBtn->setVisible(true);
-        circleBtn->show();
-        
-        // 在 + 按钮之前插入成员圆圈
-        circlesLayout->insertWidget(insertIndex, circleBtn);
-        insertIndex++; // 更新插入位置
-        
-        qDebug() << "添加成员按钮:" << iter.member_name << "，角色:" << iter.member_role 
-                 << "，插入位置:" << (insertIndex - 1) << "，按钮尺寸:" << circleBtn->size() 
-                 << "，是否可见:" << circleBtn->isVisible() << "，父窗口:" << circleBtn->parent();
     }
     
     // 确保所有按钮都可见并强制刷新布局

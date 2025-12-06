@@ -67,6 +67,7 @@
 #include "TAHttpHandler.h"
 #include "ArrangeSeatDialog.h"
 #include "GroupNotifyDialog.h"
+#include "StudentAttributeDialog.h"
 #include "QXlsx/header/xlsxdocument.h"
 #include "QXlsx/header/xlsxworksheet.h"
 #include "QXlsx/header/xlsxcell.h"
@@ -347,10 +348,52 @@ public:
 						
 						qDebug() << "从服务器获取成绩表成功，学生数量:" << m_students.size();
 						
-						// 自动刷新座位表，使用"正序"排序（按成绩从高到低）
+						// 将成绩数据设置到座位表对应单元格学生的属性中
 						if (!m_students.isEmpty() && seatTable) {
-							arrangeSeats(m_students, "正序");
-							qDebug() << "已自动刷新座位表，使用正序排序";
+							// 遍历座位表，找到对应的学生并设置成绩属性
+							for (int row = 0; row < 8; ++row) {
+								for (int col = 0; col < 11; ++col) {
+									QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
+									if (!btn || !btn->property("isSeat").toBool()) continue;
+									
+									QString studentId = btn->property("studentId").toString();
+									QString studentName = btn->property("studentName").toString();
+									
+									// 如果座位上有学生，查找对应的成绩数据
+									if (!studentId.isEmpty() || !studentName.isEmpty()) {
+										// 在成绩列表中查找匹配的学生
+										for (const StudentInfo& student : m_students) {
+											bool matched = false;
+											// 优先匹配学号，如果学号为空则匹配姓名
+											if (!studentId.isEmpty() && !student.id.isEmpty()) {
+												matched = (studentId == student.id);
+											} else if (!studentName.isEmpty() && !student.name.isEmpty()) {
+												matched = (studentName == student.name);
+											}
+											
+											if (matched) {
+												// 将成绩数据设置到座位按钮的属性中
+												if (student.attributes.contains("语文")) {
+													btn->setProperty("chineseScore", student.attributes["语文"]);
+												}
+												if (student.attributes.contains("数学")) {
+													btn->setProperty("mathScore", student.attributes["数学"]);
+												}
+												if (student.attributes.contains("英语")) {
+													btn->setProperty("englishScore", student.attributes["英语"]);
+												}
+												if (student.attributes.contains("总分")) {
+													btn->setProperty("totalScore", student.attributes["总分"]);
+												}
+												
+												qDebug() << "已为学生" << studentName << "(" << studentId << ")设置成绩属性";
+												break;
+											}
+										}
+									}
+								}
+							}
+							qDebug() << "已将成绩数据设置到座位表对应单元格学生的属性中";
 						}
 						}
 						// 处理 /groups/members 接口返回的成员列表
@@ -1002,6 +1045,11 @@ public:
 					qDebug() << "座位按钮被点击: 行" << row << "列" << col;
 				});
 				
+				// 安装事件过滤器以处理双击事件
+				btn->installEventFilter(this);
+				btn->setProperty("seatRow", row);
+				btn->setProperty("seatCol", col);
+				
 				seatTable->setCellWidget(row, col, btn);
 			}
 		}
@@ -1441,7 +1489,9 @@ public:
 	// 设置座位按钮的文本和图标：有文本时不显示图标，无文本时显示图标
 	void setSeatButtonTextAndIcon(QPushButton* btn, const QString& text);
 	void fetchSeatArrangementFromServer(); // 从服务器获取座位表
+	void fetchStudentScoresFromServer(); // 从服务器获取成绩表数据
 	void fetchCourseScheduleForDailyView();
+	void showStudentAttributeDialog(int row, int col); // 显示学生属性对话框
 	
 	// 获取座位信息列表（用于比对和更新姓名）
 	QList<SeatInfo> getSeatInfoList() const { return m_seatInfoList; }
@@ -1669,6 +1719,21 @@ private slots:
 	}
 
 protected:
+	bool eventFilter(QObject* obj, QEvent* event) override
+	{
+		// 处理座位按钮的双击事件
+		if (event->type() == QEvent::MouseButtonDblClick) {
+			QPushButton* btn = qobject_cast<QPushButton*>(obj);
+			if (btn && btn->property("isSeat").toBool()) {
+				int row = btn->property("seatRow").toInt();
+				int col = btn->property("seatCol").toInt();
+				showStudentAttributeDialog(row, col);
+				return true;
+			}
+		}
+		return QDialog::eventFilter(obj, event);
+	}
+	
 	void enterEvent(QEvent* event) override
 	{
 		QDialog::enterEvent(event);
@@ -2802,9 +2867,14 @@ inline void ScheduleDialog::fetchSeatArrangementFromServer()
 				filled++;
 			}
 			
-			seatTable->update();
-			seatTable->repaint();
-			qDebug() << "从服务器加载座位表成功，填充" << filled << "个座位";
+		seatTable->update();
+		seatTable->repaint();
+		qDebug() << "从服务器加载座位表成功，填充" << filled << "个座位";
+		
+		// 获取座位表成功后，获取成绩表数据
+		if (m_httpHandler && m_isClassGroup && !m_classid.isEmpty()) {
+			fetchStudentScoresFromServer();
+		}
 		} else if (code == 404) {
 			clearSeats();
 			qDebug() << "服务器未找到座位信息" << message;
@@ -2822,6 +2892,154 @@ inline void ScheduleDialog::fetchSeatArrangementFromServer()
 	
 	handler->get(url.toString());
 	qDebug() << "正在请求座位表:" << url.toString();
+}
+
+// 从服务器获取成绩表数据
+inline void ScheduleDialog::fetchStudentScoresFromServer()
+{
+	if (!m_httpHandler || m_classid.isEmpty()) {
+		qWarning() << "HTTP处理器未初始化或班级ID为空，无法获取成绩表";
+		return;
+	}
+	
+	// 根据当前日期计算学期
+	QDate currentDate = QDate::currentDate();
+	int year = currentDate.year();
+	int month = currentDate.month();
+	
+	QString term;
+	// 9月-1月是上学期（第一学期），2月-8月是下学期（第二学期）
+	if (month >= 9 || month <= 1) {
+		if (month >= 9) {
+			term = QString("%1-%2-1").arg(year).arg(year + 1);
+		} else {
+			term = QString("%1-%2-1").arg(year - 1).arg(year);
+		}
+	} else {
+		term = QString("%1-%2-2").arg(year - 1).arg(year);
+	}
+	
+	// 获取成绩表数据
+	QUrl url("http://47.100.126.194:5000/student-scores/get");
+	QUrlQuery query;
+	query.addQueryItem("class_id", m_classid);
+	query.addQueryItem("exam_name", "期中考试");
+	query.addQueryItem("term", term);
+	url.setQuery(query);
+	
+	qDebug() << "正在请求成绩表:" << url.toString();
+	m_httpHandler->get(url.toString());
+}
+
+// 显示学生属性对话框
+inline void ScheduleDialog::showStudentAttributeDialog(int row, int col)
+{
+	if (!seatTable) {
+		qWarning() << "座位表未初始化";
+		return;
+	}
+	
+	QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
+	if (!btn || !btn->property("isSeat").toBool()) {
+		return;
+	}
+	
+	// 获取学生信息
+	QString studentId = btn->property("studentId").toString();
+	QString studentName = btn->property("studentName").toString();
+	
+	// 如果座位上没有学生，不显示对话框
+	if (studentId.isEmpty() && studentName.isEmpty()) {
+		return;
+	}
+	
+	// 创建StudentInfo对象
+	StudentInfo student;
+	student.id = studentId;
+	student.name = studentName.isEmpty() ? btn->text() : studentName;
+	student.originalIndex = -1;
+	student.score = 0;
+	
+	// 从按钮属性中读取成绩数据
+	if (btn->property("chineseScore").isValid()) {
+		double chinese = btn->property("chineseScore").toDouble();
+		student.attributes["语文"] = chinese;
+	}
+	if (btn->property("mathScore").isValid()) {
+		double math = btn->property("mathScore").toDouble();
+		student.attributes["数学"] = math;
+	}
+	if (btn->property("englishScore").isValid()) {
+		double english = btn->property("englishScore").toDouble();
+		student.attributes["英语"] = english;
+	}
+	if (btn->property("totalScore").isValid()) {
+		double total = btn->property("totalScore").toDouble();
+		student.attributes["总分"] = total;
+		student.score = total;
+	}
+	
+	// 检查是否有其他属性（如"早读"、"积极发言"等）
+	// 遍历按钮的所有属性，查找可能的属性值
+	QList<QByteArray> propertyNames = btn->dynamicPropertyNames();
+	for (const QByteArray& propName : propertyNames) {
+		QString propNameStr = QString::fromUtf8(propName);
+		// 跳过已知的属性
+		if (propNameStr == "isSeat" || propNameStr == "row" || propNameStr == "col" || 
+		    propNameStr == "seatRow" || propNameStr == "seatCol" || 
+		    propNameStr == "studentId" || propNameStr == "studentName" ||
+		    propNameStr == "chineseScore" || propNameStr == "mathScore" || 
+		    propNameStr == "englishScore" || propNameStr == "totalScore") {
+			continue;
+		}
+		
+		// 如果属性值是数字，可能是成绩属性
+		QVariant propValue = btn->property(propName);
+		if (propValue.canConvert<double>()) {
+			double value = propValue.toDouble();
+			if (value > 0) { // 只添加有值的属性
+				student.attributes[propNameStr] = value;
+			}
+		}
+	}
+	
+	// 创建并显示学生属性对话框
+	StudentAttributeDialog* dialog = new StudentAttributeDialog(this);
+	
+	// 设置可用属性列表（包括成绩和其他属性）
+	QList<QString> availableAttributes;
+	if (student.attributes.contains("语文")) {
+		availableAttributes.append("语文");
+	}
+	if (student.attributes.contains("数学")) {
+		availableAttributes.append("数学");
+	}
+	if (student.attributes.contains("英语")) {
+		availableAttributes.append("英语");
+	}
+	if (student.attributes.contains("总分")) {
+		availableAttributes.append("总分");
+	}
+	
+	// 添加其他属性（如"早读"、"积极发言"等）
+	for (auto it = student.attributes.begin(); it != student.attributes.end(); ++it) {
+		QString attrName = it.key();
+		if (attrName != "语文" && attrName != "数学" && attrName != "英语" && attrName != "总分") {
+			if (!availableAttributes.contains(attrName)) {
+				availableAttributes.append(attrName);
+			}
+		}
+	}
+	
+	// 如果没有属性，至少显示学生姓名
+	if (availableAttributes.isEmpty()) {
+		availableAttributes.append("总分"); // 默认显示总分
+	}
+	
+	dialog->setAvailableAttributes(availableAttributes);
+	dialog->setStudentInfo(student);
+	dialog->exec();
+	dialog->deleteLater();
 }
 
 // 上传座位表到服务器

@@ -3,6 +3,7 @@
 #include <QMessageBox>
 #include <QDebug>
 #include <QMap>
+#include <QApplication>
 
 StudentAttributeDialog::StudentAttributeDialog(QWidget* parent)
     : QDialog(parent)
@@ -10,11 +11,27 @@ StudentAttributeDialog::StudentAttributeDialog(QWidget* parent)
     , m_currentEditingAttribute("")
 {
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
-    setStyleSheet("background-color: #e0f0ff;");
+    setStyleSheet("background-color: #808080;"); // 灰色背景
     resize(400, 500);
+    
+    // 启用鼠标跟踪以检测鼠标进入/离开
+    setMouseTracking(true);
+
+    // 创建关闭按钮
+    m_btnClose = new QPushButton("X", this);
+    m_btnClose->setFixedSize(30, 30);
+    m_btnClose->setStyleSheet(
+        "QPushButton { background-color: orange; color: white; font-weight:bold; font-size: 14px; border: 1px solid #555; border-radius: 4px; }"
+        "QPushButton:hover { background-color: #cc6600; }"
+    );
+    m_btnClose->hide(); // 初始隐藏
+    connect(m_btnClose, &QPushButton::clicked, this, &QDialog::close);
+    
+    // 为关闭按钮安装事件过滤器，确保鼠标在按钮上时不会隐藏
+    m_btnClose->installEventFilter(this);
 
     QVBoxLayout* outerLayout = new QVBoxLayout(this);
-    outerLayout->setContentsMargins(20, 20, 20, 20);
+    outerLayout->setContentsMargins(20, 40, 20, 20); // 增加顶部边距，为关闭按钮留出空间
     outerLayout->setSpacing(15);
 
     // 标题："期中成绩表"
@@ -279,5 +296,99 @@ void StudentAttributeDialog::clearAllHighlights()
         );
     }
     m_selectedAttribute = "";
+}
+
+// 鼠标进入窗口时显示关闭按钮
+void StudentAttributeDialog::enterEvent(QEvent* event)
+{
+    if (m_btnClose) {
+        m_btnClose->show();
+    }
+    QDialog::enterEvent(event);
+}
+
+// 鼠标离开窗口时隐藏关闭按钮
+void StudentAttributeDialog::leaveEvent(QEvent* event)
+{
+    // 检查鼠标是否真的离开了窗口（包括关闭按钮）
+    QPoint globalPos = QCursor::pos();
+    QRect widgetRect = QRect(mapToGlobal(QPoint(0, 0)), size());
+    if (!widgetRect.contains(globalPos) && m_btnClose) {
+        // 如果鼠标不在窗口内，检查是否在关闭按钮上
+        QRect btnRect = QRect(m_btnClose->mapToGlobal(QPoint(0, 0)), m_btnClose->size());
+        if (!btnRect.contains(globalPos)) {
+            m_btnClose->hide();
+        }
+    }
+    QDialog::leaveEvent(event);
+}
+
+// 窗口大小改变时更新关闭按钮位置
+void StudentAttributeDialog::resizeEvent(QResizeEvent* event)
+{
+    if (m_btnClose) {
+        m_btnClose->move(width() - 35, 5);
+    }
+    QDialog::resizeEvent(event);
+}
+
+// 窗口显示时更新关闭按钮位置
+void StudentAttributeDialog::showEvent(QShowEvent* event)
+{
+    if (m_btnClose) {
+        m_btnClose->move(width() - 35, 5);
+        // 窗口显示时也显示关闭按钮
+        m_btnClose->show();
+    }
+    
+    // 确保窗口位置在屏幕可见区域内
+    QRect screenGeometry = QApplication::desktop()->availableGeometry();
+    QRect windowGeometry = geometry();
+    
+    // 如果窗口完全在屏幕外，移动到屏幕中央
+    if (!screenGeometry.intersects(windowGeometry)) {
+        move(screenGeometry.center() - QPoint(windowGeometry.width() / 2, windowGeometry.height() / 2));
+    }
+    
+    // 确保窗口显示在最前面
+    raise();
+    activateWindow();
+    QDialog::showEvent(event);
+}
+
+// 事件过滤器，处理关闭按钮的鼠标事件
+bool StudentAttributeDialog::eventFilter(QObject* obj, QEvent* event)
+{
+    if (obj == m_btnClose) {
+        if (event->type() == QEvent::Enter) {
+            // 鼠标进入关闭按钮时确保显示
+            m_btnClose->show();
+        } else if (event->type() == QEvent::Leave) {
+            // 鼠标离开关闭按钮时，检查是否还在窗口内
+            QPoint globalPos = QCursor::pos();
+            QRect widgetRect = QRect(mapToGlobal(QPoint(0, 0)), size());
+            if (!widgetRect.contains(globalPos)) {
+                m_btnClose->hide();
+            }
+        }
+    }
+    return QDialog::eventFilter(obj, event);
+}
+
+// 重写鼠标事件以实现窗口拖动
+void StudentAttributeDialog::mousePressEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton) {
+        m_dragPosition = event->globalPos() - frameGeometry().topLeft();
+        event->accept();
+    }
+}
+
+void StudentAttributeDialog::mouseMoveEvent(QMouseEvent* event)
+{
+    if (event->buttons() & Qt::LeftButton && !m_dragPosition.isNull()) {
+        move(event->globalPos() - m_dragPosition);
+        event->accept();
+    }
 }
 

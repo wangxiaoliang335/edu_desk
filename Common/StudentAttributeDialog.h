@@ -8,6 +8,14 @@
 #include <QLineEdit>
 #include <QMap>
 #include <QList>
+#include <QMouseEvent>
+#include <QResizeEvent>
+#include <QShowEvent>
+#include <QEvent>
+#include <QPoint>
+#include <QCursor>
+#include <QRect>
+#include <QDesktopWidget>
 
 class StudentAttributeDialog : public QDialog
 {
@@ -18,7 +26,28 @@ signals:
 
 public:
     explicit StudentAttributeDialog(QWidget* parent = nullptr);
+
+protected:
+    // 鼠标进入窗口时显示关闭按钮
+    void enterEvent(QEvent* event) override;
     
+    // 鼠标离开窗口时隐藏关闭按钮
+    void leaveEvent(QEvent* event) override;
+    
+    // 窗口大小改变时更新关闭按钮位置
+    void resizeEvent(QResizeEvent* event) override;
+    
+    // 窗口显示时更新关闭按钮位置
+    void showEvent(QShowEvent* event) override;
+    
+    // 事件过滤器，处理关闭按钮的鼠标事件
+    bool eventFilter(QObject* obj, QEvent* event) override;
+    
+    // 重写鼠标事件以实现窗口拖动
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+
+public:
     // 设置学生信息
     void setStudentInfo(const struct StudentInfo& student);
     
@@ -43,5 +72,8 @@ private:
     QMap<QString, QLineEdit*> m_valueEdits; // 属性名 -> 输入框（隐藏，用于编辑）
     QString m_currentEditingAttribute; // 当前正在编辑的属性
     QString m_selectedAttribute; // 当前选中的属性
+    
+    QPushButton* m_btnClose = nullptr; // 关闭按钮
+    QPoint m_dragPosition; // 用于窗口拖动
 };
 

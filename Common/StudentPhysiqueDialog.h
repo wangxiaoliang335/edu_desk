@@ -920,7 +920,7 @@ private slots:
                 QTableWidgetItem* item = table->item(row, col);
                 if (item && !item->text().trimmed().isEmpty()) {
                     bool ok;
-                    int score = item->text().toInt(&ok);
+                    double score = item->text().toDouble(&ok);
                     if (ok) {
                         // 根据列名映射到字段名
                         QString fieldName = headerToFieldMap.value(headerName, headerName.toLower());

@@ -523,7 +523,7 @@ void MidtermGradeDialog::onUpload()
             QTableWidgetItem* item = table->item(row, colChinese);
             if (item && !item->text().trimmed().isEmpty()) {
                 bool ok;
-                int score = item->text().toInt(&ok);
+                double score = item->text().toDouble(&ok);
                 if (ok) {
                     scoreObj["chinese"] = score;
                 }
@@ -533,7 +533,7 @@ void MidtermGradeDialog::onUpload()
             QTableWidgetItem* item = table->item(row, colMath);
             if (item && !item->text().trimmed().isEmpty()) {
                 bool ok;
-                int score = item->text().toInt(&ok);
+                double score = item->text().toDouble(&ok);
                 if (ok) {
                     scoreObj["math"] = score;
                 }
@@ -543,7 +543,7 @@ void MidtermGradeDialog::onUpload()
             QTableWidgetItem* item = table->item(row, colEnglish);
             if (item && !item->text().trimmed().isEmpty()) {
                 bool ok;
-                int score = item->text().toInt(&ok);
+                double score = item->text().toDouble(&ok);
                 if (ok) {
                     scoreObj["english"] = score;
                 }
