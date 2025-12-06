@@ -51,7 +51,7 @@ public:
     MidtermGradeDialog(QString classid, QWidget* parent = nullptr);
     
     // 导入Excel数据
-    void importData(const QStringList& headers, const QList<QStringList>& dataRows);
+    void importData(const QStringList& headers, const QList<QStringList>& dataRows, const QString& excelFilePath = QString());
 
 protected:
     // 重写鼠标事件以实现窗口拖动
@@ -111,4 +111,6 @@ private:
     QString m_classid;
     QPushButton* m_btnClose = nullptr; // 关闭按钮
     QPoint m_dragPosition; // 用于窗口拖动
+    QString m_excelFilePath; // Excel文件路径
+    QString m_excelFileName; // Excel文件名
 };

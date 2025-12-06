@@ -39,7 +39,7 @@ public:
         // 去掉标题栏，但保持窗口属性
         // 使用 Dialog 标志确保窗口可以正常显示
         setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
-        setWindowTitle("列表管理");
+        setWindowTitle("学生统计表导入");
         resize(300, 200);
         setStyleSheet("background-color: #808080;");
         
@@ -51,8 +51,7 @@ public:
 
         m_classid = classid;
 
-        m_midtermGradeDlg = new MidtermGradeDialog(classid, this);
-        m_studentPhysiqueDlg = new StudentPhysiqueDialog(this);
+        // 不再预先创建对话框，根据导入的Excel文件动态创建
 
         // 创建关闭按钮
         m_btnClose = new QPushButton("X", this);
@@ -73,33 +72,14 @@ public:
         // 增加顶部边距，为关闭按钮留出空间（关闭按钮高度30，位置y=5，所以顶部至少需要40）
         mainLayout->setContentsMargins(10, 40, 10, 10);
 
-        // 添加两行列表项
-        QPushButton* btnMidterm = addRow(mainLayout, "期中成绩单");
-        QPushButton* btnPhysique = addRow(mainLayout, "学生体质统计表");
+        // 添加标题
+        QLabel* lblTitle = new QLabel("学生统计表导入");
+        lblTitle->setStyleSheet("background-color: #d3d3d3; color: black; font-size: 16px; font-weight: bold; padding: 8px; border-radius: 4px;");
+        lblTitle->setAlignment(Qt::AlignCenter);
+        mainLayout->addWidget(lblTitle);
 
-        // 连接期中成绩单按钮点击事件
-        connect(btnMidterm, &QPushButton::clicked, this, [=]() {
-            if (m_midtermGradeDlg && m_midtermGradeDlg->isHidden()) {
-                m_midtermGradeDlg->show();
-            } else if (m_midtermGradeDlg && !m_midtermGradeDlg->isHidden()) {
-                m_midtermGradeDlg->hide();
-            } else {
-                m_midtermGradeDlg = new MidtermGradeDialog(classid, this);
-                m_midtermGradeDlg->show();
-            }
-        });
-
-        // 连接学生体质统计表按钮点击事件
-        connect(btnPhysique, &QPushButton::clicked, this, [=]() {
-            if (m_studentPhysiqueDlg && m_studentPhysiqueDlg->isHidden()) {
-                m_studentPhysiqueDlg->show();
-            } else if (m_studentPhysiqueDlg && !m_studentPhysiqueDlg->isHidden()) {
-                m_studentPhysiqueDlg->hide();
-            } else {
-                m_studentPhysiqueDlg = new StudentPhysiqueDialog(this);
-                m_studentPhysiqueDlg->show();
-            }
-        });
+        // 保存主布局的引用，用于动态添加按钮
+        m_mainLayout = mainLayout;
 
         // 底部 "+"" 按钮
         QPushButton *btnAdd = new QPushButton("+");
@@ -225,6 +205,7 @@ private slots:
         // 检查文件扩展名
         QFileInfo fileInfo(fileName);
         QString suffix = fileInfo.suffix().toLower();
+        QString excelFileName = fileInfo.fileName(); // 提前获取文件名，避免重复定义
         
         QStringList headers;
         QList<QStringList> dataRows;
@@ -256,37 +237,56 @@ private slots:
         bool isMidtermGrade = false; // 期中成绩单
         bool isStudentPhysique = false; // 学生体质统计表
         
-        // 检查是否是期中成绩单（包含：学号、姓名、语文、数学、英语、总分）
-        if (headers.contains("学号") && headers.contains("姓名") && 
-            headers.contains("语文") && headers.contains("数学") && 
-            headers.contains("英语") && headers.contains("总分") &&
-            !headers.contains("小组")) {
-            isMidtermGrade = true;
-        }
-        // 检查是否是学生体质统计表（包含：小组、学号、姓名等）
-        else if (headers.contains("小组") && headers.contains("学号") && 
-                 headers.contains("姓名") && headers.contains("小组总分")) {
+        // 先判断是否包含"小组"列来区分是带小组的表还是不带小组的表
+        bool hasGroup = headers.contains("小组");
+        
+        // 只检查学号和姓名字段，其他字段都是属性字段，由服务器处理
+        bool hasStudentId = headers.contains("学号");
+        bool hasStudentName = headers.contains("姓名");
+        
+        // 如果带"小组"列，且包含学号和姓名，则是学生体质统计表（带小组的表）
+        if (hasGroup && hasStudentId && hasStudentName) {
             isStudentPhysique = true;
         }
+        // 如果不带"小组"列，且包含学号和姓名，则是期中成绩单（不带小组的表）
+        else if (!hasGroup && hasStudentId && hasStudentName) {
+            isMidtermGrade = true;
+        }
 
+        // Excel文件名已在上面获取
+        
+        // 检查是否已经导入过这个文件
+        if (m_dialogMap.contains(excelFileName)) {
+            QMessageBox::information(this, "提示", QString("文件 %1 已经导入过了！").arg(excelFileName));
+            // 显示已存在的对话框
+            QDialog* existingDlg = m_dialogMap[excelFileName];
+            if (existingDlg) {
+                existingDlg->show();
+                existingDlg->raise();
+                existingDlg->activateWindow();
+            }
+            return;
+        }
+        
         // 根据表格类型导入数据
+        QDialog* dialog = nullptr;
         if (isMidtermGrade) {
             // 比对并更新姓名（以座位表为准）
             updateNamesFromSeatInfo(headers, dataRows);
             
-            if (!m_midtermGradeDlg) {
-                m_midtermGradeDlg = new MidtermGradeDialog(m_classid, this);
-            }
-            m_midtermGradeDlg->importData(headers, dataRows);
+            MidtermGradeDialog* midtermDlg = new MidtermGradeDialog(m_classid, this);
+            // 传递Excel文件路径
+            midtermDlg->importData(headers, dataRows, fileName);
+            dialog = midtermDlg;
             
             QMessageBox::information(this, "导入成功", 
                 QString("已成功导入期中成绩单！\n共%1行数据。").arg(dataRows.size()));
             
-            m_midtermGradeDlg->show();
+            midtermDlg->show();
             
             // 延迟询问是否立即上传（等待对话框显示完成）
             QTimer::singleShot(300, this, [=]() {
-                QMessageBox msgBox(m_midtermGradeDlg);
+                QMessageBox msgBox(midtermDlg);
                 msgBox.setWindowTitle("上传确认");
                 msgBox.setText("是否立即上传到服务器？");
                 msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
@@ -297,23 +297,23 @@ private slots:
                 int ret = msgBox.exec();
                 if (ret == QMessageBox::Yes) {
                     // 直接调用上传方法
-                    QMetaObject::invokeMethod(m_midtermGradeDlg, "onUpload", Qt::QueuedConnection);
+                    QMetaObject::invokeMethod(midtermDlg, "onUpload", Qt::QueuedConnection);
                 }
             });
         } else if (isStudentPhysique) {
-            if (!m_studentPhysiqueDlg) {
-                m_studentPhysiqueDlg = new StudentPhysiqueDialog(this);
-            }
-            m_studentPhysiqueDlg->importData(headers, dataRows);
+            StudentPhysiqueDialog* physiqueDlg = new StudentPhysiqueDialog(this);
+            // 传递Excel文件路径
+            physiqueDlg->importData(headers, dataRows, fileName);
+            dialog = physiqueDlg;
             
             QMessageBox::information(this, "导入成功", 
                 QString("已成功导入学生体质统计表！\n共%1行数据。").arg(dataRows.size()));
             
-            m_studentPhysiqueDlg->show();
+            physiqueDlg->show();
             
             // 延迟询问是否立即上传（等待对话框显示完成）
             QTimer::singleShot(300, this, [=]() {
-                QMessageBox msgBox(m_studentPhysiqueDlg);
+                QMessageBox msgBox(physiqueDlg);
                 msgBox.setWindowTitle("上传确认");
                 msgBox.setText("是否立即上传到服务器？");
                 msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
@@ -324,15 +324,83 @@ private slots:
                 int ret = msgBox.exec();
                 if (ret == QMessageBox::Yes) {
                     // 直接调用上传方法
-                    QMetaObject::invokeMethod(m_studentPhysiqueDlg, "onUpload", Qt::QueuedConnection);
+                    QMetaObject::invokeMethod(physiqueDlg, "onUpload", Qt::QueuedConnection);
                 }
             });
         } else {
             QMessageBox::warning(this, "提示", 
                 "无法识别表格类型！\n\n"
-                "期中成绩单应包含：学号、姓名、语文、数学、英语、总分\n"
-                "学生体质统计表应包含：小组、学号、姓名、小组总分\n\n"
-                "请确保文件格式正确，列名匹配上述要求。");
+                "请确保表格包含'学号'和'姓名'列。");
+            return;
+        }
+        
+        // 如果成功创建对话框，则创建对应的按钮
+        if (dialog) {
+            // 保存对话框映射
+            m_dialogMap[excelFileName] = dialog;
+            
+            // 创建按钮行（在"+"按钮之前插入）
+            // 找到"+"按钮的位置
+            int insertIndex = m_mainLayout->count() - 1; // "+"按钮是最后一个
+            if (insertIndex < 0) insertIndex = 0;
+            
+            // 创建按钮行布局
+            QHBoxLayout *rowLayout = new QHBoxLayout;
+            rowLayout->setSpacing(0);
+
+            QPushButton *btnTitle = new QPushButton(excelFileName);
+            btnTitle->setStyleSheet(
+                "QPushButton { background-color: green; color: white; font-size: 14px; padding: 4px; border: 1px solid #555; }"
+                "QPushButton:hover { background-color: darkgreen; }"
+            );
+            btnTitle->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+
+            QPushButton *btnClose = new QPushButton("X");
+            btnClose->setFixedWidth(30);
+            btnClose->setStyleSheet(
+                "QPushButton { background-color: orange; color: white; font-weight:bold; border: 1px solid #555; }"
+                "QPushButton:hover { background-color: #cc6600; }"
+            );
+
+            rowLayout->addWidget(btnTitle);
+            rowLayout->addWidget(btnClose);
+            
+            // 将按钮行插入到"+"按钮之前
+            m_mainLayout->insertLayout(insertIndex, rowLayout);
+            
+            // 保存按钮映射
+            m_buttonToFileNameMap[btnTitle] = excelFileName;
+            
+            // 连接按钮点击事件
+            connect(btnTitle, &QPushButton::clicked, this, [=]() {
+                if (dialog && dialog->isHidden()) {
+                    dialog->show();
+                    dialog->raise();
+                    dialog->activateWindow();
+                } else if (dialog && !dialog->isHidden()) {
+                    dialog->hide();
+                }
+            });
+            
+            // 连接关闭按钮
+            connect(btnClose, &QPushButton::clicked, this, [=]() {
+                // 删除按钮和对话框
+                m_dialogMap.remove(excelFileName);
+                m_buttonToFileNameMap.remove(btnTitle);
+                
+                // 从布局中移除按钮行
+                m_mainLayout->removeItem(rowLayout);
+                
+                // 删除按钮和布局
+                btnTitle->deleteLater();
+                btnClose->deleteLater();
+                rowLayout->deleteLater();
+                
+                // 删除对话框
+                if (dialog) {
+                    dialog->deleteLater();
+                }
+            });
         }
     }
 
@@ -543,8 +611,13 @@ private:
     }
 
 private:
-    MidtermGradeDialog* m_midtermGradeDlg = nullptr;
-    StudentPhysiqueDialog* m_studentPhysiqueDlg = nullptr;
+    // 保存主布局的引用，用于动态添加按钮
+    QVBoxLayout* m_mainLayout = nullptr;
+    
+    // 使用QMap保存按钮和对话框的映射关系（Excel文件名 -> 对话框指针）
+    QMap<QString, QDialog*> m_dialogMap; // Excel文件名 -> 对话框
+    QMap<QPushButton*, QString> m_buttonToFileNameMap; // 按钮 -> Excel文件名
+    
     QString m_classid;
     QPushButton* m_btnClose = nullptr; // 关闭按钮
     QPoint m_dragPosition; // 用于窗口拖动

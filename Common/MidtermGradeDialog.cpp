@@ -23,6 +23,10 @@
 #include <QApplication>
 #include <QDebug>
 #include <QDate>
+#include <QHttpMultiPart>
+#include <QHttpPart>
+#include <QMimeDatabase>
+#include <QMimeType>
 
 MidtermGradeDialog::MidtermGradeDialog(QString classid, QWidget* parent) : QDialog(parent)
 {
@@ -132,9 +136,9 @@ MidtermGradeDialog::MidtermGradeDialog(QString classid, QWidget* parent) : QDial
 
     mainLayout->addWidget(table);
 
-    // 固定列索引（不能删除的列）
-    fixedColumns = { 0, 1, 2, 3, 4, 5 }; // 学号、姓名、语文、数学、英语、总分
-    nameColumnIndex = 1; // 姓名列索引
+    // 固定列索引（不能删除的列）- 初始为空，导入数据时根据实际列头动态设置
+    fixedColumns.clear();
+    nameColumnIndex = -1; // 姓名列索引，导入数据时设置
 
     // 连接信号和槽
     connect(btnAddRow, &QPushButton::clicked, this, &MidtermGradeDialog::onAddRow);
@@ -163,9 +167,22 @@ MidtermGradeDialog::MidtermGradeDialog(QString classid, QWidget* parent) : QDial
     connect(table, &QTableWidget::customContextMenuRequested, this, &MidtermGradeDialog::onTableContextMenu);
 }
 
-void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStringList>& dataRows)
+void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStringList>& dataRows, const QString& excelFilePath)
 {
     if (!table) return;
+
+    // 保存Excel文件路径和文件名
+    m_excelFilePath = excelFilePath;
+    if (!excelFilePath.isEmpty()) {
+        QFileInfo fileInfo(excelFilePath);
+        m_excelFileName = fileInfo.fileName();
+    } else {
+        m_excelFileName.clear();
+    }
+
+    // 根据导入的Excel列头动态设置表格列头
+    table->setColumnCount(headers.size());
+    table->setHorizontalHeaderLabels(headers);
 
     // 清空现有数据
     table->setRowCount(0);
@@ -176,21 +193,28 @@ void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStr
         headerMap[headers[i]] = i;
     }
 
-    // 获取固定列的索引
-    int colId = -1, colName = -1, colChinese = -1, colMath = -1, colEnglish = -1, colTotal = -1;
+    // 获取固定列的索引（根据导入的列头）
+    int colId = -1, colName = -1;
     
-    // 在表格中找到对应的列
-    for (int col = 0; col < table->columnCount(); ++col) {
-        QTableWidgetItem* headerItem = table->horizontalHeaderItem(col);
-        if (!headerItem) continue;
-        QString headerText = headerItem->text();
+    // 在导入的列头中找到对应的列
+    for (int col = 0; col < headers.size(); ++col) {
+        QString headerText = headers[col];
         
-        if (headerText == "学号") colId = col;
-        else if (headerText == "姓名") colName = col;
-        else if (headerText == "语文") colChinese = col;
-        else if (headerText == "数学") colMath = col;
-        else if (headerText == "英语") colEnglish = col;
-        else if (headerText == "总分") colTotal = col;
+        if (headerText == "学号") {
+            colId = col;
+            fixedColumns.insert(col); // 学号是固定列
+        }
+        else if (headerText == "姓名") {
+            colName = col;
+            fixedColumns.insert(col); // 姓名是固定列
+            nameColumnIndex = col; // 设置姓名列索引
+        }
+    }
+    
+    // 确保学号和姓名列都存在
+    if (colId < 0 || colName < 0) {
+        QMessageBox::warning(this, "错误", "导入的数据中必须包含'学号'和'姓名'列！");
+        return;
     }
 
     // 导入数据
@@ -207,41 +231,11 @@ void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStr
             table->setItem(row, col, item);
         }
 
-        // 填充数据
-        if (colId >= 0 && headerMap.contains("学号")) {
-            int srcCol = headerMap["学号"];
-            if (srcCol < rowData.size()) {
-                table->item(row, colId)->setText(rowData[srcCol]);
-            }
-        }
-        if (colName >= 0 && headerMap.contains("姓名")) {
-            int srcCol = headerMap["姓名"];
-            if (srcCol < rowData.size()) {
-                table->item(row, colName)->setText(rowData[srcCol]);
-            }
-        }
-        if (colChinese >= 0 && headerMap.contains("语文")) {
-            int srcCol = headerMap["语文"];
-            if (srcCol < rowData.size()) {
-                table->item(row, colChinese)->setText(rowData[srcCol]);
-            }
-        }
-        if (colMath >= 0 && headerMap.contains("数学")) {
-            int srcCol = headerMap["数学"];
-            if (srcCol < rowData.size()) {
-                table->item(row, colMath)->setText(rowData[srcCol]);
-            }
-        }
-        if (colEnglish >= 0 && headerMap.contains("英语")) {
-            int srcCol = headerMap["英语"];
-            if (srcCol < rowData.size()) {
-                table->item(row, colEnglish)->setText(rowData[srcCol]);
-            }
-        }
-        if (colTotal >= 0 && headerMap.contains("总分")) {
-            int srcCol = headerMap["总分"];
-            if (srcCol < rowData.size()) {
-                table->item(row, colTotal)->setText(rowData[srcCol]);
+        // 填充数据 - 根据导入的列头动态填充所有列
+        for (int col = 0; col < headers.size(); ++col) {
+            QString headerText = headers[col];
+            if (col < rowData.size()) {
+                table->item(row, col)->setText(rowData[col]);
             }
         }
     }
@@ -274,7 +268,7 @@ void MidtermGradeDialog::onDeleteColumn()
 
     // 检查是否是固定列
     if (fixedColumns.contains(currentCol)) {
-        QMessageBox::warning(this, "警告", "不能删除固定列（学号、姓名、语文、数学、英语、总分）");
+        QMessageBox::warning(this, "警告", "不能删除固定列（学号、姓名）");
         return;
     }
 
@@ -307,8 +301,8 @@ void MidtermGradeDialog::onAddColumn()
         return;
     }
 
-    // 在姓名列后添加
-    int insertCol = nameColumnIndex + 1;
+    // 在姓名列后添加（如果姓名列存在）
+    int insertCol = nameColumnIndex >= 0 ? nameColumnIndex + 1 : table->columnCount();
     table->insertColumn(insertCol);
     table->setHorizontalHeaderItem(insertCol, new QTableWidgetItem(columnName));
 
@@ -428,6 +422,8 @@ void MidtermGradeDialog::onExport()
 void MidtermGradeDialog::onUpload()
 {
     qDebug() << "onUpload() 方法被调用！";
+    qDebug() << "Excel文件路径:" << m_excelFilePath;
+    qDebug() << "Excel文件名:" << m_excelFileName;
     
     // 检查表格是否有数据
     if (table->rowCount() == 0) {
@@ -477,17 +473,23 @@ void MidtermGradeDialog::onUpload()
     // 从表格中读取数据
     QJsonArray scoresArray;
     
-    // 获取列索引
-    int colId = -1, colName = -1, colChinese = -1, colMath = -1, colEnglish = -1;
+    // 获取列索引（只查找学号和姓名）
+    int colId = -1, colName = -1;
+    QMap<QString, int> attributeColumnMap; // 存储所有属性列的映射（列名 -> 列索引）
+    
     for (int col = 0; col < table->columnCount(); ++col) {
         QTableWidgetItem* headerItem = table->horizontalHeaderItem(col);
         if (!headerItem) continue;
         QString headerText = headerItem->text();
-        if (headerText == "学号") colId = col;
-        else if (headerText == "姓名") colName = col;
-        else if (headerText == "语文") colChinese = col;
-        else if (headerText == "数学") colMath = col;
-        else if (headerText == "英语") colEnglish = col;
+        
+        if (headerText == "学号") {
+            colId = col;
+        } else if (headerText == "姓名") {
+            colName = col;
+        } else if (!headerText.isEmpty()) {
+            // 其他所有列都作为属性列
+            attributeColumnMap[headerText] = col;
+        }
     }
 
     if (colId < 0 || colName < 0) {
@@ -518,34 +520,23 @@ void MidtermGradeDialog::onUpload()
             scoreObj["student_name"] = studentName;
         }
 
-        // 读取成绩
-        if (colChinese >= 0) {
-            QTableWidgetItem* item = table->item(row, colChinese);
+        // 动态读取所有属性列（除了学号和姓名之外的所有列）
+        for (auto it = attributeColumnMap.begin(); it != attributeColumnMap.end(); ++it) {
+            QString columnName = it.key();
+            int col = it.value();
+            
+            QTableWidgetItem* item = table->item(row, col);
             if (item && !item->text().trimmed().isEmpty()) {
+                QString text = item->text().trimmed();
+                // 尝试转换为数字
                 bool ok;
-                double score = item->text().toDouble(&ok);
+                double score = text.toDouble(&ok);
                 if (ok) {
-                    scoreObj["chinese"] = score;
-                }
-            }
-        }
-        if (colMath >= 0) {
-            QTableWidgetItem* item = table->item(row, colMath);
-            if (item && !item->text().trimmed().isEmpty()) {
-                bool ok;
-                double score = item->text().toDouble(&ok);
-                if (ok) {
-                    scoreObj["math"] = score;
-                }
-            }
-        }
-        if (colEnglish >= 0) {
-            QTableWidgetItem* item = table->item(row, colEnglish);
-            if (item && !item->text().trimmed().isEmpty()) {
-                bool ok;
-                double score = item->text().toDouble(&ok);
-                if (ok) {
-                    scoreObj["english"] = score;
+                    // 直接使用列名作为字段名（支持中文列名）
+                    scoreObj[columnName] = score;
+                } else {
+                    // 如果不是数字，作为字符串存储（支持中文列名）
+                    scoreObj[columnName] = text;
                 }
             }
         }
@@ -567,6 +558,11 @@ void MidtermGradeDialog::onUpload()
         requestObj["remark"] = remark;
     }
     requestObj["scores"] = scoresArray;
+    
+    // 如果有Excel文件，添加文件名
+    if (!m_excelFileName.isEmpty()) {
+        requestObj["excel_file_name"] = m_excelFileName;
+    }
 
     QJsonDocument doc(requestObj);
     QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
@@ -575,14 +571,58 @@ void MidtermGradeDialog::onUpload()
     QString url = "http://47.100.126.194:5000/student-scores/save";
     QNetworkRequest request;
     request.setUrl(QUrl(url));
-    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-
-    QNetworkReply* reply = networkManager->post(request, jsonData);
+    
+    QNetworkReply* reply = nullptr;
+    
+    // 如果有Excel文件，使用multipart/form-data格式上传
+    if (!m_excelFilePath.isEmpty() && QFile::exists(m_excelFilePath)) {
+        QHttpMultiPart* multiPart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
+        
+        // 添加JSON数据部分
+        QHttpPart jsonPart;
+        jsonPart.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("form-data; name=\"data\""));
+        jsonPart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant("application/json"));
+        jsonPart.setBody(jsonData);
+        multiPart->append(jsonPart);
+        
+        // 添加Excel文件部分
+        QFile* file = new QFile(m_excelFilePath);
+        if (file->open(QIODevice::ReadOnly)) {
+            QHttpPart filePart;
+            filePart.setHeader(QNetworkRequest::ContentDispositionHeader, 
+                QVariant(QString("form-data; name=\"excel_file\"; filename=\"%1\"").arg(m_excelFileName)));
+            
+            // 设置MIME类型
+            QMimeDatabase mimeDb;
+            QMimeType mimeType = mimeDb.mimeTypeForFile(m_excelFilePath);
+            filePart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(mimeType.name()));
+            
+            filePart.setBodyDevice(file);
+            file->setParent(multiPart); // 确保文件在multiPart销毁时也被删除
+            multiPart->append(filePart);
+        } else {
+            delete file;
+            delete multiPart;
+            QMessageBox::warning(this, "错误", "无法打开Excel文件！");
+            return;
+        }
+        
+        reply = networkManager->post(request, multiPart);
+        multiPart->setParent(reply); // 确保multiPart在reply销毁时也被删除
+    } else {
+        // 没有Excel文件，使用JSON格式上传
+        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        reply = networkManager->post(request, jsonData);
+    }
 
     // 显示上传中提示
     QMessageBox* progressMsg = new QMessageBox(this);
     progressMsg->setWindowTitle("上传中");
-    progressMsg->setText("正在上传成绩数据到服务器...");
+    QString uploadText = "正在上传成绩数据到服务器...";
+    if (!m_excelFileName.isEmpty()) {
+        uploadText += QString("\n包含Excel文件：%1").arg(m_excelFileName);
+    }
+    progressMsg->setText(uploadText);
     progressMsg->setStandardButtons(QMessageBox::NoButton);
     progressMsg->show();
 
@@ -728,23 +768,22 @@ void MidtermGradeDialog::openSeatingArrangementDialog()
     // 从表格中读取学生数据
     QList<StudentInfo> students;
     
-    // 获取列索引
-    int colId = -1, colName = -1, colTotal = -1, colChinese = -1, colMath = -1, colEnglish = -1;
-    QMap<QString, int> otherColumns; // 存储其他列（如"背诵"等）
+    // 获取列索引（只查找学号和姓名，其他列都作为属性列）
+    int colId = -1, colName = -1;
+    QMap<QString, int> attributeColumns; // 存储所有属性列（列名 -> 列索引）
     
     for (int col = 0; col < table->columnCount(); ++col) {
         QTableWidgetItem* headerItem = table->horizontalHeaderItem(col);
         if (!headerItem) continue;
         QString headerText = headerItem->text();
-        if (headerText == "学号") colId = col;
-        else if (headerText == "姓名") colName = col;
-        else if (headerText == "总分") colTotal = col;
-        else if (headerText == "语文") colChinese = col;
-        else if (headerText == "数学") colMath = col;
-        else if (headerText == "英语") colEnglish = col;
-        else {
-            // 其他列（如"背诵"等）也保存起来
-            otherColumns[headerText] = col;
+        
+        if (headerText == "学号") {
+            colId = col;
+        } else if (headerText == "姓名") {
+            colName = col;
+        } else if (!headerText.isEmpty()) {
+            // 其他所有列都作为属性列
+            attributeColumns[headerText] = col;
         }
     }
     
@@ -769,56 +808,9 @@ void MidtermGradeDialog::openSeatingArrangementDialog()
             }
         }
         
-        // 获取总分作为排序依据
-        if (colTotal >= 0) {
-            QTableWidgetItem* totalItem = table->item(row, colTotal);
-            if (totalItem && !totalItem->text().trimmed().isEmpty()) {
-                bool ok;
-                student.score = totalItem->text().toDouble(&ok);
-                if (!ok) student.score = 0;
-                // 同时保存到 attributes 中
-                student.attributes["总分"] = student.score;
-            } else {
-                student.score = 0;
-            }
-        } else {
-            student.score = 0;
-        }
-        
-        // 读取各科成绩并填充到 attributes 中
-        if (colChinese >= 0) {
-            QTableWidgetItem* item = table->item(row, colChinese);
-            if (item && !item->text().trimmed().isEmpty()) {
-                bool ok;
-                double score = item->text().toDouble(&ok);
-                if (ok) {
-                    student.attributes["语文"] = score;
-                }
-            }
-        }
-        if (colMath >= 0) {
-            QTableWidgetItem* item = table->item(row, colMath);
-            if (item && !item->text().trimmed().isEmpty()) {
-                bool ok;
-                double score = item->text().toDouble(&ok);
-                if (ok) {
-                    student.attributes["数学"] = score;
-                }
-            }
-        }
-        if (colEnglish >= 0) {
-            QTableWidgetItem* item = table->item(row, colEnglish);
-            if (item && !item->text().trimmed().isEmpty()) {
-                bool ok;
-                double score = item->text().toDouble(&ok);
-                if (ok) {
-                    student.attributes["英语"] = score;
-                }
-            }
-        }
-        
-        // 读取其他列（如"背诵"等）并填充到 attributes 中
-        for (auto it = otherColumns.begin(); it != otherColumns.end(); ++it) {
+        // 读取所有属性列并填充到 attributes 中
+        double totalScore = 0.0;
+        for (auto it = attributeColumns.begin(); it != attributeColumns.end(); ++it) {
             QString columnName = it.key();
             int col = it.value();
             QTableWidgetItem* item = table->item(row, col);
@@ -827,8 +819,20 @@ void MidtermGradeDialog::openSeatingArrangementDialog()
                 double score = item->text().toDouble(&ok);
                 if (ok) {
                     student.attributes[columnName] = score;
+                    // 如果列名是"总分"，则作为排序依据
+                    if (columnName == "总分") {
+                        student.score = score;
+                    } else {
+                        // 累加所有数值列作为总分（如果总分列不存在）
+                        totalScore += score;
+                    }
                 }
             }
+        }
+        
+        // 如果没有"总分"列，使用累加值
+        if (student.score == 0 && totalScore > 0) {
+            student.score = totalScore;
         }
         
         student.originalIndex = students.size();

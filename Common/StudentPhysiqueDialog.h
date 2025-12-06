@@ -43,6 +43,11 @@
 #include <QJsonArray>
 #include <algorithm>
 #include <QDebug>
+#include <QHttpMultiPart>
+#include <QHttpPart>
+#include <QMimeDatabase>
+#include <QMimeType>
+#include <QFileInfo>
 #include "StudentPhysiqueTableWidget.h"
 
 // 单元格注释窗口
@@ -261,9 +266,37 @@ public:
     }
 
     // 导入Excel数据
-    void importData(const QStringList& headers, const QList<QStringList>& dataRows)
+    void importData(const QStringList& headers, const QList<QStringList>& dataRows, const QString& excelFilePath = QString())
     {
         if (!table) return;
+
+        // 保存Excel文件路径和文件名
+        m_excelFilePath = excelFilePath;
+        if (!excelFilePath.isEmpty()) {
+            QFileInfo fileInfo(excelFilePath);
+            m_excelFileName = fileInfo.fileName();
+        } else {
+            m_excelFileName.clear();
+        }
+
+        // 根据导入的Excel列头动态设置表格列头
+        // 如果导入的列头中没有"总分"，则添加；如果没有"小组总分"且带小组列，则添加
+        QStringList tableHeaders = headers;
+        bool hasTotal = tableHeaders.contains("总分");
+        bool hasGroupTotal = tableHeaders.contains("小组总分");
+        bool hasGroup = tableHeaders.contains("小组");
+        
+        // 确保有"总分"列（如果导入的数据中没有，则添加）
+        if (!hasTotal) {
+            tableHeaders.append("总分");
+        }
+        // 如果有"小组"列但没有"小组总分"列，则添加
+        if (hasGroup && !hasGroupTotal) {
+            tableHeaders.append("小组总分");
+        }
+        
+        table->setColumnCount(tableHeaders.size());
+        table->setHorizontalHeaderLabels(tableHeaders);
 
         // 清空现有数据
         table->setRowCount(0);
@@ -274,16 +307,14 @@ public:
             headerMap[headers[i]] = i;
         }
 
-        // 获取固定列的索引
+        // 获取固定列的索引（根据导入的列头）
         int colGroup = -1, colId = -1, colName = -1;
         QMap<QString, int> scoreColumnMap; // 存储其他评分列的映射
         int colTotal = -1, colGroupTotal = -1;
         
-        // 在表格中找到对应的列
-        for (int col = 0; col < table->columnCount(); ++col) {
-            QTableWidgetItem* headerItem = table->horizontalHeaderItem(col);
-            if (!headerItem) continue;
-            QString headerText = headerItem->text();
+        // 在表格列头中找到对应的列
+        for (int col = 0; col < tableHeaders.size(); ++col) {
+            QString headerText = tableHeaders[col];
             
             if (headerText == "小组") colGroup = col;
             else if (headerText == "学号") colId = col;
@@ -342,15 +373,17 @@ public:
                 }
             }
 
-            // 填充评分列
-            for (auto it = scoreColumnMap.begin(); it != scoreColumnMap.end(); ++it) {
-                QString headerName = it.key();
-                int targetCol = it.value();
-                if (headerMap.contains(headerName)) {
-                    int srcCol = headerMap[headerName];
-                    if (srcCol < rowData.size()) {
-                        table->item(row, targetCol)->setText(rowData[srcCol]);
-                    }
+            // 填充所有导入的列数据（除了已经填充的固定列）
+            for (int col = 0; col < headers.size(); ++col) {
+                QString headerText = headers[col];
+                // 跳过已经填充的固定列（小组、学号、姓名）
+                if (headerText == "小组" || headerText == "学号" || headerText == "姓名") {
+                    continue;
+                }
+                // 找到该列在表格中的位置
+                int targetCol = tableHeaders.indexOf(headerText);
+                if (targetCol >= 0 && col < rowData.size()) {
+                    table->item(row, targetCol)->setText(rowData[col]);
                 }
             }
         }
@@ -776,6 +809,10 @@ private slots:
 
     void onUpload()
     {
+        qDebug() << "StudentPhysiqueDialog::onUpload() 方法被调用！";
+        qDebug() << "Excel文件路径:" << m_excelFilePath;
+        qDebug() << "Excel文件名:" << m_excelFileName;
+        
         // 检查表格是否有数据
         if (table->rowCount() == 0) {
             QMessageBox::warning(this, "提示", "表格中没有数据，无法上传！");
@@ -945,6 +982,11 @@ private slots:
             requestObj["remark"] = remark;
         }
         requestObj["group_scores"] = groupScoresArray;
+        
+        // 如果有Excel文件，添加文件名
+        if (!m_excelFileName.isEmpty()) {
+            requestObj["excel_file_name"] = m_excelFileName;
+        }
 
         QJsonDocument doc(requestObj);
         QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
@@ -953,14 +995,58 @@ private slots:
         QString url = "http://47.100.126.194:5000/group-scores/save";
         QNetworkRequest request;
         request.setUrl(QUrl(url));
-        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-
-        QNetworkReply* reply = networkManager->post(request, jsonData);
+        
+        QNetworkReply* reply = nullptr;
+        
+        // 如果有Excel文件，使用multipart/form-data格式上传
+        if (!m_excelFilePath.isEmpty() && QFile::exists(m_excelFilePath)) {
+            QHttpMultiPart* multiPart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
+            
+            // 添加JSON数据部分
+            QHttpPart jsonPart;
+            jsonPart.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("form-data; name=\"data\""));
+            jsonPart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant("application/json"));
+            jsonPart.setBody(jsonData);
+            multiPart->append(jsonPart);
+            
+            // 添加Excel文件部分
+            QFile* file = new QFile(m_excelFilePath);
+            if (file->open(QIODevice::ReadOnly)) {
+                QHttpPart filePart;
+                filePart.setHeader(QNetworkRequest::ContentDispositionHeader, 
+                    QVariant(QString("form-data; name=\"excel_file\"; filename=\"%1\"").arg(m_excelFileName)));
+                
+                // 设置MIME类型
+                QMimeDatabase mimeDb;
+                QMimeType mimeType = mimeDb.mimeTypeForFile(m_excelFilePath);
+                filePart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(mimeType.name()));
+                
+                filePart.setBodyDevice(file);
+                file->setParent(multiPart); // 确保文件在multiPart销毁时也被删除
+                multiPart->append(filePart);
+            } else {
+                delete file;
+                delete multiPart;
+                QMessageBox::warning(this, "错误", "无法打开Excel文件！");
+                return;
+            }
+            
+            reply = networkManager->post(request, multiPart);
+            multiPart->setParent(reply); // 确保multiPart在reply销毁时也被删除
+        } else {
+            // 没有Excel文件，使用JSON格式上传
+            request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+            reply = networkManager->post(request, jsonData);
+        }
 
         // 显示上传中提示
         QMessageBox* progressMsg = new QMessageBox(this);
         progressMsg->setWindowTitle("上传中");
-        progressMsg->setText("正在上传小组积分数据到服务器...");
+        QString uploadText = "正在上传小组积分数据到服务器...";
+        if (!m_excelFileName.isEmpty()) {
+            uploadText += QString("\n包含Excel文件：%1").arg(m_excelFileName);
+        }
+        progressMsg->setText(uploadText);
         progressMsg->setStandardButtons(QMessageBox::NoButton);
         progressMsg->show();
 
@@ -1422,4 +1508,6 @@ private:
     CellCommentWidget* commentWidget = nullptr; // 注释窗口
     QPushButton* m_btnClose = nullptr; // 关闭按钮
     QPoint m_dragPosition; // 用于窗口拖动
+    QString m_excelFilePath; // Excel文件路径
+    QString m_excelFileName; // Excel文件名
 };
