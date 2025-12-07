@@ -7,8 +7,13 @@
 #include <QGraphicsDropShadowEffect>
 #include <QMouseEvent>
 #include <QApplication>
+#include <QThread>
 #include <random>
 #include <algorithm>
+#include <QSet>
+#include <QFile>
+#include <QTextStream>
+#include <QTextCodec>
 
 RandomCallDialog::RandomCallDialog(QWidget* parent)
     : QDialog(parent)
@@ -138,7 +143,49 @@ RandomCallDialog::RandomCallDialog(QWidget* parent)
     tableComboBox->hide();
     connect(tableComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, btnTable](int index) {
         btnTable->setText(tableComboBox->itemText(index));
-        updateParticipants();
+        
+        // 加载对应Excel文件的数据
+        if (index >= 0 && index < tableComboBox->count()) {
+            QString tableName = tableComboBox->itemText(index);
+            QString filePath = m_excelFileMap[tableName];
+            
+            if (!filePath.isEmpty()) {
+                QStringList headers;
+                QList<QStringList> dataRows;
+                
+                QFileInfo fileInfo(filePath);
+                QString suffix = fileInfo.suffix().toLower();
+                
+                bool readSuccess = false;
+                if (suffix == "xlsx" || suffix == "xls") {
+                    readSuccess = readExcelFile(filePath, headers, dataRows);
+                } else if (suffix == "csv") {
+                    readSuccess = readCSVFile(filePath, headers, dataRows);
+                }
+                
+                if (readSuccess && !headers.isEmpty()) {
+                    // 从Excel数据创建学生信息列表
+                    createStudentsFromExcelData(headers, dataRows);
+                    
+                    // 更新属性下拉框
+                    attributeComboBox->clear();
+                    for (const QString& header : headers) {
+                        if (header != "学号" && header != "姓名" && header != "小组" && !header.isEmpty()) {
+                            attributeComboBox->addItem(header);
+                        }
+                    }
+                    
+                    if (attributeComboBox->count() > 0) {
+                        attributeComboBox->setCurrentIndex(0);
+                        currentAttribute = attributeComboBox->currentText();
+                    }
+                    
+                    updateParticipants();
+                }
+            }
+        } else {
+            updateParticipants();
+        }
     });
     connect(btnTable, &QPushButton::clicked, this, [this, btnTable]() {
         // 显示下拉菜单
@@ -152,11 +199,7 @@ RandomCallDialog::RandomCallDialog(QWidget* parent)
     });
 
     attributeComboBox = new QComboBox(this);
-    attributeComboBox->addItem("总分");
-    attributeComboBox->addItem("语文");
-    attributeComboBox->addItem("数学");
-    attributeComboBox->addItem("英语");
-    attributeComboBox->setCurrentText("数学");
+    // 属性下拉框将在加载Excel文件时动态填充
     attributeComboBox->hide();
     connect(attributeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, btnAttr](int index) {
         btnAttr->setText(attributeComboBox->itemText(index));
@@ -249,8 +292,8 @@ RandomCallDialog::RandomCallDialog(QWidget* parent)
     connect(maxValueEdit, &QLineEdit::textChanged, this, &RandomCallDialog::onRangeChanged);
     connect(btnConfirm, &QPushButton::clicked, this, &RandomCallDialog::onConfirm);
 
-    // 初始化当前属性
-    currentAttribute = "数学";
+    // 初始化当前属性（将在加载Excel文件时动态设置）
+    currentAttribute = "";
 
     // 初始化动画定时器
     animationTimer = new QTimer(this);
@@ -338,6 +381,16 @@ void RandomCallDialog::onAnimationFinished()
         isAnimating = false;
         qDebug() << "动画结束，步数:" << animationStep;
         
+        // 先清除所有高亮，确保没有残留的高亮效果
+        clearAllHighlights();
+        
+        // 强制刷新界面，确保清除效果可见
+        if (m_seatTable) {
+            m_seatTable->update();
+            m_seatTable->repaint();
+            QApplication::processEvents();
+        }
+        
         // 随机选择一个参与者
         if (!m_participants.isEmpty()) {
             std::random_device rd;
@@ -348,16 +401,39 @@ void RandomCallDialog::onAnimationFinished()
             
             qDebug() << "最终选中的学生ID:" << selectedStudentId << "，姓名:" << m_participants[randomIndex].name;
             
-            // 高亮选中的学生
-            highlightStudent(selectedStudentId, true);
+            // 保存学生信息用于延迟显示
+            QString studentName = m_participants[randomIndex].name;
+            QString studentId = selectedStudentId;
             
-            // 使用自定义消息对话框
-            RandomCallMessageDialog* msgDlg = new RandomCallMessageDialog(this);
-            msgDlg->setTitle("随机点名");
-            msgDlg->setMessage(QString("选中学生: %1 (学号: %2)").arg(m_participants[randomIndex].name).arg(selectedStudentId));
-            msgDlg->setTitleBarColor(QColor(85, 85, 85));  // RGB(85, 85, 85)
-            msgDlg->setBackgroundColor(QColor(85, 85, 85));  // RGB(85, 85, 85)
-            msgDlg->exec();
+            // 使用单次定时器延迟高亮，确保清除操作完成后再高亮
+            QTimer::singleShot(50, this, [this, studentId]() {
+                // 再次清除所有高亮（防止在延迟期间有其他高亮）
+                clearAllHighlights();
+                QApplication::processEvents();
+                
+                // 高亮选中的学生（确保只高亮一个）
+                highlightStudent(studentId, true);
+                
+                // 强制刷新界面，确保高亮效果可见
+                if (m_seatTable) {
+                    m_seatTable->update();
+                    m_seatTable->repaint();
+                    QApplication::processEvents();
+                }
+                
+                qDebug() << "已高亮选中的学生ID:" << studentId;
+            });
+            
+            // 延迟显示消息对话框，确保高亮效果先显示
+            QTimer::singleShot(150, this, [this, studentName, studentId]() {
+                // 使用自定义消息对话框
+                RandomCallMessageDialog* msgDlg = new RandomCallMessageDialog(this);
+                msgDlg->setTitle("随机点名");
+                msgDlg->setMessage(QString("选中学生: %1 (学号: %2)").arg(studentName).arg(studentId));
+                msgDlg->setTitleBarColor(QColor(85, 85, 85));  // RGB(85, 85, 85)
+                msgDlg->setBackgroundColor(QColor(85, 85, 85));  // RGB(85, 85, 85)
+                msgDlg->exec();
+            });
         }
         return;
     }
@@ -414,13 +490,27 @@ void RandomCallDialog::onSeatClicked()
     // 打开属性编辑对话框
     StudentAttributeDialog* attrDlg = new StudentAttributeDialog(this);
     
-    // 设置可用属性列表（根据当前选择的表格和属性）
-    QList<QString> attributes;
-    if (tableComboBox->currentText() == "期中成绩表") {
-        attributes = QStringList() << "背诵" << "语文" << "数学" << "英语" << "总分";
-    } else {
-        attributes = QStringList() << "身高" << "体重" << "肺活量" << "50米跑";
+    // 设置标题为当前选中的表格名称
+    if (tableComboBox && tableComboBox->count() > 0) {
+        QString currentTable = tableComboBox->currentText();
+        attrDlg->setTitle(currentTable);
     }
+    
+    // 动态获取可用属性列表（从学生数据中获取所有属性）
+    QList<QString> attributes;
+    QSet<QString> attributeSet; // 使用Set避免重复
+    
+    // 遍历所有学生，收集所有属性名称
+    for (const auto& s : m_students) {
+        for (auto it = s.attributes.begin(); it != s.attributes.end(); ++it) {
+            attributeSet.insert(it.key());
+        }
+    }
+    
+    // 转换为列表并排序
+    attributes = attributeSet.values();
+    std::sort(attributes.begin(), attributes.end());
+    
     attrDlg->setAvailableAttributes(attributes);
     
     // 设置学生信息
@@ -482,19 +572,14 @@ void RandomCallDialog::updateParticipants()
     // 根据当前选择的属性筛选参与者
     QString selectedAttr = currentAttribute;
     for (const auto& student : m_students) {
-        double value = student.score; // 默认使用score
+        double value = 0;
         
-        // 如果学生有该属性的值，使用属性值
+        // 直接从学生属性中获取值
         if (student.attributes.contains(selectedAttr)) {
             value = student.attributes[selectedAttr];
-        } else if (selectedAttr == "总分" && student.attributes.contains("总分")) {
-            value = student.attributes["总分"];
-        } else if (selectedAttr == "数学" && student.attributes.contains("数学")) {
-            value = student.attributes["数学"];
-        } else if (selectedAttr == "语文" && student.attributes.contains("语文")) {
-            value = student.attributes["语文"];
-        } else if (selectedAttr == "英语" && student.attributes.contains("英语")) {
-            value = student.attributes["英语"];
+        } else {
+            // 如果学生没有该属性，跳过该学生
+            continue;
         }
         
         if (value >= minValue && value <= maxValue) {
@@ -556,6 +641,25 @@ void RandomCallDialog::highlightStudent(const QString& studentId, bool highlight
         
         // 确保按钮可见（提升到最前）
         btn->raise();
+        btn->show(); // 确保按钮可见
+        btn->setVisible(true); // 再次确保可见
+        
+        // 如果按钮在表格中，尝试滚动到按钮位置
+        if (m_seatTable) {
+            // 查找按钮在表格中的位置
+            for (int row = 0; row < 6; ++row) {
+                for (int col = 0; col < 10; ++col) {
+                    QPushButton* cellBtn = qobject_cast<QPushButton*>(m_seatTable->cellWidget(row, col));
+                    if (cellBtn == btn) {
+                        // 滚动到该单元格
+                        m_seatTable->scrollToItem(m_seatTable->item(row, col), QAbstractItemView::EnsureVisible);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // 强制更新按钮和表格
         btn->repaint(); // 强制重绘
         btn->update(); // 更新显示
         
@@ -564,6 +668,23 @@ void RandomCallDialog::highlightStudent(const QString& studentId, bool highlight
             m_seatTable->update();
             m_seatTable->repaint();
         }
+        
+        // 多次处理事件，确保界面更新
+        QApplication::processEvents();
+        QApplication::processEvents();
+        
+        // 再次强制更新，确保高亮效果显示
+        QTimer::singleShot(10, this, [btn, m_seatTable = this->m_seatTable]() {
+            if (btn) {
+                btn->repaint();
+                btn->update();
+            }
+            if (m_seatTable) {
+                m_seatTable->update();
+                m_seatTable->repaint();
+            }
+            QApplication::processEvents();
+        });
         
         qDebug() << "高亮学生ID:" << studentId << "，按钮位置:" << btn->pos() << "，按钮文本:" << btn->text();
     } else {
@@ -580,17 +701,35 @@ void RandomCallDialog::clearAllHighlights()
 {
     if (!m_seatTable) return;
     
+    // 遍历所有座位按钮，清除高亮效果
     for (int row = 0; row < 6; ++row) {
         for (int col = 0; col < 10; ++col) {
             QPushButton* btn = qobject_cast<QPushButton*>(m_seatTable->cellWidget(row, col));
             if (btn && btn->property("isSeat").toBool()) {
-                btn->setGraphicsEffect(nullptr);
+                // 先移除图形效果（Qt会自动删除旧的效果对象）
+                if (btn->graphicsEffect()) {
+                    btn->setGraphicsEffect(nullptr);
+                }
+                
                 // 恢复原始样式
                 if (originalStyles.contains(btn)) {
                     btn->setStyleSheet(originalStyles[btn]);
+                } else {
+                    // 如果没有保存原始样式，使用默认样式
+                    btn->setStyleSheet("");
                 }
+                
+                // 强制更新按钮
+                btn->update();
+                btn->repaint();
             }
         }
+    }
+    
+    // 强制更新表格
+    if (m_seatTable) {
+        m_seatTable->update();
+        m_seatTable->repaint();
     }
 }
 
@@ -679,5 +818,418 @@ void RandomCallDialog::mouseReleaseEvent(QMouseEvent* event)
         event->accept();
     }
     QDialog::mouseReleaseEvent(event);
+}
+
+void RandomCallDialog::closeEvent(QCloseEvent* event)
+{
+    // 断开座位按钮的连接，恢复原来的行为
+    restoreSeatButtonConnections();
+    QDialog::closeEvent(event);
+}
+
+void RandomCallDialog::hideEvent(QHideEvent* event)
+{
+    // 断开座位按钮的连接，恢复原来的行为
+    restoreSeatButtonConnections();
+    QDialog::hideEvent(event);
+}
+
+// 恢复座位按钮的原始连接
+void RandomCallDialog::restoreSeatButtonConnections()
+{
+    if (!m_seatTable) return;
+    
+    // 断开所有座位按钮与 onSeatClicked 的连接
+    for (int row = 0; row < 6; ++row) {
+        for (int col = 0; col < 10; ++col) {
+            QPushButton* btn = qobject_cast<QPushButton*>(m_seatTable->cellWidget(row, col));
+            if (btn && btn->property("isSeat").toBool()) {
+                // 断开与 onSeatClicked 的连接
+                btn->disconnect(this);
+                // 清除高亮效果
+                btn->setGraphicsEffect(nullptr);
+                if (originalStyles.contains(btn)) {
+                    btn->setStyleSheet(originalStyles[btn]);
+                }
+            }
+        }
+    }
+    
+    // 清除选中的学生ID
+    selectedStudentId.clear();
+    isAnimating = false;
+    
+    qDebug() << "已恢复座位按钮的原始连接";
+}
+
+// 加载已下载的Excel文件并更新表格和属性选择
+void RandomCallDialog::loadExcelFiles(const QString& classId)
+{
+    m_classId = classId;
+    
+    // 获取学校ID和班级ID
+    UserInfo userInfo = CommonInfo::GetData();
+    QString schoolId = userInfo.schoolId;
+    
+    if (schoolId.isEmpty() || classId.isEmpty()) {
+        qDebug() << "学校ID或班级ID为空，无法加载Excel文件";
+        return;
+    }
+    
+    // 构建Excel文件目录路径
+    QString baseDir = QCoreApplication::applicationDirPath() + "/excel_files";
+    QString schoolDir = baseDir + "/" + schoolId;
+    QString classDir = schoolDir + "/" + classId;
+    
+    QDir dir(classDir);
+    if (!dir.exists()) {
+        qDebug() << "Excel文件目录不存在:" << classDir;
+        return;
+    }
+    
+    // 获取目录中的所有Excel文件
+    QStringList filters;
+    filters << "*.xlsx" << "*.xls" << "*.csv";
+    QFileInfoList fileList = dir.entryInfoList(filters, QDir::Files);
+    
+    qDebug() << "找到" << fileList.size() << "个Excel文件";
+    
+    // 收集所有Excel文件
+    QStringList excelFiles;
+    m_excelFileMap.clear();
+    
+    for (const QFileInfo& fileInfo : fileList) {
+        QString filePath = fileInfo.absoluteFilePath();
+        QString fileName = fileInfo.baseName(); // 去掉扩展名的文件名
+        
+        excelFiles.append(fileName);
+        m_excelFileMap[fileName] = filePath;
+    }
+    
+    // 更新表格和属性下拉框
+    updateTableAndAttributeComboBoxes(excelFiles);
+    
+    // 如果有Excel文件，加载第一个文件的数据
+    if (!excelFiles.isEmpty()) {
+        QString firstTable = excelFiles.first();
+        QString firstFilePath = m_excelFileMap[firstTable];
+        
+        // 读取Excel文件
+        QStringList headers;
+        QList<QStringList> dataRows;
+        
+        QFileInfo fileInfo(firstFilePath);
+        QString suffix = fileInfo.suffix().toLower();
+        
+        bool readSuccess = false;
+        if (suffix == "xlsx" || suffix == "xls") {
+            readSuccess = readExcelFile(firstFilePath, headers, dataRows);
+        } else if (suffix == "csv") {
+            readSuccess = readCSVFile(firstFilePath, headers, dataRows);
+        }
+        
+        if (readSuccess && !headers.isEmpty()) {
+            // 从Excel数据创建学生信息列表
+            createStudentsFromExcelData(headers, dataRows);
+            
+            // 更新参与者列表
+            updateParticipants();
+        }
+    }
+}
+
+// 更新表格和属性下拉框
+void RandomCallDialog::updateTableAndAttributeComboBoxes(const QStringList& excelFiles)
+{
+    // 清空并更新表格下拉框
+    tableComboBox->clear();
+    for (const QString& fileName : excelFiles) {
+        tableComboBox->addItem(fileName);
+    }
+    
+    // 如果当前选择的表格不在列表中，选择第一个
+    if (tableComboBox->count() > 0) {
+        tableComboBox->setCurrentIndex(0);
+    }
+    
+    // 更新属性下拉框（需要读取当前选择的Excel文件）
+    if (tableComboBox->count() > 0) {
+        QString currentTable = tableComboBox->currentText();
+        QString filePath = m_excelFileMap[currentTable];
+        
+        if (!filePath.isEmpty()) {
+            QStringList headers;
+            QList<QStringList> dataRows;
+            
+            QFileInfo fileInfo(filePath);
+            QString suffix = fileInfo.suffix().toLower();
+            
+            bool readSuccess = false;
+            if (suffix == "xlsx" || suffix == "xls") {
+                readSuccess = readExcelFile(filePath, headers, dataRows);
+            } else if (suffix == "csv") {
+                readSuccess = readCSVFile(filePath, headers, dataRows);
+            }
+            
+            if (readSuccess && !headers.isEmpty()) {
+                // 更新属性下拉框（排除固定列）
+                attributeComboBox->clear();
+                for (const QString& header : headers) {
+                    if (header != "学号" && header != "姓名" && header != "小组" && !header.isEmpty()) {
+                        attributeComboBox->addItem(header);
+                    }
+                }
+                
+                // 如果当前属性不在列表中，选择第一个
+                if (attributeComboBox->count() > 0) {
+                    int index = attributeComboBox->findText(currentAttribute);
+                    if (index >= 0) {
+                        attributeComboBox->setCurrentIndex(index);
+                    } else {
+                        attributeComboBox->setCurrentIndex(0);
+                        currentAttribute = attributeComboBox->currentText();
+                    }
+                }
+            }
+        }
+    }
+}
+
+// 读取Excel文件
+bool RandomCallDialog::readExcelFile(const QString& fileName, QStringList& headers, QList<QStringList>& dataRows)
+{
+    using namespace QXlsx;
+    
+    if (!QFile::exists(fileName)) {
+        return false;
+    }
+    
+    Document xlsx(fileName);
+    
+    // 读取第一行作为表头
+    int col = 1;
+    headers.clear();
+    while (true) {
+        QVariant cellValue = xlsx.read(1, col);
+        if (cellValue.isNull()) {
+            if (col == 1) {
+                return false;
+            }
+            break;
+        }
+        QString cellText = cellValue.toString().trimmed();
+        if (cellText.isEmpty() && col > 1) {
+            break;
+        }
+        headers.append(cellText);
+        ++col;
+        if (col > 1000) {
+            break;
+        }
+    }
+    
+    if (headers.isEmpty()) {
+        return false;
+    }
+    
+    // 读取数据行
+    dataRows.clear();
+    int row = 2;
+    int maxRows = 10000;
+    
+    while (row <= maxRows) {
+        QStringList rowData;
+        bool hasData = false;
+        
+        for (int c = 1; c <= headers.size(); ++c) {
+            QVariant cellValue = xlsx.read(row, c);
+            QString cellText = cellValue.isNull() ? "" : cellValue.toString().trimmed();
+            rowData.append(cellText);
+            if (!cellText.isEmpty()) {
+                hasData = true;
+            }
+        }
+        
+        if (!hasData) {
+            bool allEmpty = true;
+            for (int checkRow = row; checkRow < row + 3 && checkRow <= maxRows; ++checkRow) {
+                for (int c = 1; c <= headers.size(); ++c) {
+                    QVariant cellValue = xlsx.read(checkRow, c);
+                    if (!cellValue.isNull() && !cellValue.toString().trimmed().isEmpty()) {
+                        allEmpty = false;
+                        break;
+                    }
+                }
+                if (!allEmpty) break;
+            }
+            if (allEmpty) {
+                break;
+            }
+        }
+        
+        dataRows.append(rowData);
+        ++row;
+    }
+    
+    return true;
+}
+
+// 读取CSV文件
+bool RandomCallDialog::readCSVFile(const QString& fileName, QStringList& headers, QList<QStringList>& dataRows)
+{
+    QFile file(fileName);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return false;
+    }
+    
+    QTextStream in(&file);
+    in.setCodec("UTF-8");
+    
+    QString content = in.readAll();
+    if (content.startsWith("\xEF\xBB\xBF")) {
+        content = content.mid(3);
+    }
+    
+    // 解析CSV内容
+    QStringList lines;
+    QString currentLine;
+    bool inQuotes = false;
+    
+    for (int i = 0; i < content.length(); ++i) {
+        QChar c = content[i];
+        if (c == '"') {
+            inQuotes = !inQuotes;
+            currentLine += c;
+        } else if (c == '\n' && !inQuotes) {
+            if (!currentLine.isEmpty()) {
+                lines.append(currentLine);
+            }
+            currentLine.clear();
+        } else {
+            currentLine += c;
+        }
+    }
+    if (!currentLine.isEmpty()) {
+        lines.append(currentLine);
+    }
+    
+    if (lines.isEmpty()) {
+        file.close();
+        return false;
+    }
+    
+    // 解析CSV行的辅助函数
+    auto parseCSVLine = [](const QString& line) -> QStringList {
+        QStringList fields;
+        QString currentField;
+        bool inQuotes = false;
+        
+        for (int i = 0; i < line.length(); ++i) {
+            QChar c = line[i];
+            if (c == '"') {
+                if (i + 1 < line.length() && line[i + 1] == '"') {
+                    currentField += '"';
+                    ++i;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (c == ',' && !inQuotes) {
+                fields.append(currentField.trimmed());
+                currentField.clear();
+            } else {
+                currentField += c;
+            }
+        }
+        fields.append(currentField.trimmed());
+        return fields;
+    };
+    
+    // 读取表头
+    headers = parseCSVLine(lines[0]);
+    
+    // 读取数据行
+    dataRows.clear();
+    for (int i = 1; i < lines.size(); ++i) {
+        QStringList fields = parseCSVLine(lines[i]);
+        if (!fields.isEmpty() && !fields[0].trimmed().isEmpty()) {
+            dataRows.append(fields);
+        }
+    }
+    
+    file.close();
+    return true;
+}
+
+// 从Excel数据创建学生信息列表
+void RandomCallDialog::createStudentsFromExcelData(const QStringList& headers, const QList<QStringList>& dataRows)
+{
+    m_students.clear();
+    
+    // 找到学号和姓名列的索引
+    int colId = -1, colName = -1;
+    QMap<QString, int> attributeColumnMap;
+    
+    for (int i = 0; i < headers.size(); ++i) {
+        QString header = headers[i];
+        if (header == "学号") {
+            colId = i;
+        } else if (header == "姓名") {
+            colName = i;
+        } else if (header != "小组" && !header.isEmpty()) {
+            attributeColumnMap[header] = i;
+        }
+    }
+    
+    if (colName < 0) {
+        qWarning() << "Excel文件中缺少姓名列";
+        return;
+    }
+    
+    // 创建学生信息列表
+    for (const QStringList& rowData : dataRows) {
+        if (rowData.size() <= colName) continue;
+        
+        StudentInfo student;
+        student.id = (colId >= 0 && colId < rowData.size()) ? rowData[colId].trimmed() : "";
+        student.name = rowData[colName].trimmed();
+        
+        if (student.name.isEmpty()) continue;
+        
+        // 读取所有属性列
+        for (auto it = attributeColumnMap.begin(); it != attributeColumnMap.end(); ++it) {
+            QString columnName = it.key();
+            int col = it.value();
+            
+            if (col < rowData.size() && !rowData[col].trimmed().isEmpty()) {
+                bool ok;
+                double value = rowData[col].toDouble(&ok);
+                if (ok) {
+                    student.attributes[columnName] = value;
+                    
+                    // 如果属性是"总分"，也设置到score
+                    if (columnName == "总分") {
+                        student.score = value;
+                    }
+                }
+            }
+        }
+        
+        // 如果没有总分，尝试计算
+        if (!student.attributes.contains("总分") && student.score == 0) {
+            double total = 0;
+            for (auto it = student.attributes.begin(); it != student.attributes.end(); ++it) {
+                total += it.value();
+            }
+            if (total > 0) {
+                student.attributes["总分"] = total;
+                student.score = total;
+            }
+        }
+        
+        student.originalIndex = m_students.size();
+        m_students.append(student);
+    }
+    
+    qDebug() << "从Excel文件创建了" << m_students.size() << "个学生信息";
 }
 

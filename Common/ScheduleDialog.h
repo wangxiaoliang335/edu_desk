@@ -38,6 +38,11 @@
 #include <QUrl>
 #include <QUrlQuery>
 #include <QDate>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QFile>
+#include <QFileInfo>
 #include <QPainter>
 #include <QPainterPath>
 #include <QRegion>
@@ -213,6 +218,7 @@ public:
 		m_classid = classid;
 
 		m_httpHandler = new TAHttpHandler(this);
+		m_networkManager = new QNetworkAccessManager(this);
 		if (m_httpHandler)
 		{
 			connect(m_httpHandler, &TAHttpHandler::success, this, [=](const QString& responseString) {
@@ -308,45 +314,93 @@ public:
 								student.name = scoreObj["student_name"].toString();
 								student.originalIndex = i;
 								
-								// 读取各科成绩并填充到 attributes 中（处理 null 值）
-								if (scoreObj.contains("chinese") && !scoreObj["chinese"].isNull()) {
-									double chinese = scoreObj["chinese"].toDouble();
-									student.attributes["语文"] = chinese;
-								}
-								if (scoreObj.contains("math") && !scoreObj["math"].isNull()) {
-									double math = scoreObj["math"].toDouble();
-									student.attributes["数学"] = math;
-								}
-								if (scoreObj.contains("english") && !scoreObj["english"].isNull()) {
-									double english = scoreObj["english"].toDouble();
-									student.attributes["英语"] = english;
+								// 系统字段列表（需要排除的字段）
+								QSet<QString> systemFields;
+								systemFields << "id" << "student_id" << "student_name" << "total_score";
+								
+								// 动态读取所有属性字段（排除系统字段）
+								for (auto it = scoreObj.begin(); it != scoreObj.end(); ++it) {
+									QString key = it.key();
+									// 跳过系统字段
+									if (systemFields.contains(key)) {
+										continue;
+									}
+									
+									// 读取属性值（处理 null 值）
+									QJsonValue value = it.value();
+									if (!value.isNull()) {
+										if (value.isDouble()) {
+											student.attributes[key] = value.toDouble();
+										} else if (value.isString()) {
+											// 尝试转换为数字
+											bool ok;
+											double numValue = value.toString().toDouble(&ok);
+											if (ok) {
+												student.attributes[key] = numValue;
+											}
+										}
+									}
 								}
 								
-								// 读取总分（字段名是 total_score）
+								// 读取总分（字段名是 total_score），用于排序
 								if (scoreObj.contains("total_score") && !scoreObj["total_score"].isNull()) {
 									double total = scoreObj["total_score"].toDouble();
-									student.attributes["总分"] = total;
 									student.score = total; // 使用总分作为排序依据
+									// 如果attributes中没有"总分"，则添加
+									if (!student.attributes.contains("总分")) {
+										student.attributes["总分"] = total;
+									}
 								} else {
-									// 如果没有总分，计算总分
-									double total = 0;
-									if (student.attributes.contains("语文")) {
-										total += student.attributes["语文"];
+									// 如果没有total_score，尝试从attributes中获取"总分"
+									if (student.attributes.contains("总分")) {
+										student.score = student.attributes["总分"];
+									} else {
+										student.score = 0;
 									}
-									if (student.attributes.contains("数学")) {
-										total += student.attributes["数学"];
-									}
-									if (student.attributes.contains("英语")) {
-										total += student.attributes["英语"];
-									}
-									student.attributes["总分"] = total;
-									student.score = total;
 								}
 								
 							m_students.append(student);
 						}
 						
 						qDebug() << "从服务器获取成绩表成功，学生数量:" << m_students.size();
+						
+						// 处理Excel文件URL（新格式：数组格式）
+						if (dataObj.contains("excel_file_url") && dataObj["excel_file_url"].isArray()) {
+							QJsonArray excelFileUrlArray = dataObj["excel_file_url"].toArray();
+							qDebug() << "获取到Excel文件数量:" << excelFileUrlArray.size();
+							
+							// 获取学校ID和班级ID
+							UserInfo userInfo = CommonInfo::GetData();
+							QString schoolId = userInfo.schoolId;
+							QString classId = m_classid;
+							
+							if (!schoolId.isEmpty() && !classId.isEmpty()) {
+								// 创建文件夹结构：学校ID/班级ID/
+								QString baseDir = QCoreApplication::applicationDirPath() + "/excel_files";
+								QString schoolDir = baseDir + "/" + schoolId;
+								QString classDir = schoolDir + "/" + classId;
+								
+								QDir dir;
+								if (!dir.exists(classDir)) {
+									dir.mkpath(classDir);
+									qDebug() << "创建文件夹:" << classDir;
+								}
+								
+								// 下载每个Excel文件
+								for (int i = 0; i < excelFileUrlArray.size(); ++i) {
+									QJsonObject fileObj = excelFileUrlArray[i].toObject();
+									QString filename = fileObj["filename"].toString();
+									QString url = fileObj["url"].toString();
+									
+									if (!filename.isEmpty() && !url.isEmpty()) {
+										// 下载文件
+										downloadExcelFile(url, classDir, filename);
+									}
+								}
+							} else {
+								qWarning() << "学校ID或班级ID为空，无法创建文件夹";
+							}
+						}
 						
 						// 将成绩数据设置到座位表对应单元格学生的属性中
 						if (!m_students.isEmpty() && seatTable) {
@@ -372,21 +426,16 @@ public:
 											}
 											
 											if (matched) {
-												// 将成绩数据设置到座位按钮的属性中
-												if (student.attributes.contains("语文")) {
-													btn->setProperty("chineseScore", student.attributes["语文"]);
-												}
-												if (student.attributes.contains("数学")) {
-													btn->setProperty("mathScore", student.attributes["数学"]);
-												}
-												if (student.attributes.contains("英语")) {
-													btn->setProperty("englishScore", student.attributes["英语"]);
-												}
-												if (student.attributes.contains("总分")) {
-													btn->setProperty("totalScore", student.attributes["总分"]);
+												// 动态将所有属性数据设置到座位按钮的属性中
+												for (auto it = student.attributes.begin(); it != student.attributes.end(); ++it) {
+													QString attrName = it.key();
+													double attrValue = it.value();
+													
+													// 直接使用属性名作为属性键
+													btn->setProperty(attrName.toUtf8().constData(), attrValue);
 												}
 												
-												qDebug() << "已为学生" << studentName << "(" << studentId << ")设置成绩属性";
+												qDebug() << "已为学生" << studentName << "(" << studentId << ")设置成绩属性，属性数量:" << student.attributes.size();
 												break;
 											}
 										}
@@ -1491,6 +1540,7 @@ public:
 	void fetchSeatArrangementFromServer(); // 从服务器获取座位表
 	void fetchStudentScoresFromServer(); // 从服务器获取成绩表数据
 	void fetchCourseScheduleForDailyView();
+	void downloadExcelFile(const QString& url, const QString& saveDir, const QString& filename); // 下载Excel文件
 	void showStudentAttributeDialog(int row, int col); // 显示学生属性对话框
 	
 	// 获取座位信息列表（用于比对和更新姓名）
@@ -1870,6 +1920,7 @@ private:
 	bool m_isClassGroup = true; // 默认为班级群
 	QGroupInfo* m_groupInfo;
 	TAHttpHandler* m_httpHandler = NULL;
+	QNetworkAccessManager* m_networkManager = nullptr; // 用于下载Excel文件
 	// 用于记录按下开始时间
 	qint64 pressStartMs = 0;
 	//QProgressBar* m_volumeBar = nullptr;
@@ -2960,45 +3011,39 @@ inline void ScheduleDialog::showStudentAttributeDialog(int row, int col)
 	student.originalIndex = -1;
 	student.score = 0;
 	
-	// 从按钮属性中读取成绩数据
-	if (btn->property("chineseScore").isValid()) {
-		double chinese = btn->property("chineseScore").toDouble();
-		student.attributes["语文"] = chinese;
-	}
-	if (btn->property("mathScore").isValid()) {
-		double math = btn->property("mathScore").toDouble();
-		student.attributes["数学"] = math;
-	}
-	if (btn->property("englishScore").isValid()) {
-		double english = btn->property("englishScore").toDouble();
-		student.attributes["英语"] = english;
-	}
-	if (btn->property("totalScore").isValid()) {
-		double total = btn->property("totalScore").toDouble();
-		student.attributes["总分"] = total;
-		student.score = total;
-	}
+	// 系统属性列表（需要排除的属性）
+	QSet<QString> systemProperties;
+	systemProperties << "isSeat" << "row" << "col" << "seatRow" << "seatCol" 
+	                 << "studentId" << "studentName";
 	
-	// 检查是否有其他属性（如"早读"、"积极发言"等）
-	// 遍历按钮的所有属性，查找可能的属性值
+	// 动态读取所有按钮属性
 	QList<QByteArray> propertyNames = btn->dynamicPropertyNames();
 	for (const QByteArray& propName : propertyNames) {
 		QString propNameStr = QString::fromUtf8(propName);
-		// 跳过已知的属性
-		if (propNameStr == "isSeat" || propNameStr == "row" || propNameStr == "col" || 
-		    propNameStr == "seatRow" || propNameStr == "seatCol" || 
-		    propNameStr == "studentId" || propNameStr == "studentName" ||
-		    propNameStr == "chineseScore" || propNameStr == "mathScore" || 
-		    propNameStr == "englishScore" || propNameStr == "totalScore") {
+		
+		// 跳过系统属性
+		if (systemProperties.contains(propNameStr)) {
 			continue;
 		}
 		
-		// 如果属性值是数字，可能是成绩属性
+		// 获取属性值
 		QVariant propValue = btn->property(propName);
+		if (!propValue.isValid()) {
+			continue;
+		}
+		
+		// 如果属性值是数字，作为成绩属性
 		if (propValue.canConvert<double>()) {
 			double value = propValue.toDouble();
-			if (value > 0) { // 只添加有值的属性
-				student.attributes[propNameStr] = value;
+			
+			// 直接使用属性名作为属性名称
+			QString attributeName = propNameStr;
+			
+			student.attributes[attributeName] = value;
+			
+			// 如果是"总分"，也设置到score
+			if (attributeName == "总分") {
+				student.score = value;
 			}
 		}
 	}
@@ -3006,34 +3051,18 @@ inline void ScheduleDialog::showStudentAttributeDialog(int row, int col)
 	// 创建并显示学生属性对话框
 	StudentAttributeDialog* dialog = new StudentAttributeDialog(this);
 	
-	// 设置可用属性列表（包括成绩和其他属性）
+	// 动态收集所有属性名称（从学生属性中获取）
 	QList<QString> availableAttributes;
-	if (student.attributes.contains("语文")) {
-		availableAttributes.append("语文");
-	}
-	if (student.attributes.contains("数学")) {
-		availableAttributes.append("数学");
-	}
-	if (student.attributes.contains("英语")) {
-		availableAttributes.append("英语");
-	}
-	if (student.attributes.contains("总分")) {
-		availableAttributes.append("总分");
-	}
-	
-	// 添加其他属性（如"早读"、"积极发言"等）
 	for (auto it = student.attributes.begin(); it != student.attributes.end(); ++it) {
 		QString attrName = it.key();
-		if (attrName != "语文" && attrName != "数学" && attrName != "英语" && attrName != "总分") {
-			if (!availableAttributes.contains(attrName)) {
-				availableAttributes.append(attrName);
-			}
+		if (!attrName.isEmpty()) {
+			availableAttributes.append(attrName);
 		}
 	}
 	
-	// 如果没有属性，至少显示学生姓名
+	// 如果没有属性，至少显示学生姓名（但这种情况应该很少见）
 	if (availableAttributes.isEmpty()) {
-		availableAttributes.append("总分"); // 默认显示总分
+		qWarning() << "学生" << student.name << "没有任何属性数据";
 	}
 	
 	dialog->setAvailableAttributes(availableAttributes);
@@ -4440,5 +4469,48 @@ inline void ScheduleDialog::sendPostClassEvaluationContent(const QString& subjec
 	qDebug() << "消息内容:" << jsonString;
 	
 	QMessageBox::information(this, QString::fromUtf8(u8"成功"), QString::fromUtf8(u8"课后评价内容已发送到群组！"));
+}
+
+// 下载Excel文件
+inline void ScheduleDialog::downloadExcelFile(const QString& url, const QString& saveDir, const QString& filename)
+{
+	if (!m_networkManager) {
+		qWarning() << "网络管理器未初始化";
+		return;
+	}
+	
+	QUrl fileUrl(url);
+	QNetworkRequest request(fileUrl);
+	QNetworkReply* reply = m_networkManager->get(request);
+	
+	// 构建保存路径
+	QString filePath = saveDir + "/" + filename;
+	
+	// 连接下载完成信号
+	connect(reply, &QNetworkReply::finished, this, [=]() {
+		if (reply->error() == QNetworkReply::NoError) {
+			// 确保目录存在
+			QDir dir;
+			if (!dir.exists(saveDir)) {
+				dir.mkpath(saveDir);
+			}
+			
+			// 保存文件
+			QFile file(filePath);
+			if (file.open(QIODevice::WriteOnly)) {
+				file.write(reply->readAll());
+				file.close();
+				qDebug() << "Excel文件下载成功:" << filePath;
+			} else {
+				qWarning() << "无法保存文件:" << filePath;
+			}
+		} else {
+			qWarning() << "下载Excel文件失败:" << reply->errorString() << "URL:" << url;
+		}
+		
+		reply->deleteLater();
+	});
+	
+	qDebug() << "开始下载Excel文件:" << url << "保存到:" << filePath;
 }
 

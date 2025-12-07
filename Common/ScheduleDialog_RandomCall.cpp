@@ -23,7 +23,12 @@ void ScheduleDialog::connectRandomCallButton(QPushButton* btnRandom, QTableWidge
         
         if (!randomCallDlg) {
             randomCallDlg = new RandomCallDialog(this);
-            randomCallDlg->setStudentData(m_students);
+            // 优先从Excel文件加载数据
+            randomCallDlg->loadExcelFiles(m_classid);
+            // 如果没有Excel文件，使用现有的学生数据
+            if (randomCallDlg->getParticipants().isEmpty() && !m_students.isEmpty()) {
+                randomCallDlg->setStudentData(m_students);
+            }
             randomCallDlg->setSeatTable(this->seatTable);
             // 连接学生成绩更新信号
             connect(randomCallDlg, &RandomCallDialog::studentScoreUpdated, this, [this](const QString& studentId, double newScore) {
@@ -40,7 +45,12 @@ void ScheduleDialog::connectRandomCallButton(QPushButton* btnRandom, QTableWidge
                 }
             });
         } else {
-            randomCallDlg->setStudentData(m_students);
+            // 优先从Excel文件加载数据
+            randomCallDlg->loadExcelFiles(m_classid);
+            // 如果没有Excel文件，使用现有的学生数据
+            if (randomCallDlg->getParticipants().isEmpty() && !m_students.isEmpty()) {
+                randomCallDlg->setStudentData(m_students);
+            }
             randomCallDlg->setSeatTable(this->seatTable);
         }
         randomCallDlg->show();

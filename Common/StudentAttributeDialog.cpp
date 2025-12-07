@@ -34,17 +34,17 @@ StudentAttributeDialog::StudentAttributeDialog(QWidget* parent)
     outerLayout->setContentsMargins(20, 40, 20, 20); // 增加顶部边距，为关闭按钮留出空间
     outerLayout->setSpacing(15);
 
-    // 标题："期中成绩表"
-    QLabel* titleLabel = new QLabel("期中成绩表");
-    titleLabel->setStyleSheet(
+    // 标题："学生统计信息"
+    m_titleLabel = new QLabel("学生统计信息");
+    m_titleLabel->setStyleSheet(
         "background-color: #d0d0d0;"
         "color: black;"
         "font-size: 14px;"
         "padding: 8px;"
         "border-radius: 4px;"
     );
-    titleLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    outerLayout->addWidget(titleLabel);
+    m_titleLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    outerLayout->addWidget(m_titleLabel);
 
     // 主内容区域
     m_mainLayout = new QVBoxLayout;
@@ -389,6 +389,13 @@ void StudentAttributeDialog::mouseMoveEvent(QMouseEvent* event)
     if (event->buttons() & Qt::LeftButton && !m_dragPosition.isNull()) {
         move(event->globalPos() - m_dragPosition);
         event->accept();
+    }
+}
+
+void StudentAttributeDialog::setTitle(const QString& title)
+{
+    if (m_titleLabel) {
+        m_titleLabel->setText(title);
     }
 }
 

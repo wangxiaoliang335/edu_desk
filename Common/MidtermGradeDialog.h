@@ -95,6 +95,7 @@ private:
 private:
     MidtermGradeTableWidget* table;
     QTextEdit* textDescription;
+    QLabel* m_lblTitle; // 标题标签
     QPushButton* btnAddRow;
     QPushButton* btnDeleteColumn;
     QPushButton* btnAddColumn;

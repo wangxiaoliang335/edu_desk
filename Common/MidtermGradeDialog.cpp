@@ -60,10 +60,10 @@ MidtermGradeDialog::MidtermGradeDialog(QString classid, QWidget* parent) : QDial
     mainLayout->setContentsMargins(15, 40, 15, 15);
 
     // 标题
-    QLabel* lblTitle = new QLabel("期中成绩表");
-    lblTitle->setStyleSheet("background-color: #d3d3d3; color: black; font-size: 16px; font-weight: bold; padding: 8px; border-radius: 4px;");
-    lblTitle->setAlignment(Qt::AlignCenter);
-    mainLayout->addWidget(lblTitle);
+    m_lblTitle = new QLabel("期中成绩表");
+    m_lblTitle->setStyleSheet("background-color: #d3d3d3; color: black; font-size: 16px; font-weight: bold; padding: 8px; border-radius: 4px;");
+    m_lblTitle->setAlignment(Qt::AlignCenter);
+    mainLayout->addWidget(m_lblTitle);
 
     // 顶部按钮行
     QHBoxLayout* btnLayout = new QHBoxLayout;
@@ -176,6 +176,10 @@ void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStr
     if (!excelFilePath.isEmpty()) {
         QFileInfo fileInfo(excelFilePath);
         m_excelFileName = fileInfo.fileName();
+        // 更新标题标签为文件名（去掉扩展名）
+        if (m_lblTitle) {
+            m_lblTitle->setText(fileInfo.baseName());
+        }
     } else {
         m_excelFileName.clear();
     }
@@ -183,6 +187,22 @@ void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStr
     // 根据导入的Excel列头动态设置表格列头
     table->setColumnCount(headers.size());
     table->setHorizontalHeaderLabels(headers);
+    
+    // 根据实际列头动态生成说明文本
+    QStringList attributeColumns; // 属性列（除了学号、姓名、总分）
+    for (const QString& header : headers) {
+        if (header != "学号" && header != "姓名" && header != "总分" && !header.isEmpty()) {
+            attributeColumns.append(header);
+        }
+    }
+    
+    QString description = "说明:该表为统计表。";
+    if (!attributeColumns.isEmpty()) {
+        description += "包含以下科目/属性: " + attributeColumns.join("、");
+    }
+    if (textDescription) {
+        textDescription->setPlainText(description);
+    }
 
     // 清空现有数据
     table->setRowCount(0);

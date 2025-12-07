@@ -166,10 +166,10 @@ public:
         mainLayout->setContentsMargins(15, 40, 15, 15);
 
         // 标题
-        QLabel* lblTitle = new QLabel("小组积分表");
-        lblTitle->setStyleSheet("background-color: #add8e6; color: black; font-size: 16px; font-weight: bold; padding: 8px; border-radius: 4px;");
-        lblTitle->setAlignment(Qt::AlignCenter);
-        mainLayout->addWidget(lblTitle);
+        m_lblTitle = new QLabel("小组积分表");
+        m_lblTitle->setStyleSheet("background-color: #add8e6; color: black; font-size: 16px; font-weight: bold; padding: 8px; border-radius: 4px;");
+        m_lblTitle->setAlignment(Qt::AlignCenter);
+        mainLayout->addWidget(m_lblTitle);
 
         // 顶部按钮行
         QHBoxLayout* btnLayout = new QHBoxLayout;
@@ -275,6 +275,10 @@ public:
         if (!excelFilePath.isEmpty()) {
             QFileInfo fileInfo(excelFilePath);
             m_excelFileName = fileInfo.fileName();
+            // 更新标题标签为文件名（去掉扩展名）
+            if (m_lblTitle) {
+                m_lblTitle->setText(fileInfo.baseName());
+            }
         } else {
             m_excelFileName.clear();
         }
@@ -329,6 +333,23 @@ public:
             }
         }
 
+        // 根据实际列头动态生成说明文本
+        QStringList attributeColumns; // 属性列（除了小组、学号、姓名、总分、小组总分）
+        for (const QString& header : headers) {
+            if (header != "小组" && header != "学号" && header != "姓名" && 
+                header != "总分" && header != "小组总分" && !header.isEmpty()) {
+                attributeColumns.append(header);
+            }
+        }
+        
+        QString description = "说明:该表为统计表。";
+        if (!attributeColumns.isEmpty()) {
+            description += "包含以下评分项: " + attributeColumns.join("、");
+        }
+        if (textDescription) {
+            textDescription->setPlainText(description);
+        }
+        
         // 导入数据
         QString currentGroup = "";
         int groupStartRow = -1;
@@ -1493,6 +1514,7 @@ private:
 private:
     StudentPhysiqueTableWidget* table;
     QTextEdit* textDescription;
+    QLabel* m_lblTitle; // 标题标签
     QPushButton* btnAddRow;
     QPushButton* btnDeleteColumn;
     QPushButton* btnAddColumn;

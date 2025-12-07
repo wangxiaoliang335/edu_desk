@@ -53,6 +53,9 @@ public:
     
     // 设置可用属性列表
     void setAvailableAttributes(const QList<QString>& attributes);
+    
+    // 设置标题
+    void setTitle(const QString& title);
 
 private slots:
     void onAttributeValueClicked();
@@ -75,5 +78,6 @@ private:
     
     QPushButton* m_btnClose = nullptr; // 关闭按钮
     QPoint m_dragPosition; // 用于窗口拖动
+    QLabel* m_titleLabel = nullptr; // 标题标签
 };
 

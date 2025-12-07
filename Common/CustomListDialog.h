@@ -22,9 +22,13 @@
 #include "MidtermGradeDialog.h"
 #include "StudentPhysiqueDialog.h"
 #include "xlsxdocument.h"
+#include "CommonInfo.h"
 #include <QRegularExpression>
 #include <QMap>
+#include <QSet>
 #include <QDebug>
+#include <QDir>
+#include <QCoreApplication>
 
 // 前向声明
 class ScheduleDialog;
@@ -182,6 +186,9 @@ protected:
             move(screenGeometry.center() - QPoint(windowGeometry.width() / 2, windowGeometry.height() / 2));
         }
         
+        // 扫描并加载已下载的Excel文件
+        loadDownloadedExcelFiles();
+        
         // 确保窗口显示在最前面
         raise();
         activateWindow();
@@ -297,6 +304,9 @@ private slots:
             MidtermGradeDialog* midtermDlg = new MidtermGradeDialog(m_classid, this);
             // 传递Excel文件路径
             midtermDlg->importData(headers, dataRows, fileName);
+            // 设置对话框标题为文件名（去掉扩展名）
+            QFileInfo fileInfo(fileName);
+            midtermDlg->setWindowTitle(fileInfo.baseName());
             dialog = midtermDlg;
             
             QMessageBox::information(this, "导入成功", 
@@ -324,6 +334,9 @@ private slots:
             StudentPhysiqueDialog* physiqueDlg = new StudentPhysiqueDialog(this);
             // 传递Excel文件路径
             physiqueDlg->importData(headers, dataRows, fileName);
+            // 设置对话框标题为文件名（去掉扩展名）
+            QFileInfo fileInfo2(fileName);
+            physiqueDlg->setWindowTitle(fileInfo2.baseName());
             dialog = physiqueDlg;
             
             QMessageBox::information(this, "导入成功", 
@@ -602,6 +615,12 @@ private:
     // 从字符串中提取纯姓名（去掉数字部分）
     // 例如："姜凯文13-5/14" -> "姜凯文"
     QString extractPureName(const QString& nameStr);
+    
+    // 扫描并加载已下载的Excel文件
+    void loadDownloadedExcelFiles();
+    
+    // 加载单个Excel文件并创建按钮
+    void loadExcelFileAndCreateButton(const QString& filePath);
 
 private:
     QPushButton* addRow(QVBoxLayout *parentLayout, const QString &text)
@@ -641,4 +660,191 @@ private:
     QString m_classid;
     QPushButton* m_btnClose = nullptr; // 关闭按钮
     QPoint m_dragPosition; // 用于窗口拖动
+    QSet<QString> m_loadedFiles; // 已加载的文件路径，避免重复加载
 };
+
+// 扫描并加载已下载的Excel文件
+inline void CustomListDialog::loadDownloadedExcelFiles()
+{
+    // 获取学校ID和班级ID
+    UserInfo userInfo = CommonInfo::GetData();
+    QString schoolId = userInfo.schoolId;
+    QString classId = m_classid;
+    
+    if (schoolId.isEmpty() || classId.isEmpty()) {
+        qDebug() << "学校ID或班级ID为空，无法加载已下载的Excel文件";
+        return;
+    }
+    
+    // 构建Excel文件目录路径
+    QString baseDir = QCoreApplication::applicationDirPath() + "/excel_files";
+    QString schoolDir = baseDir + "/" + schoolId;
+    QString classDir = schoolDir + "/" + classId;
+    
+    QDir dir(classDir);
+    if (!dir.exists()) {
+        qDebug() << "Excel文件目录不存在:" << classDir;
+        return;
+    }
+    
+    // 获取目录中的所有Excel文件
+    QStringList filters;
+    filters << "*.xlsx" << "*.xls" << "*.csv";
+    QFileInfoList fileList = dir.entryInfoList(filters, QDir::Files);
+    
+    qDebug() << "找到" << fileList.size() << "个Excel文件";
+    
+    // 为每个文件创建按钮（如果还没有加载过）
+    for (const QFileInfo& fileInfo : fileList) {
+        QString filePath = fileInfo.absoluteFilePath();
+        QString fileName = fileInfo.fileName();
+        
+        // 检查是否已经加载过
+        if (m_loadedFiles.contains(filePath) || m_dialogMap.contains(fileName)) {
+            continue;
+        }
+        
+        // 加载文件并创建按钮
+        loadExcelFileAndCreateButton(filePath);
+    }
+}
+
+// 加载单个Excel文件并创建按钮
+inline void CustomListDialog::loadExcelFileAndCreateButton(const QString& filePath)
+{
+    QFileInfo fileInfo(filePath);
+    if (!fileInfo.exists()) {
+        qWarning() << "文件不存在:" << filePath;
+        return;
+    }
+    
+    QString fileName = fileInfo.fileName();
+    QString suffix = fileInfo.suffix().toLower();
+    
+    // 读取Excel文件
+    QStringList headers;
+    QList<QStringList> dataRows;
+    
+    bool readSuccess = false;
+    if (suffix == "xlsx" || suffix == "xls") {
+        readSuccess = readExcelFile(filePath, headers, dataRows);
+    } else if (suffix == "csv") {
+        readSuccess = readCSVFile(filePath, headers, dataRows);
+    }
+    
+    if (!readSuccess || headers.isEmpty()) {
+        qWarning() << "无法读取Excel文件:" << filePath;
+        return;
+    }
+    
+    // 判断表格类型
+    bool isMidtermGrade = false;
+    bool isStudentPhysique = false;
+    
+    bool hasGroup = headers.contains("小组");
+    bool hasStudentId = headers.contains("学号");
+    bool hasStudentName = headers.contains("姓名");
+    
+    if (hasGroup && hasStudentId && hasStudentName) {
+        isStudentPhysique = true;
+    } else if (!hasGroup && hasStudentId && hasStudentName) {
+        isMidtermGrade = true;
+    } else {
+        qWarning() << "无法识别表格类型:" << fileName;
+        return;
+    }
+    
+    // 根据表格类型导入数据
+    QDialog* dialog = nullptr;
+    if (isMidtermGrade) {
+        // 比对并更新姓名（以座位表为准）
+        updateNamesFromSeatInfo(headers, dataRows);
+        
+        MidtermGradeDialog* midtermDlg = new MidtermGradeDialog(m_classid, this);
+        midtermDlg->importData(headers, dataRows, filePath);
+        // 设置对话框标题为文件名（去掉扩展名）
+        midtermDlg->setWindowTitle(fileInfo.baseName());
+        dialog = midtermDlg;
+    } else if (isStudentPhysique) {
+        StudentPhysiqueDialog* physiqueDlg = new StudentPhysiqueDialog(this);
+        physiqueDlg->importData(headers, dataRows, filePath);
+        // 设置对话框标题为文件名（去掉扩展名）
+        physiqueDlg->setWindowTitle(fileInfo.baseName());
+        dialog = physiqueDlg;
+    }
+    
+    if (!dialog) {
+        return;
+    }
+    
+    // 标记为已加载
+    m_loadedFiles.insert(filePath);
+    
+    // 保存对话框映射
+    m_dialogMap[fileName] = dialog;
+    
+    // 创建按钮行（在"+"按钮之前插入）
+    int insertIndex = m_mainLayout->count() - 1; // "+"按钮是最后一个
+    if (insertIndex < 0) insertIndex = 0;
+    
+    // 创建按钮行布局
+    QHBoxLayout *rowLayout = new QHBoxLayout;
+    rowLayout->setSpacing(0);
+    
+    QPushButton *btnTitle = new QPushButton(fileName);
+    btnTitle->setStyleSheet(
+        "QPushButton { background-color: green; color: white; font-size: 14px; padding: 4px; border: 1px solid #555; }"
+        "QPushButton:hover { background-color: darkgreen; }"
+    );
+    btnTitle->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    
+    QPushButton *btnClose = new QPushButton("X");
+    btnClose->setFixedWidth(30);
+    btnClose->setStyleSheet(
+        "QPushButton { background-color: orange; color: white; font-weight:bold; border: 1px solid #555; }"
+        "QPushButton:hover { background-color: #cc6600; }"
+    );
+    
+    rowLayout->addWidget(btnTitle);
+    rowLayout->addWidget(btnClose);
+    
+    // 将按钮行插入到"+"按钮之前
+    m_mainLayout->insertLayout(insertIndex, rowLayout);
+    
+    // 保存按钮映射
+    m_buttonToFileNameMap[btnTitle] = fileName;
+    
+    // 连接按钮点击事件
+    connect(btnTitle, &QPushButton::clicked, this, [=]() {
+        if (dialog && dialog->isHidden()) {
+            dialog->show();
+            dialog->raise();
+            dialog->activateWindow();
+        } else if (dialog && !dialog->isHidden()) {
+            dialog->hide();
+        }
+    });
+    
+    // 连接关闭按钮
+    connect(btnClose, &QPushButton::clicked, this, [=]() {
+        // 删除按钮和对话框
+        m_dialogMap.remove(fileName);
+        m_buttonToFileNameMap.remove(btnTitle);
+        m_loadedFiles.remove(filePath);
+        
+        // 从布局中移除按钮行
+        m_mainLayout->removeItem(rowLayout);
+        
+        // 删除按钮和布局
+        btnTitle->deleteLater();
+        btnClose->deleteLater();
+        rowLayout->deleteLater();
+        
+        // 删除对话框
+        if (dialog) {
+            dialog->deleteLater();
+        }
+    });
+    
+    qDebug() << "已加载Excel文件并创建按钮:" << fileName;
+}
