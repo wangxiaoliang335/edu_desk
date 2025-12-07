@@ -255,17 +255,37 @@ private slots:
 
         // Excel文件名已在上面获取
         
-        // 检查是否已经导入过这个文件
+        // 如果已经导入过这个文件，先删除旧的对话框和按钮，允许重新导入更新
         if (m_dialogMap.contains(excelFileName)) {
-            QMessageBox::information(this, "提示", QString("文件 %1 已经导入过了！").arg(excelFileName));
-            // 显示已存在的对话框
             QDialog* existingDlg = m_dialogMap[excelFileName];
-            if (existingDlg) {
-                existingDlg->show();
-                existingDlg->raise();
-                existingDlg->activateWindow();
+            // 找到对应的按钮
+            QPushButton* existingBtn = nullptr;
+            for (auto it = m_buttonToFileNameMap.begin(); it != m_buttonToFileNameMap.end(); ++it) {
+                if (it.value() == excelFileName) {
+                    existingBtn = it.key();
+                    break;
+                }
             }
-            return;
+            
+            // 删除旧的对话框
+            if (existingDlg) {
+                existingDlg->deleteLater();
+            }
+            m_dialogMap.remove(excelFileName);
+            
+            // 删除旧的按钮
+            if (existingBtn) {
+                m_buttonToFileNameMap.remove(existingBtn);
+                // 找到按钮所在的行布局并删除
+                QWidget* rowWidget = existingBtn->parentWidget();
+                if (rowWidget) {
+                    QHBoxLayout* rowLayout = qobject_cast<QHBoxLayout*>(rowWidget->layout());
+                    if (rowLayout) {
+                        m_mainLayout->removeWidget(rowWidget);
+                        rowWidget->deleteLater();
+                    }
+                }
+            }
         }
         
         // 根据表格类型导入数据
