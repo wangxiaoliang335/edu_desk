@@ -13,6 +13,9 @@
 #include <QDebug>
 #include <QSize>
 #include <QPixmap>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
 #include <cstring>
 
 // 定义 TempRoomStorage 的静态成员变量
@@ -1089,6 +1092,9 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
             return;
         }
         QJsonArray json_group_list = jsonDoc.array();
+
+        // 收集群组ID，用于查询临时语音房间
+        QSet<QString> groupIdSet;
         
         // 获取当前用户信息
         UserInfo userInfo = CommonInfo::GetData();
@@ -1163,6 +1169,9 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
             if (!classid.isEmpty()) {
                 ths->m_setClassId.insert(classid);
             }
+
+            // 记录群组ID
+            groupIdSet.insert(groupid.trimmed());
             
             // 构造群组信息对象（用于后续可能的同步，暂时保留但不使用）
             QJsonObject groupObj;
@@ -1215,6 +1224,88 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
         }
         
         qDebug() << "从腾讯服务器获取群组列表成功，共" << groupsArray.size() << "个群组，已直接刷新到界面";
+
+        // 调用临时语音房间查询接口 /temp_rooms/query
+        if (!groupIdSet.isEmpty()) {
+            QJsonArray groupIdArray;
+            for (const QString& gid : groupIdSet) {
+                QString trimmed = gid.trimmed();
+                if (!trimmed.isEmpty()) {
+                    groupIdArray.append(trimmed);
+                }
+            }
+
+            if (!groupIdArray.isEmpty()) {
+                QJsonObject payload;
+                payload["group_ids"] = groupIdArray;
+                QByteArray postData = QJsonDocument(payload).toJson(QJsonDocument::Compact);
+
+                QNetworkAccessManager* mgr = new QNetworkAccessManager(ths);
+                QNetworkRequest req(QUrl("http://47.100.126.194:5000/temp_rooms/query"));
+                req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+                QNetworkReply* r = mgr->post(req, postData);
+
+                QObject::connect(r, &QNetworkReply::finished, ths, [ths, mgr, r]() {
+                    auto cleanup = [mgr, r]() {
+                        if (r) r->deleteLater();
+                        if (mgr) mgr->deleteLater();
+                    };
+
+                    if (!r) { cleanup(); return; }
+                    if (r->error() != QNetworkReply::NoError) {
+                        qWarning() << "查询临时语音房间失败:" << r->errorString();
+                        cleanup();
+                        return;
+                    }
+
+                    QByteArray resp = r->readAll();
+                    QJsonParseError perr;
+                    QJsonDocument doc = QJsonDocument::fromJson(resp, &perr);
+                    if (perr.error != QJsonParseError::NoError || !doc.isObject()) {
+                        qWarning() << "解析临时语音房间响应失败:" << perr.errorString();
+                        cleanup();
+                        return;
+                    }
+
+                    QJsonObject obj = doc.object();
+                    if (obj["code"].toInt() != 200) {
+                        qWarning() << "查询临时语音房间返回非200:" << resp;
+                        cleanup();
+                        return;
+                    }
+
+                    if (obj.contains("data") && obj["data"].isObject()) {
+                        QJsonObject dataObj = obj["data"].toObject();
+                        if (dataObj.contains("rooms") && dataObj["rooms"].isArray()) {
+                            QJsonArray rooms = dataObj["rooms"].toArray();
+                            for (const QJsonValue& v : rooms) {
+                                if (!v.isObject()) continue;
+                                QJsonObject roomObj = v.toObject();
+                                TempRoomInfo info;
+                                info.group_id = roomObj["group_id"].toString();
+                                info.room_id = roomObj["room_id"].toString();
+                                info.whip_url = roomObj["publish_url"].toString();
+                                info.whep_url = roomObj["play_url"].toString();
+                                info.stream_name = roomObj["stream_name"].toString();
+                                info.owner_id = roomObj["owner_id"].toString();
+                                info.owner_name = roomObj["owner_name"].toString();
+                                info.owner_icon = roomObj["owner_icon"].toString();
+                                if (!info.group_id.isEmpty()) {
+                                    TempRoomStorage::saveTempRoomInfo(info.group_id, info);
+                                    qDebug() << "已缓存语音房间:" << info.group_id << info.room_id;
+                                }
+                            }
+                        }
+                    }
+
+                    cleanup();
+                });
+            } else {
+                qWarning() << "group_ids 为空，跳过 temp_rooms/query 调用";
+            }
+        } else {
+            qWarning() << "未收集到群组ID，跳过 temp_rooms/query 调用";
+        }
         
         // 初始化 addGroupWidget（如果有群组数据）
         if (ths->addGroupWidget /*&& !ths->m_setClassId.isEmpty()*/) {

@@ -1,4 +1,5 @@
 ﻿#include <QApplication>
+#include <QGuiApplication>
 #include <QDialog>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -30,6 +31,8 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QRegion>
+#include <QScrollArea>
+#include <QScreen>
 #include "ScheduleDialog.h"  // 包含以使用 TempRoomStorage
 
 // 自定义消息对话框类
@@ -295,6 +298,14 @@ public:
         mainLayout->setContentsMargins(20, 40, 20, 20);
         mainLayout->setSpacing(16);
 
+        // 统一设置深灰背景，便于控件辨识
+        this->setStyleSheet(
+            "QDialog { background-color: #565656; }"
+            "QScrollArea { background: #565656; border: none; }"
+            "QScrollArea > QWidget > QWidget { background: #565656; }"
+            "QLabel { color: #f5f5f5; }"
+        );
+
         // 窗口标题标签
         QLabel* lblWindowTitle = new QLabel(QString::fromUtf8(u8"班级 / 教师选择"));
         lblWindowTitle->setAlignment(Qt::AlignCenter);
@@ -316,13 +327,22 @@ public:
         classLayout->addWidget(lblClassTitle);
 
         QWidget* classListWidget = new QWidget;
+        classListWidget->setStyleSheet("background-color: #606060;");
         classListLayout = new QVBoxLayout(classListWidget);
         classListLayout->setSpacing(8);
         // 初始化班级单选分组，保证互斥
         classGroup = new QButtonGroup(this);
         classGroup->setExclusive(true);
-        classLayout->addWidget(classListWidget);
+        // 为班级列表增加滚动区域，避免超出屏幕
+        QScrollArea* classScrollArea = new QScrollArea;
+        classScrollArea->setWidget(classListWidget);
+        classScrollArea->setWidgetResizable(true);
+        classScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        classScrollArea->setFrameShape(QFrame::NoFrame);
+        classLayout->addWidget(classScrollArea);
         mainLayout->addLayout(classLayout);
+        // 班级与教师区域之间留白，避免遮挡（再向下移动一些）
+        mainLayout->addSpacing(40);
 
         // 教师区域
         QVBoxLayout* teacherLayout = new QVBoxLayout;
@@ -332,12 +352,16 @@ public:
         teacherLayout->addWidget(lblTeacherTitle);
 
         QWidget* teacherListWidget = new QWidget;
+        teacherListWidget->setStyleSheet("background-color: #606060;");
         teacherListLayout = new QVBoxLayout(teacherListWidget);
         teacherListLayout->setSpacing(8);
-        //addPersonRow(teacherListLayout, ":/icons/avatar1.png", "软件开发工程师", true); // 这里演示一个选中状态
-        //addPersonRow(teacherListLayout, ":/icons/avatar2.png", "苏州-UI-已入职");
-        //addPersonRow(teacherListLayout, ":/icons/avatar3.png", "平平淡淡");
-        teacherLayout->addWidget(teacherListWidget);
+        // 为教师列表增加滚动区域，避免超出屏幕
+        QScrollArea* teacherScrollArea = new QScrollArea;
+        teacherScrollArea->setWidget(teacherListWidget);
+        teacherScrollArea->setWidgetResizable(true);
+        teacherScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        teacherScrollArea->setFrameShape(QFrame::NoFrame);
+        teacherLayout->addWidget(teacherScrollArea);
         mainLayout->addLayout(teacherLayout);
 
         // 底部按钮
@@ -363,6 +387,17 @@ public:
             // 不再发送 scheduleDialogNeeded 信号，ScheduleDialog 只在点击按钮时创建
             accept();
         });
+
+        // 限制窗口高度，避免超过屏幕高度（保留约20%边距）
+        if (QGuiApplication::primaryScreen()) {
+            int maxH = static_cast<int>(QGuiApplication::primaryScreen()->availableGeometry().height() * 0.8);
+            setMaximumHeight(maxH);
+        }
+
+        // 增加窗口和列表的最小高度，确保选项清晰可见
+        setMinimumHeight(520);
+        classScrollArea->setMinimumHeight(180);
+        teacherScrollArea->setMinimumHeight(180);
     }
 
     void InitData(QSet<QString> setclassId)
@@ -574,6 +609,8 @@ private:
         QString grade, QString class_taught, QButtonGroup* pBtnGroup, bool checked = false)
     {
         QHBoxLayout* rowLayout = new QHBoxLayout;
+        rowLayout->setContentsMargins(10, 6, 10, 6);
+        rowLayout->setSpacing(10);
         QRadioButton* radio = new QRadioButton;
         radio->setChecked(checked);
         radio->setProperty("phone", phone); // 可以是 int / QString / QVariant
@@ -584,12 +621,13 @@ private:
 
         QLabel* avatar = new QLabel;
         avatar->setFixedSize(36, 36);
-        avatar->setStyleSheet("background-color: lightgray; border-radius: 18px;");
+        avatar->setStyleSheet("background-color: #707070; border-radius: 18px;");
         // 如果有头像图片资源，可以这样设置：
         QPixmap pix(iconPath);
         avatar->setPixmap(pix.scaled(36, 36, Qt::KeepAspectRatio, Qt::SmoothTransformation));
 
         QLabel* lblName = new QLabel(name);
+        lblName->setStyleSheet("color: #f5f5f5;");
         rowLayout->addWidget(radio);
         rowLayout->addWidget(avatar);
         rowLayout->addWidget(lblName);
@@ -602,6 +640,7 @@ private:
 
         QWidget* rowWidget = new QWidget;
         rowWidget->setLayout(rowLayout);
+        rowWidget->setStyleSheet("background-color: #5c5c5c;");
         parentLayout->addWidget(rowWidget);
     }
     private slots:
