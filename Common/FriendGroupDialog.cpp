@@ -1047,7 +1047,7 @@ void FriendGroupDialog::InitData()
         }
     }
 
-    //GetGroupJoinedList(); //客户端不用从腾讯服务器获取群列表了
+    GetGroupJoinedList(); //客户端不用从腾讯服务器获取群列表了
 
     if (m_httpHandler)
     {
@@ -1058,10 +1058,10 @@ void FriendGroupDialog::InitData()
         m_httpHandler->get(url);
 
         // 调用获取群组信息的接口
-        QString groupUrl = "http://47.100.126.194:5000/groups/by-teacher?";
-        groupUrl += "teacher_unique_id=";
-        groupUrl += userInfo.teacher_unique_id;
-        m_httpHandler->get(groupUrl);
+        //QString groupUrl = "http://47.100.126.194:5000/groups/by-teacher?";
+        //groupUrl += "teacher_unique_id=";
+        //groupUrl += userInfo.teacher_unique_id;
+        //m_httpHandler->get(groupUrl);
         
         // 获取班级列表并显示在"好友"标签页下的"班级"节点中
         if (!userInfo.schoolId.isEmpty()) {
@@ -1103,13 +1103,73 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
             // 获取群组基础信息
             QString groupid = group[kTIMGroupBaseInfoGroupId].toString();
             QString groupName = group[kTIMGroupBaseInfoGroupName].toString();
+            if (groupName.isEmpty()) {
+                groupName = group[kTIMGroupDetialInfoGroupName].toString();
+            }
             
-            // 构造群组信息对象
+            // 读取自定义字段（班级ID）
+            QString classid;
+            QJsonArray customInfo = group[kTIMGroupDetialInfoCustomInfo].toArray();
+            for (int j = 0; j < customInfo.size(); j++) {
+                QJsonObject customItem = customInfo[j].toObject();
+                QString key = customItem[kTIMGroupInfoCustemStringInfoKey].toString();
+                QString value = customItem[kTIMGroupInfoCustemStringInfoValue].toString();
+                // 兼容旧的带下划线格式和新的无下划线格式
+                if (key == "class_id" || key == "classid") {
+                    classid = value;
+                    break;
+                }
+            }
+            
+            // 判断是否是群主（通过 self_role 判断）
+            // - 400 或 "Owner" -> "Owner" (群主)
+            // - 300 或 "Admin" -> "Admin" (管理员)
+            // - 其他 -> "Member" (普通成员)
+            QJsonObject selfInfo = group[kTIMGroupBaseInfoSelfInfo].toObject();
+            QJsonValue roleValue = selfInfo[kTIMGroupSelfInfoRole];
+            bool isGroupOwner = false;
+            
+            // 支持整数和字符串两种格式
+            if (roleValue.isDouble()) {
+                int selfRole = roleValue.toInt();
+                isGroupOwner = (selfRole == 400); // 400 表示群主
+            } else if (roleValue.isString()) {
+                QString roleStr = roleValue.toString();
+                isGroupOwner = (roleStr == "Owner" || roleStr == "400");
+            }
+            
+            // 获取群组的 Introduction 和 Notification 字段
+            QString introduction = group[kTIMGroupDetialInfoIntroduction].toString();
+            QString notification = group[kTIMGroupDetialInfoNotification].toString();
+            
+            // 判断是否是班级群：根据 Name、Introduction、Notification 字段中是否包含"班级群"
+            bool isClassGroup = false;
+            if (groupName.contains("班级群") || introduction.contains("班级群") || notification.contains("班级群")) {
+                isClassGroup = true;
+            } else if (!classid.isEmpty()) {
+                // 如果有班级ID，也认为是班级群（兼容旧逻辑）
+                isClassGroup = true;
+            }
+            
+            // 如果班级ID为空，则将群组ID去掉末尾的两位作为班级ID
+            if (classid.isEmpty() && !groupid.isEmpty() && groupid.length() >= 2) {
+                classid = groupid.left(groupid.length() - 2);
+            }
+            
+            // 直接刷新到界面
+            ths->addClassNode(groupName, groupid, classid, isGroupOwner, isClassGroup);
+            ths->addGroupTreeNode(groupName, groupid, classid, isGroupOwner, isClassGroup);
+            
+            if (!classid.isEmpty()) {
+                ths->m_setClassId.insert(classid);
+            }
+            
+            // 构造群组信息对象（用于后续可能的同步，暂时保留但不使用）
             QJsonObject groupObj;
             
             // 群组基础信息
             groupObj["group_id"] = groupid;
-            groupObj["group_name"] = groupName.isEmpty() ? group[kTIMGroupDetialInfoGroupName].toString() : groupName;
+            groupObj["group_name"] = groupName;
             groupObj["group_type"] = group[kTIMGroupBaseInfoGroupType].toInt();
             groupObj["face_url"] = group[kTIMGroupBaseInfoFaceUrl].toString();
             groupObj["info_seq"] = group[kTIMGroupBaseInfoInfoSeq].toInt();
@@ -1136,23 +1196,9 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
             groupObj["visible"] = group[kTIMGroupDetialInfoVisible].toInt();
             groupObj["searchable"] = group[kTIMGroupDetialInfoSearchable].toInt();
             groupObj["detail_is_shutup_all"] = group[kTIMGroupDetialInfoIsShutupAll].toBool();
-            
-            // 读取自定义字段（班级ID和学校ID）
-            QJsonArray customInfo = group[kTIMGroupDetialInfoCustomInfo].toArray();
-            for (int j = 0; j < customInfo.size(); j++) {
-                QJsonObject customItem = customInfo[j].toObject();
-                QString key = customItem[kTIMGroupInfoCustemStringInfoKey].toString();
-                QString value = customItem[kTIMGroupInfoCustemStringInfoValue].toString();
-                // 兼容旧的带下划线格式和新的无下划线格式
-                if (key == "class_id" || key == "classid") {
-                    groupObj["classid"] = value;
-                } else if (key == "school_id" || key == "schoolid") {
-                    groupObj["schoolid"] = value;
-                }
-            }
+            groupObj["classid"] = classid;
             
             // 用户在该群组中的信息
-            QJsonObject selfInfo = group[kTIMGroupBaseInfoSelfInfo].toObject();
             QJsonObject memberInfo;
             memberInfo["user_id"] = userId;
             memberInfo["user_name"] = userInfo.strName;
@@ -1168,6 +1214,15 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
             groupsArray.append(groupObj);
         }
         
+        qDebug() << "从腾讯服务器获取群组列表成功，共" << groupsArray.size() << "个群组，已直接刷新到界面";
+        
+        // 初始化 addGroupWidget（如果有群组数据）
+        if (ths->addGroupWidget /*&& !ths->m_setClassId.isEmpty()*/) {
+            ths->addGroupWidget->InitData(ths->m_setClassId);
+        }
+        
+        // 注释掉：同步到服务器的代码（暂时不需要）
+        /*
         // 构造最终的上传JSON
         QJsonObject uploadData;
         uploadData["user_id"] = userId;
@@ -1185,6 +1240,7 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
             ths->m_httpHandler->post(url, jsonData);
             qDebug() << "上传群组信息到服务器，共" << groupsArray.size() << "个群组";
         }
+        */
         
         //CIMWnd::GetInst().Logf("GroupList", kTIMLog_Info, json_param);
         }, this);

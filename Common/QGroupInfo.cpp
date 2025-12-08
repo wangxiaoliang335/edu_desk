@@ -135,14 +135,6 @@ void IntercomControlWidget::mouseReleaseEvent(QMouseEvent* event)
 
 // ==================== QGroupInfo 实现 ====================
 
-// 解散群聊回调数据结构
-struct DismissGroupCallbackData {
-    QGroupInfo* dlg;
-    QString groupId;
-    QString userId;
-    QString userName;
-};
-
 QGroupInfo::QGroupInfo(QWidget* parent)
 	: QDialog(parent)
 {
@@ -1365,57 +1357,11 @@ void QGroupInfo::onDismissGroupClicked()
     
     qDebug() << "开始解散群聊，群组ID:" << m_groupNumberId << "，用户ID:" << userId;
     
-    // 构造回调数据结构
-    DismissGroupCallbackData* callbackData = new DismissGroupCallbackData;
-    callbackData->dlg = this;
-    callbackData->groupId = m_groupNumberId;
-    callbackData->userId = userId;
-    callbackData->userName = userName;
-    
-    // 检查REST API是否初始化
-    if (!m_restAPI) {
-        QMessageBox::critical(this, "错误", "REST API未初始化！");
-        delete callbackData;
-        return;
-    }
-    
-    // 在使用REST API前设置管理员账号信息
-    // 注意：REST API需要使用应用管理员账号，使用当前登录用户的teacher_unique_id
-    std::string adminUserId = GenerateTestUserSig::instance().getAdminUserId();
-    if (!adminUserId.empty()) {
-        std::string adminUserSig = GenerateTestUserSig::instance().genTestUserSig(adminUserId);
-        m_restAPI->setAdminInfo(QString::fromStdString(adminUserId), QString::fromStdString(adminUserSig));
-    }
-    
-    // 调用REST API解散群聊接口
-    m_restAPI->destroyGroup(m_groupNumberId,
-        [=](int errorCode, const QString& errorDesc, const QJsonObject& result) {
-            if (errorCode != 0) {
-                QString errorMsg;
-                
-                // 特殊处理常见的错误码
-                if (errorCode == 10004) {
-                    errorMsg = QString("解散群聊失败\n错误码: %1\n错误描述: %2\n\n注意：私有群无法解散群组。\n只有公开群、聊天室和直播大群的群主可以解散群组。").arg(errorCode).arg(errorDesc);
-                } else {
-                    errorMsg = QString("解散群聊失败\n错误码: %1\n错误描述: %2").arg(errorCode).arg(errorDesc);
-                }
-                
-                qDebug() << errorMsg;
-                QMessageBox::critical(callbackData->dlg, "解散失败", errorMsg);
-                
-                // 释放回调数据
-                delete callbackData;
-                return;
-            }
-            
-            qDebug() << "REST API解散群聊成功:" << callbackData->groupId;
-            
-            // REST API成功，现在调用自己的服务器接口（传递回调数据以便后续释放）
-            callbackData->dlg->sendDismissGroupRequestToServer(callbackData->groupId, callbackData->userId, callbackData);
-        });
+    // 直接调用自己的服务器接口（服务器会在解散群组后调用腾讯IM接口）
+    sendDismissGroupRequestToServer(m_groupNumberId, userId);
 }
 
-void QGroupInfo::sendDismissGroupRequestToServer(const QString& groupId, const QString& userId, void* callbackData)
+void QGroupInfo::sendDismissGroupRequestToServer(const QString& groupId, const QString& userId)
 {
     // 构造发送到服务器的JSON数据
     QJsonObject requestData;
@@ -1473,11 +1419,6 @@ void QGroupInfo::sendDismissGroupRequestToServer(const QString& groupId, const Q
             qDebug() << "发送解散群聊请求到服务器失败:" << reply->errorString();
             QMessageBox::warning(this, "解散失败", 
                 QString("网络错误: %1").arg(reply->errorString()));
-        }
-        
-        // 释放回调数据（如果提供了）
-        if (callbackData) {
-            delete (DismissGroupCallbackData*)callbackData;
         }
         
         reply->deleteLater();

@@ -173,7 +173,7 @@ private:
     void onExitGroupClicked(); // 退出群聊按钮点击处理
     void onDismissGroupClicked(); // 解散群聊按钮点击处理
     void sendExitGroupRequestToServer(const QString& groupId, const QString& userId, const QString& leftUserId); // 发送退出群聊请求到服务器
-    void sendDismissGroupRequestToServer(const QString& groupId, const QString& userId, void* callbackData = nullptr); // 发送解散群聊请求到服务器
+    void sendDismissGroupRequestToServer(const QString& groupId, const QString& userId); // 发送解散群聊请求到服务器
     void refreshMemberList(const QString& groupId); // 刷新成员列表（通知父窗口刷新）
     void onSetLeaderRequested(const QString& memberId); // 设置管理员（设为班主任）
     void onCancelLeaderRequested(const QString& memberId); // 取消管理员（取消班主任）
