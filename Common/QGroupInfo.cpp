@@ -1357,8 +1357,44 @@ void QGroupInfo::onDismissGroupClicked()
     
     qDebug() << "开始解散群聊，群组ID:" << m_groupNumberId << "，用户ID:" << userId;
     
-    // 直接调用自己的服务器接口（服务器会在解散群组后调用腾讯IM接口）
-    sendDismissGroupRequestToServer(m_groupNumberId, userId);
+    // 使用腾讯IM接口解散群组
+    if (!m_restAPI) {
+        QMessageBox::warning(this, "错误", "REST API未初始化");
+        return;
+    }
+    
+    // 设置管理员账号信息（REST API需要使用应用管理员账号）
+    std::string adminUserId = GenerateTestUserSig::instance().getAdminUserId();
+    if (adminUserId.empty()) {
+        QMessageBox::warning(this, "错误", "管理员账号ID未设置，无法调用REST API");
+        return;
+    }
+    std::string adminUserSig = GenerateTestUserSig::instance().genTestUserSig(adminUserId);
+    m_restAPI->setAdminInfo(QString::fromStdString(adminUserId), QString::fromStdString(adminUserSig));
+    
+    m_restAPI->destroyGroup(m_groupNumberId, [this](int errorCode, const QString& errorDesc, const QJsonObject& result) {
+        if (errorCode != 0) {
+            QString errorMsg = QString("解散群聊失败\n错误码: %1\n错误描述: %2").arg(errorCode).arg(errorDesc);
+            qDebug() << errorMsg;
+            QMessageBox::warning(this, "解散失败", errorMsg);
+            return;
+        }
+        
+        qDebug() << "解散群聊成功，响应结果:" << result;
+        
+        // 发出群聊解散信号，通知父窗口刷新群列表
+        emit this->groupDismissed(m_groupNumberId);
+        
+        // 显示成功消息
+        QMessageBox::information(this, "解散成功", 
+            QString("已成功解散群聊 \"%1\"！").arg(m_groupName));
+        
+        // 关闭对话框
+        this->accept();
+    });
+    
+    // 原来调用自己服务器接口的代码（已注释）
+    // sendDismissGroupRequestToServer(m_groupNumberId, userId);
 }
 
 void QGroupInfo::sendDismissGroupRequestToServer(const QString& groupId, const QString& userId)
