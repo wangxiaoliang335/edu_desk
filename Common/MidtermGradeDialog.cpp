@@ -625,11 +625,48 @@ void MidtermGradeDialog::onUpload()
     if (!remark.isEmpty()) {
         requestObj["remark"] = remark;
     }
+    requestObj["operation_mode"] = "replace"; // 默认使用替换模式
+    
+    // 添加表格说明（从 textDescription 获取）
+    if (textDescription) {
+        QString description = textDescription->toPlainText().trimmed();
+        if (!description.isEmpty()) {
+            requestObj["excel_file_description"] = description;
+        }
+    }
+    
     requestObj["scores"] = scoresArray;
     
     // 如果有Excel文件，添加文件名
     if (!m_excelFileName.isEmpty()) {
         requestObj["excel_file_name"] = m_excelFileName;
+    }
+    
+    // 构建 fields 数组（替换模式需要）
+    QJsonArray fieldsArray;
+    int fieldOrder = 1;
+    
+    // 遍历所有属性列，构建字段定义
+    for (auto it = attributeColumnMap.begin(); it != attributeColumnMap.end(); ++it) {
+        QString columnName = it.key();
+        
+        // 跳过固定列（学号、姓名、总分）
+        if (columnName == "学号" || columnName == "姓名" || columnName == "总分") {
+            continue;
+        }
+        
+        QJsonObject fieldObj;
+        fieldObj["field_name"] = columnName;
+        fieldObj["field_type"] = "number"; // 默认为数字类型
+        fieldObj["field_order"] = fieldOrder++;
+        fieldObj["is_total"] = (columnName == "总分") ? 1 : 0;
+        
+        fieldsArray.append(fieldObj);
+    }
+    
+    // 如果有字段定义，添加到请求中
+    if (!fieldsArray.isEmpty()) {
+        requestObj["fields"] = fieldsArray;
     }
 
     QJsonDocument doc(requestObj);
@@ -705,26 +742,59 @@ void MidtermGradeDialog::onUpload()
             
             if (responseDoc.isObject()) {
                 QJsonObject responseObj = responseDoc.object();
-                int code = responseObj["code"].toInt();
                 
-                if (code == 200) {
-                    QJsonObject dataObj = responseObj["data"].toObject();
-                    QString message = dataObj["message"].toString();
-                    int insertedCount = dataObj["inserted_count"].toInt();
+                // 检查是否成功（支持 code == 200 或 success == true）
+                bool isSuccess = false;
+                if (responseObj.contains("code")) {
+                    int code = responseObj["code"].toInt();
+                    isSuccess = (code == 200);
+                } else if (responseObj.contains("success")) {
+                    isSuccess = responseObj["success"].toBool();
+                }
+                
+                if (isSuccess) {
+                    // 尝试从 data 对象中获取数据，如果没有 data 则直接从 responseObj 获取
+                    QJsonObject dataObj;
+                    if (responseObj.contains("data") && responseObj["data"].isObject()) {
+                        dataObj = responseObj["data"].toObject();
+                    } else {
+                        dataObj = responseObj;
+                    }
                     
-                    // 尝试获取 score_header_id（如果服务器返回）
+                    QString message = dataObj["message"].toString();
+                    if (message.isEmpty()) {
+                        message = "上传成功！";
+                    }
+                    
+                    int insertedCount = dataObj["inserted_count"].toInt(0);
+                    int updatedCount = dataObj["updated_count"].toInt(0);
+                    
+                    // 尝试获取 score_header_id（支持 id 或 score_header_id 字段）
                     if (dataObj.contains("id") && dataObj["id"].isDouble()) {
                         m_scoreHeaderId = dataObj["id"].toInt();
                         qDebug() << "获取到 score_header_id:" << m_scoreHeaderId;
+                    } else if (dataObj.contains("score_header_id") && dataObj["score_header_id"].isDouble()) {
+                        m_scoreHeaderId = dataObj["score_header_id"].toInt();
+                        qDebug() << "获取到 score_header_id:" << m_scoreHeaderId;
+                    } else if (responseObj.contains("score_header_id") && responseObj["score_header_id"].isDouble()) {
+                        m_scoreHeaderId = responseObj["score_header_id"].toInt();
+                        qDebug() << "获取到 score_header_id:" << m_scoreHeaderId;
                     }
                     
-                    QMessageBox::information(this, "上传成功", 
-                        QString("上传成功！\n\n%1\n共插入 %2 条记录").arg(message).arg(insertedCount));
+                    QString successMsg = QString("上传成功！\n\n%1").arg(message);
+                    if (insertedCount > 0 || updatedCount > 0) {
+                        successMsg += QString("\n新增 %1 条记录").arg(insertedCount);
+                        if (updatedCount > 0) {
+                            successMsg += QString("，更新 %1 条记录").arg(updatedCount);
+                        }
+                    }
                     
-                    // 上传成功后自动打开排座窗口
-                    openSeatingArrangementDialog();
+                    QMessageBox::information(this, "上传成功", successMsg);
                 } else {
                     QString errorMsg = responseObj["message"].toString();
+                    if (errorMsg.isEmpty()) {
+                        errorMsg = "服务器返回错误";
+                    }
                     QMessageBox::warning(this, "上传失败", 
                         QString("服务器返回错误：\n%1").arg(errorMsg));
                 }

@@ -970,11 +970,43 @@ private slots:
         if (!remark.isEmpty()) {
             requestObj["remark"] = remark;
         }
+        requestObj["operation_mode"] = "replace"; // 默认使用替换模式
+        
+        // 添加表格说明（从 textDescription 获取）
+        if (textDescription) {
+            QString description = textDescription->toPlainText().trimmed();
+            if (!description.isEmpty()) {
+                requestObj["excel_file_description"] = description;
+            }
+        }
+        
         requestObj["group_scores"] = groupScoresArray;
         
         // 如果有Excel文件，添加文件名
         if (!m_excelFileName.isEmpty()) {
             requestObj["excel_file_name"] = m_excelFileName;
+        }
+        
+        // 构建 fields 数组（替换模式需要）
+        QJsonArray fieldsArray;
+        int fieldOrder = 1;
+        
+        // 遍历所有评分列，构建字段定义
+        for (auto it = scoreColumnMap.begin(); it != scoreColumnMap.end(); ++it) {
+            QString columnName = it.key();
+            
+            QJsonObject fieldObj;
+            fieldObj["field_name"] = columnName;
+            fieldObj["field_type"] = "number"; // 默认为数字类型
+            fieldObj["field_order"] = fieldOrder++;
+            fieldObj["is_total"] = 0;
+            
+            fieldsArray.append(fieldObj);
+        }
+        
+        // 如果有字段定义，添加到请求中
+        if (!fieldsArray.isEmpty()) {
+            requestObj["fields"] = fieldsArray;
         }
 
         QJsonDocument doc(requestObj);
