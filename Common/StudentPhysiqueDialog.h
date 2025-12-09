@@ -40,6 +40,7 @@
 #include <QNetworkReply>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include "CommonInfo.h"
 #include <QJsonArray>
 #include <algorithm>
 #include <QDebug>
@@ -47,6 +48,10 @@
 #include <QHttpPart>
 #include <QMimeDatabase>
 #include <QMimeType>
+#include <QStandardPaths>
+#include <QDir>
+#include <QDateTime>
+#include "QXlsx/header/xlsxdocument.h"
 #include <QFileInfo>
 #include <QDate>
 #include "StudentPhysiqueTableWidget.h"
@@ -108,6 +113,7 @@ public:
                           "QPushButton:hover { background-color: #006400; }";
 
         btnAddRow = new QPushButton("添加行");
+        btnDeleteRow = new QPushButton("删除行");
         btnDeleteColumn = new QPushButton("删除列");
         btnAddColumn = new QPushButton("添加列");
         btnFontColor = new QPushButton("字体颜色");
@@ -116,6 +122,7 @@ public:
         btnUpload = new QPushButton("上传服务器");
 
         btnAddRow->setStyleSheet(btnStyle);
+        btnDeleteRow->setStyleSheet(btnStyle);
         btnDeleteColumn->setStyleSheet(btnStyle);
         btnAddColumn->setStyleSheet(btnStyle);
         btnFontColor->setStyleSheet(btnStyle);
@@ -125,6 +132,7 @@ public:
                                  "QPushButton:hover { background-color: #0000CD; }");
 
         btnLayout->addWidget(btnAddRow);
+        btnLayout->addWidget(btnDeleteRow);
         btnLayout->addWidget(btnDeleteColumn);
         btnLayout->addWidget(btnAddColumn);
         btnLayout->addWidget(btnFontColor);
@@ -151,6 +159,12 @@ public:
         // 固定列：小组(0)、学号(1)、姓名(2)、总分(总分数-2)、小组总分(总分数-1)
         // 可添加列在姓名后插入
         table = new StudentPhysiqueTableWidget(this); // 使用自定义表格控件
+        table->setSelectionMode(QAbstractItemView::ExtendedSelection);   // 允许多选
+        table->setSelectionBehavior(QAbstractItemView::SelectItems);     // 支持按行/列/单元格选择
+        table->horizontalHeader()->setSectionsClickable(true);           // 允许点击表头选列
+        table->verticalHeader()->setSectionsClickable(true);             // 允许点击行号选行
+        // 统一选中高亮颜色
+        table->setStyleSheet("QTableWidget::item:selected { background-color: #4A90E2; color: white; }");
 
         // 固定列索引（不能删除的列）
         // 小组(0)、学号(1)、姓名(2)、总分(总分数-2)、小组总分(总分数-1)
@@ -166,6 +180,7 @@ public:
         
         // 连接信号和槽
         connect(btnAddRow, &QPushButton::clicked, this, &StudentPhysiqueDialog::onAddRow);
+        connect(btnDeleteRow, &QPushButton::clicked, this, &StudentPhysiqueDialog::onDeleteRow);
         connect(btnDeleteColumn, &QPushButton::clicked, this, &StudentPhysiqueDialog::onDeleteColumn);
         connect(btnAddColumn, &QPushButton::clicked, this, &StudentPhysiqueDialog::onAddColumn);
         connect(btnFontColor, &QPushButton::clicked, this, &StudentPhysiqueDialog::onFontColor);
@@ -287,8 +302,17 @@ public:
         int groupStartRow = -1;
         
         for (const QStringList& rowData : dataRows) {
-            if (rowData.size() != headers.size()) continue; // 跳过列数不匹配的行
-
+            // 检查是否为空行（所有列都为空）
+            bool isEmptyRow = true;
+            for (const QString& cell : rowData) {
+                if (!cell.trimmed().isEmpty()) {
+                    isEmptyRow = false;
+                    break;
+                }
+            }
+            if (isEmptyRow) continue; // 跳过空行
+            
+            // 允许数据行的列数少于表头列数（空列会被填充为空字符串）
             int row = table->rowCount();
             table->insertRow(row);
 
@@ -316,13 +340,19 @@ public:
             if (colId >= 0 && headerMap.contains("学号")) {
                 int srcCol = headerMap["学号"];
                 if (srcCol < rowData.size()) {
-                    table->item(row, colId)->setText(rowData[srcCol]);
+                    QTableWidgetItem* idItem = table->item(row, colId);
+                    idItem->setText(rowData[srcCol]);
+                    idItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
+                    idItem->setData(Qt::UserRole, QVariant()); // 学号列不需要注释
                 }
             }
             if (colName >= 0 && headerMap.contains("姓名")) {
                 int srcCol = headerMap["姓名"];
                 if (srcCol < rowData.size()) {
-                    table->item(row, colName)->setText(rowData[srcCol]);
+                    QTableWidgetItem* nameItem = table->item(row, colName);
+                    nameItem->setText(rowData[srcCol]);
+                    nameItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
+                    nameItem->setData(Qt::UserRole, QVariant()); // 姓名列不需要注释
                 }
             }
 
@@ -380,6 +410,14 @@ public:
         // 重新合并小组单元格并更新总分
         mergeGroupCells();
         updateAllTotals();
+        
+        // 确保表格可见并刷新显示
+        table->setVisible(true);
+        table->show();
+        table->update();
+        table->repaint();
+        
+        qDebug() << "导入完成，共" << table->rowCount() << "行数据";
     }
 
 protected:
@@ -597,10 +635,35 @@ private slots:
         int insertRow = currentRow + 1;
         table->insertRow(insertRow);
 
+        // 获取学号和姓名列的索引
+        int colId = -1, colName = -1;
+        for (int c = 0; c < table->columnCount(); ++c) {
+            QTableWidgetItem* headerItem = table->horizontalHeaderItem(c);
+            if (!headerItem) continue;
+            QString headerText = headerItem->text();
+            if (headerText == "学号") {
+                colId = c;
+            } else if (headerText == "姓名") {
+                colName = c;
+            }
+        }
+
         // 初始化新行的所有单元格
         for (int col = 0; col < table->columnCount(); ++col) {
             QTableWidgetItem* item = new QTableWidgetItem("");
             item->setTextAlignment(Qt::AlignCenter);
+            
+            QTableWidgetItem* headerItem = table->horizontalHeaderItem(col);
+            QString headerText = headerItem ? headerItem->text() : "";
+            
+            // 学号、姓名、小组列清空注释，保持可编辑；其他列默认值为"0"
+            if (headerText == "学号" || headerText == "姓名" || headerText == "小组") {
+                item->setData(Qt::UserRole, QVariant());
+            } else if (headerText != "总分" && headerText != "小组总分") {
+                // 除了学号、姓名、小组、总分、小组总分，其他字段默认值都为0
+                item->setText("0");
+            }
+            
             table->setItem(insertRow, col, item);
         }
         
@@ -609,6 +672,39 @@ private slots:
             QTableWidgetItem* newGroupItem = table->item(insertRow, groupColumnIndex);
             if (newGroupItem) {
                 newGroupItem->setText(groupName);
+            }
+        }
+
+        // 为学号列填入当前最大且不同的学号+1（确保不与现有学号重复）
+        if (colId >= 0) {
+            // 收集所有现有学号（包括insertRow之后的行）
+            QSet<int> existingIds;
+            for (int r = 0; r < table->rowCount(); ++r) {
+                if (r == insertRow) continue; // 跳过新插入的行
+                QTableWidgetItem* idItem = table->item(r, colId);
+                if (!idItem) continue;
+                bool ok = false;
+                int v = idItem->text().trimmed().toInt(&ok);
+                if (ok && v > 0) {
+                    existingIds.insert(v);
+                }
+            }
+            
+            // 找到最大学号
+            int maxId = 0;
+            if (!existingIds.isEmpty()) {
+                maxId = *std::max_element(existingIds.begin(), existingIds.end());
+            }
+            
+            // 生成新的学号，确保不与现有学号重复
+            int newId = maxId + 1;
+            while (existingIds.contains(newId)) {
+                newId++;
+            }
+            
+            QTableWidgetItem* newIdItem = table->item(insertRow, colId);
+            if (newIdItem) {
+                newIdItem->setText(QString::number(newId));
             }
         }
         
@@ -687,9 +783,9 @@ private slots:
         table->insertColumn(insertCol);
         table->setHorizontalHeaderItem(insertCol, new QTableWidgetItem(columnName));
 
-        // 初始化新列的所有单元格
+        // 初始化新列的所有单元格，默认值0
         for (int row = 0; row < table->rowCount(); ++row) {
-            QTableWidgetItem* item = new QTableWidgetItem("");
+            QTableWidgetItem* item = new QTableWidgetItem("0");
             item->setTextAlignment(Qt::AlignCenter);
             table->setItem(row, insertCol, item);
         }
@@ -863,6 +959,59 @@ private slots:
 
         delete inputDialog;
 
+        // 确保有可写入的本地Excel路径；如果不存在则创建文件并保存当前表格
+        {
+            QString excelPath = m_excelFilePath;
+            QString excelName = m_excelFileName;
+
+            // 目标目录：appDir/excel_files/<schoolId>/<classId>/
+            UserInfo userInfo = CommonInfo::GetData();
+            QString schoolId = userInfo.schoolId;
+            QString classId = m_classid;
+            QString baseDir = QCoreApplication::applicationDirPath() + "/excel_files";
+            QString targetDir;
+            if (!schoolId.isEmpty() && !classId.isEmpty()) {
+                targetDir = baseDir + "/" + schoolId + "/" + classId;
+            }
+
+            if (excelName.isEmpty()) {
+                excelName = QString("学生体质统计表_%1.xlsx").arg(QDateTime::currentDateTime().toString("yyyyMMddHHmmss"));
+            }
+
+            if (!targetDir.isEmpty()) {
+                QDir().mkpath(targetDir);
+                excelPath = targetDir + "/" + excelName;
+            } else if (excelPath.isEmpty() || !QFile::exists(excelPath)) {
+                QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+                if (dir.isEmpty()) dir = QCoreApplication::applicationDirPath();
+                QDir().mkpath(dir);
+                excelPath = dir + "/" + excelName;
+            }
+
+            m_excelFilePath = excelPath;
+            m_excelFileName = excelName;
+
+            QXlsx::Document xlsx;
+            // 写表头
+            for (int col = 0; col < table->columnCount(); ++col) {
+                QTableWidgetItem* headerItem = table->horizontalHeaderItem(col);
+                QString headerText = headerItem ? headerItem->text() : "";
+                xlsx.write(1, col + 1, headerText);
+            }
+            // 写数据
+            for (int row = 0; row < table->rowCount(); ++row) {
+                for (int col = 0; col < table->columnCount(); ++col) {
+                    QTableWidgetItem* item = table->item(row, col);
+                    QString text = item ? item->text() : "";
+                    xlsx.write(row + 2, col + 1, text);
+                }
+            }
+            if (!xlsx.saveAs(m_excelFilePath)) {
+                QMessageBox::warning(this, "错误", "保存本地Excel文件失败，无法上传！");
+                return;
+            }
+        }
+
         // 从表格中读取数据
         QJsonArray groupScoresArray;
         
@@ -963,6 +1112,27 @@ private slots:
             return;
         }
 
+        // 校验学号与姓名非空、学号不重复
+        {
+            QSet<QString> idSet;
+            for (int row = 0; row < table->rowCount(); ++row) {
+                QTableWidgetItem* idItem = table->item(row, colId);
+                QTableWidgetItem* nameItem = table->item(row, colName);
+                if (!idItem || !nameItem) continue;
+                QString studentId = idItem->text().trimmed();
+                QString studentName = nameItem->text().trimmed();
+                if (studentId.isEmpty() || studentName.isEmpty()) {
+                    QMessageBox::warning(this, "错误", "存在学号或姓名为空的行，无法上传！");
+                    return;
+                }
+                if (idSet.contains(studentId)) {
+                    QMessageBox::warning(this, "错误", QString("存在重复学号：%1，无法上传！").arg(studentId));
+                    return;
+                }
+                idSet.insert(studentId);
+            }
+        }
+
         // 构造请求 JSON
         QJsonObject requestObj;
         requestObj["class_id"] = classId;
@@ -990,6 +1160,7 @@ private slots:
         // 构建 fields 数组（替换模式需要）
         QJsonArray fieldsArray;
         int fieldOrder = 1;
+        QStringList excelFieldNames;
         
         // 遍历所有评分列，构建字段定义
         for (auto it = scoreColumnMap.begin(); it != scoreColumnMap.end(); ++it) {
@@ -1002,11 +1173,43 @@ private slots:
             fieldObj["is_total"] = 0;
             
             fieldsArray.append(fieldObj);
+            excelFieldNames.append(columnName);
         }
         
         // 如果有字段定义，添加到请求中
         if (!fieldsArray.isEmpty()) {
             requestObj["fields"] = fieldsArray;
+        }
+        
+        // excel_files 列表（每个 Excel 的字段映射与描述）
+        if (!m_excelFileName.isEmpty()) {
+            QJsonArray excelFilesArray;
+            QJsonObject excelObj;
+            excelObj["filename"] = m_excelFileName;
+            excelObj["url"] = ""; // 客户端本地上传，无现成 URL
+            if (textDescription) {
+                QString desc = textDescription->toPlainText().trimmed();
+                if (!desc.isEmpty()) {
+                    excelObj["description"] = desc;
+                }
+            }
+            QJsonArray excelFieldsJson;
+            if (excelFieldNames.isEmpty()) {
+                for (const auto& f : fieldsArray) {
+                    QJsonObject fObj = f.toObject();
+                    QString name = fObj.value("field_name").toString();
+                    if (!name.isEmpty()) {
+                        excelFieldsJson.append(name);
+                    }
+                }
+            } else {
+                for (const QString& f : excelFieldNames) {
+                    excelFieldsJson.append(f);
+                }
+            }
+            excelObj["fields"] = excelFieldsJson;
+            excelFilesArray.append(excelObj);
+            requestObj["excel_files"] = excelFilesArray;
         }
 
         QJsonDocument doc(requestObj);
@@ -1131,6 +1334,16 @@ private slots:
             table->setItem(row, column, item);
         }
         
+        // 获取列头名称，检查是否是学号或姓名列
+        QTableWidgetItem* headerItem = table->horizontalHeaderItem(column);
+        QString headerText = headerItem ? headerItem->text() : "";
+        
+        // 如果是学号或姓名列，直接进入编辑状态
+        if (headerText == "学号" || headerText == "姓名") {
+            table->editItem(item);
+            return;
+        }
+        
         // 检查是否是跨列注释的起始单元格
         int spanCols = item->data(Qt::UserRole + 1).toInt();
         QString comment = item->data(Qt::UserRole).toString();
@@ -1152,7 +1365,7 @@ private slots:
             }
         }
         
-        // 如果已有注释，显示注释窗口；否则弹出编辑对话框
+        // 如果已有注释，显示注释窗口；否则直接进入编辑状态（双击也是直接编辑）
         if (!comment.isEmpty() && commentWidget) {
             QRect cellRect = table->visualItemRect(item);
             // 计算跨列的宽度
@@ -1165,8 +1378,8 @@ private slots:
             commentWidget->showComment(comment, cellRect, table, spanCols);
             commentWidget->cancelHide();
         } else {
-            // 没有注释，弹出编辑对话框
-            showCellComment(row, column);
+            // 没有注释，直接进入编辑状态（注释编辑通过右键菜单）
+            table->editItem(item);
         }
     }
 
@@ -1181,13 +1394,24 @@ private slots:
     {
         if (!item) return;
         
+        int row = item->row();
+        int column = item->column();
+        
         // 如果修改的是小组列，需要重新合并单元格
-        if (item->column() == groupColumnIndex) {
+        if (column == groupColumnIndex) {
             mergeGroupCells();
             updateGroupTotals();
         } else {
-            // 其他列改变时，更新总分
-            updateAllTotals();
+            // 获取列头名称
+            QTableWidgetItem* headerItem = table->horizontalHeaderItem(column);
+            QString headerText = headerItem ? headerItem->text() : "";
+            
+            // 如果修改的不是"总分"列、"小组总分"列、"学号"列、"姓名"列，则更新该行的总分
+            if (headerText != "总分" && headerText != "小组总分" && headerText != "学号" && headerText != "姓名" && headerText != "小组") {
+                updateRowTotal(row);
+                // 更新小组总分（因为该行的总分改变了）
+                updateGroupTotals();
+            }
         }
     }
 
@@ -1215,6 +1439,46 @@ private slots:
                 updateGroupTotals();
             }
         }
+    }
+
+    void onDeleteRow()
+    {
+        QList<QTableWidgetSelectionRange> ranges = table->selectedRanges();
+        if (ranges.isEmpty()) {
+            QMessageBox::information(this, "提示", "请先选择要删除的行");
+            return;
+        }
+
+        // 必须整行选中（覆盖所有列）才允许删除
+        for (const auto& range : ranges) {
+            if (range.leftColumn() != 0 || range.rightColumn() != table->columnCount() - 1) {
+                QMessageBox::information(this, "提示", "请先整行选中后再删除该行");
+                return;
+            }
+        }
+
+        QSet<int> rowsToDelete;
+        for (const auto& range : ranges) {
+            for (int r = range.topRow(); r <= range.bottomRow(); ++r) {
+                rowsToDelete.insert(r);
+            }
+        }
+
+        if (rowsToDelete.isEmpty()) {
+            QMessageBox::information(this, "提示", "未选择有效的行");
+            return;
+        }
+
+        // 从下往上删除，避免行号变化影响
+        QList<int> rowsList = rowsToDelete.values();
+        std::sort(rowsList.begin(), rowsList.end(), std::greater<int>());
+        for (int r : rowsList) {
+            table->removeRow(r);
+        }
+
+        // 删除后重新合并小组单元格并更新总分
+        mergeGroupCells();
+        updateAllTotals();
     }
 
 private:
@@ -1398,6 +1662,105 @@ private:
         
         // 更新小组总分
         updateGroupTotals();
+    }
+
+    void updateRowTotal(int row)
+    {
+        // 查找"总分"列的索引
+        int totalScoreCol = -1;
+        int groupCol = groupColumnIndex;
+        int nameCol = nameColumnIndex;
+        int idCol = -1;
+        
+        // 查找学号列索引
+        for (int c = 0; c < table->columnCount(); ++c) {
+            QTableWidgetItem* headerItem = table->horizontalHeaderItem(c);
+            if (!headerItem) continue;
+            if (headerItem->text() == "学号") {
+                idCol = c;
+                break;
+            }
+        }
+        
+        // 查找总分列索引
+        for (int c = 0; c < table->columnCount(); ++c) {
+            QTableWidgetItem* headerItem = table->horizontalHeaderItem(c);
+            if (!headerItem) continue;
+            if (headerItem->text() == "总分") {
+                totalScoreCol = c;
+                break;
+            }
+        }
+        
+        // 如果没有"总分"列，不需要更新
+        if (totalScoreCol < 0) return;
+        
+        double total = 0.0;
+        
+        // 遍历所有列，计算所有数值列（排除：小组、学号、姓名、总分、小组总分列）
+        for (int col = 0; col < table->columnCount(); ++col) {
+            // 跳过固定列和总分列
+            if (col == groupCol || col == idCol || col == nameCol || col == totalScoreCol) {
+                continue;
+            }
+            
+            // 获取列头名称，确保不是固定列
+            QTableWidgetItem* headerItem = table->horizontalHeaderItem(col);
+            if (!headerItem) continue;
+            QString headerText = headerItem->text();
+            if (headerText == "小组" || headerText == "学号" || headerText == "姓名" || 
+                headerText == "总分" || headerText == "小组总分") {
+                continue;
+            }
+            
+            // 检查该单元格是否被合并（可能是注释单元格）
+            QTableWidgetItem* item = table->item(row, col);
+            if (!item) continue;
+            
+            // 检查该单元格是否是跨列注释的起始单元格
+            int spanCols = item->data(Qt::UserRole + 1).toInt();
+            if (spanCols > 1) {
+                // 这是跨列注释的起始单元格，跳过（不计算注释单元格）
+                // 同时跳过该注释跨过的所有列
+                col += (spanCols - 1);
+                continue;
+            }
+            
+            // 检查该单元格是否在某个跨列注释的范围内
+            bool isInCommentSpan = false;
+            for (int c = col - 1; c >= 0; --c) {
+                QTableWidgetItem* checkItem = table->item(row, c);
+                if (checkItem) {
+                    int sc = checkItem->data(Qt::UserRole + 1).toInt();
+                    if (sc > 1 && c + sc > col) {
+                        // 当前单元格在跨列注释范围内
+                        isInCommentSpan = true;
+                        break;
+                    }
+                }
+            }
+            if (isInCommentSpan) continue;
+            
+            QString text = item->text();
+            bool ok;
+            double value = text.toDouble(&ok);
+            if (ok) {
+                total += value;
+            }
+        }
+        
+        // 设置总分
+        QTableWidgetItem* totalItem = table->item(row, totalScoreCol);
+        if (!totalItem) {
+            totalItem = new QTableWidgetItem("");
+            totalItem->setTextAlignment(Qt::AlignCenter);
+            table->setItem(row, totalScoreCol, totalItem);
+        }
+        
+        // 暂时断开信号，避免递归调用
+        table->blockSignals(true);
+        totalItem->setText(QString::number(total));
+        table->blockSignals(false);
     }
 
     void updateGroupTotals()
@@ -1614,6 +1977,7 @@ private:
     QPushButton* btnAddRow;
     QPushButton* btnDeleteColumn;
     QPushButton* btnAddColumn;
+    QPushButton* btnDeleteRow;
     QPushButton* btnFontColor;
     QPushButton* btnBgColor;
     QPushButton* btnExport;

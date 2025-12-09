@@ -56,8 +56,8 @@ void CustomListDialog::updateNamesFromSeatInfo(const QStringList& headers, QList
         // 查找座位信息中对应的姓名
         if (seatIdToNameMap.contains(studentId)) {
             QString seatName = seatIdToNameMap[studentId];
-            if (seatName != currentName) {
-                // 姓名不一致，更新为座位表中的姓名
+            // 以导入的 Excel 姓名为准，仅当 Excel 里为空时才用座位表补全
+            if (currentName.isEmpty() && !seatName.isEmpty()) {
                 row[nameCol] = seatName;
                 updatedCount++;
             }

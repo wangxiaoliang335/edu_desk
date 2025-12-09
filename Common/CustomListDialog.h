@@ -263,7 +263,101 @@ private slots:
 
         // Excel文件名已在上面获取
         
-        // 如果已经导入过这个文件，先删除旧的对话框和按钮，允许重新导入更新
+        // 计算当前学期
+        QDate currentDate = QDate::currentDate();
+        int year = currentDate.year();
+        int month = currentDate.month();
+        QString term;
+        if (month >= 9 || month <= 1) {
+            if (month >= 9) {
+                term = QString("%1-%2-1").arg(year).arg(year + 1);
+            } else {
+                term = QString("%1-%2-1").arg(year - 1).arg(year);
+            }
+        } else {
+            term = QString("%1-%2-2").arg(year - 1).arg(year);
+        }
+        
+        // 检查是否已存在相同文件名和学期的按钮
+        QString existingTerm = m_fileNameToTermMap.value(excelFileName);
+        if (!existingTerm.isEmpty() && existingTerm == term && m_dialogMap.contains(excelFileName)) {
+            // 已存在相同文件名和学期的按钮，以导入的为准，覆盖已有对话框的数据
+            QDialog* existingDialog = m_dialogMap[excelFileName];
+            if (existingDialog) {
+                bool updated = false;
+                
+                // 尝试更新已有对话框（如果类型匹配）
+                if (isMidtermGrade) {
+                    MidtermGradeDialog* midtermDlg = qobject_cast<MidtermGradeDialog*>(existingDialog);
+                    if (midtermDlg) {
+                        // 比对并更新姓名（以座位表为准）
+                        updateNamesFromSeatInfo(headers, dataRows);
+                        // 重新导入数据
+                        midtermDlg->importData(headers, dataRows, fileName);
+                        qDebug() << "已更新已有对话框的数据:" << excelFileName << "学期:" << term;
+                        
+                        QMessageBox::information(this, "更新成功", 
+                            QString("已成功更新期中成绩单！\n共%1行数据。").arg(dataRows.size()));
+                        midtermDlg->show();
+                        midtermDlg->raise();
+                        midtermDlg->activateWindow();
+                        updated = true;
+                    }
+                } else if (isStudentPhysique) {
+                    StudentPhysiqueDialog* physiqueDlg = qobject_cast<StudentPhysiqueDialog*>(existingDialog);
+                    if (physiqueDlg) {
+                        // 重新导入数据
+                        physiqueDlg->importData(headers, dataRows, fileName);
+                        qDebug() << "已更新已有对话框的数据:" << excelFileName << "学期:" << term;
+                        
+                        QMessageBox::information(this, "更新成功", 
+                            QString("已成功更新学生体质统计表！\n共%1行数据。").arg(dataRows.size()));
+                        physiqueDlg->show();
+                        physiqueDlg->raise();
+                        physiqueDlg->activateWindow();
+                        updated = true;
+                    }
+                }
+                
+                // 如果类型不匹配，删除旧的对话框和按钮，创建新的
+                if (!updated) {
+                    qDebug() << "对话框类型不匹配，删除旧的并创建新的:" << excelFileName;
+                    // 找到对应的按钮
+                    QPushButton* existingBtn = nullptr;
+                    for (auto it = m_buttonToFileNameMap.begin(); it != m_buttonToFileNameMap.end(); ++it) {
+                        if (it.value() == excelFileName) {
+                            existingBtn = it.key();
+                            break;
+                        }
+                    }
+                    
+                    // 删除旧的对话框
+                    existingDialog->deleteLater();
+                    m_dialogMap.remove(excelFileName);
+                    m_fileNameToTermMap.remove(excelFileName);
+                    
+                    // 删除旧的按钮
+                    if (existingBtn) {
+                        m_buttonToFileNameMap.remove(existingBtn);
+                        // 找到按钮所在的行布局并删除
+                        QWidget* rowWidget = existingBtn->parentWidget();
+                        if (rowWidget) {
+                            QHBoxLayout* rowLayout = qobject_cast<QHBoxLayout*>(rowWidget->layout());
+                            if (rowLayout) {
+                                m_mainLayout->removeWidget(rowWidget);
+                                rowWidget->deleteLater();
+                            }
+                        }
+                    }
+                    // 继续执行后面的创建新对话框逻辑
+                } else {
+                    // 更新成功，直接返回
+                    return;
+                }
+            }
+        }
+        
+        // 如果已经导入过这个文件（但学期不同），先删除旧的对话框和按钮，允许重新导入
         if (m_dialogMap.contains(excelFileName)) {
             QDialog* existingDlg = m_dialogMap[excelFileName];
             // 找到对应的按钮
@@ -280,6 +374,7 @@ private slots:
                 existingDlg->deleteLater();
             }
             m_dialogMap.remove(excelFileName);
+            m_fileNameToTermMap.remove(excelFileName);
             
             // 删除旧的按钮
             if (existingBtn) {
@@ -310,19 +405,6 @@ private slots:
             midtermDlg->setWindowTitle(fileInfo.baseName());
             
             // 从全局存储中获取 score_header_id 并设置
-            QDate currentDate = QDate::currentDate();
-            int year = currentDate.year();
-            int month = currentDate.month();
-            QString term;
-            if (month >= 9 || month <= 1) {
-                if (month >= 9) {
-                    term = QString("%1-%2-1").arg(year).arg(year + 1);
-                } else {
-                    term = QString("%1-%2-1").arg(year - 1).arg(year);
-                }
-            } else {
-                term = QString("%1-%2-2").arg(year - 1).arg(year);
-            }
             int scoreHeaderId = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, "期中考试", term);
             if (scoreHeaderId > 0) {
                 midtermDlg->setScoreHeaderId(scoreHeaderId);
@@ -360,20 +442,7 @@ private slots:
             physiqueDlg->setWindowTitle(fileInfo2.baseName());
             
             // 从全局存储中获取 score_header_id 并设置
-            QDate currentDate2 = QDate::currentDate();
-            int year2 = currentDate2.year();
-            int month2 = currentDate2.month();
-            QString term2;
-            if (month2 >= 9 || month2 <= 1) {
-                if (month2 >= 9) {
-                    term2 = QString("%1-%2-1").arg(year2).arg(year2 + 1);
-                } else {
-                    term2 = QString("%1-%2-1").arg(year2 - 1).arg(year2);
-                }
-            } else {
-                term2 = QString("%1-%2-2").arg(year2 - 1).arg(year2);
-            }
-            int scoreHeaderId2 = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, "期中考试", term2);
+            int scoreHeaderId2 = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, "期中考试", term);
             if (scoreHeaderId2 > 0) {
                 physiqueDlg->setScoreHeaderId(scoreHeaderId2);
                 qDebug() << "已为 StudentPhysiqueDialog 设置 score_header_id:" << scoreHeaderId2;
@@ -411,8 +480,9 @@ private slots:
         
         // 如果成功创建对话框，则创建对应的按钮
         if (dialog) {
-            // 保存对话框映射
+            // 保存对话框映射和学期信息
             m_dialogMap[excelFileName] = dialog;
+            m_fileNameToTermMap[excelFileName] = term;
             
             // 创建按钮行（在"+"按钮之前插入）
             // 找到"+"按钮的位置
@@ -462,6 +532,7 @@ private slots:
                 // 删除按钮和对话框
                 m_dialogMap.remove(excelFileName);
                 m_buttonToFileNameMap.remove(btnTitle);
+                m_fileNameToTermMap.remove(excelFileName);
                 
                 // 从布局中移除按钮行
                 m_mainLayout->removeItem(rowLayout);
@@ -698,6 +769,8 @@ private:
     // 使用QMap保存按钮和对话框的映射关系（Excel文件名 -> 对话框指针）
     QMap<QString, QDialog*> m_dialogMap; // Excel文件名 -> 对话框
     QMap<QPushButton*, QString> m_buttonToFileNameMap; // 按钮 -> Excel文件名
+    // 存储按钮对应的学期信息（键：文件名，值：学期）
+    QMap<QString, QString> m_fileNameToTermMap; // Excel文件名 -> 学期
     
     QString m_classid;
     QPushButton* m_btnClose = nullptr; // 关闭按钮
@@ -796,6 +869,49 @@ inline void CustomListDialog::loadExcelFileAndCreateButton(const QString& filePa
         return;
     }
     
+    // 计算当前学期
+    QDate currentDate = QDate::currentDate();
+    int year = currentDate.year();
+    int month = currentDate.month();
+    QString term;
+    if (month >= 9 || month <= 1) {
+        if (month >= 9) {
+            term = QString("%1-%2-1").arg(year).arg(year + 1);
+        } else {
+            term = QString("%1-%2-1").arg(year - 1).arg(year);
+        }
+    } else {
+        term = QString("%1-%2-2").arg(year - 1).arg(year);
+    }
+    
+    // 检查是否已存在相同文件名和学期的按钮
+    QString existingTerm = m_fileNameToTermMap.value(fileName);
+    if (!existingTerm.isEmpty() && existingTerm == term && m_dialogMap.contains(fileName)) {
+        // 已存在相同文件名和学期的按钮，更新已有对话框的数据
+        QDialog* existingDialog = m_dialogMap[fileName];
+        if (existingDialog) {
+            if (isMidtermGrade) {
+                MidtermGradeDialog* midtermDlg = qobject_cast<MidtermGradeDialog*>(existingDialog);
+                if (midtermDlg) {
+                    // 比对并更新姓名（以座位表为准）
+                    updateNamesFromSeatInfo(headers, dataRows);
+                    // 重新导入数据
+                    midtermDlg->importData(headers, dataRows, filePath);
+                    qDebug() << "已更新已有对话框的数据:" << fileName << "学期:" << term;
+                    return;
+                }
+            } else if (isStudentPhysique) {
+                StudentPhysiqueDialog* physiqueDlg = qobject_cast<StudentPhysiqueDialog*>(existingDialog);
+                if (physiqueDlg) {
+                    // 重新导入数据
+                    physiqueDlg->importData(headers, dataRows, filePath);
+                    qDebug() << "已更新已有对话框的数据:" << fileName << "学期:" << term;
+                    return;
+                }
+            }
+        }
+    }
+    
     // 根据表格类型导入数据
     QDialog* dialog = nullptr;
     if (isMidtermGrade) {
@@ -808,19 +924,6 @@ inline void CustomListDialog::loadExcelFileAndCreateButton(const QString& filePa
         midtermDlg->setWindowTitle(fileInfo.baseName());
         
         // 从全局存储中获取 score_header_id 并设置
-        QDate currentDate = QDate::currentDate();
-        int year = currentDate.year();
-        int month = currentDate.month();
-        QString term;
-        if (month >= 9 || month <= 1) {
-            if (month >= 9) {
-                term = QString("%1-%2-1").arg(year).arg(year + 1);
-            } else {
-                term = QString("%1-%2-1").arg(year - 1).arg(year);
-            }
-        } else {
-            term = QString("%1-%2-2").arg(year - 1).arg(year);
-        }
         int scoreHeaderId = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, "期中考试", term);
         if (scoreHeaderId > 0) {
             midtermDlg->setScoreHeaderId(scoreHeaderId);
@@ -835,19 +938,6 @@ inline void CustomListDialog::loadExcelFileAndCreateButton(const QString& filePa
         physiqueDlg->setWindowTitle(fileInfo.baseName());
         
         // 从全局存储中获取 score_header_id 并设置（学生体质表可能使用不同的 exam_name，这里先尝试期中考试）
-        QDate currentDate = QDate::currentDate();
-        int year = currentDate.year();
-        int month = currentDate.month();
-        QString term;
-        if (month >= 9 || month <= 1) {
-            if (month >= 9) {
-                term = QString("%1-%2-1").arg(year).arg(year + 1);
-            } else {
-                term = QString("%1-%2-1").arg(year - 1).arg(year);
-            }
-        } else {
-            term = QString("%1-%2-2").arg(year - 1).arg(year);
-        }
         int scoreHeaderId = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, "期中考试", term);
         if (scoreHeaderId > 0) {
             physiqueDlg->setScoreHeaderId(scoreHeaderId);
@@ -864,8 +954,9 @@ inline void CustomListDialog::loadExcelFileAndCreateButton(const QString& filePa
     // 标记为已加载
     m_loadedFiles.insert(filePath);
     
-    // 保存对话框映射
+    // 保存对话框映射和学期信息
     m_dialogMap[fileName] = dialog;
+    m_fileNameToTermMap[fileName] = term;
     
     // 创建按钮行（在"+"按钮之前插入）
     int insertIndex = m_mainLayout->count() - 1; // "+"按钮是最后一个
@@ -914,6 +1005,7 @@ inline void CustomListDialog::loadExcelFileAndCreateButton(const QString& filePa
         // 删除按钮和对话框
         m_dialogMap.remove(fileName);
         m_buttonToFileNameMap.remove(btnTitle);
+        m_fileNameToTermMap.remove(fileName);
         m_loadedFiles.remove(filePath);
         
         // 从布局中移除按钮行

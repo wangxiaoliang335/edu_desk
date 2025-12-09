@@ -17,10 +17,15 @@
 #include <QAction>
 #include <QBrush>
 #include <QColor>
+#include <QSet>
 #include <algorithm>
 #include "CommonInfo.h"
 #include "ArrangeSeatDialog.h"
 #include "CommentStorage.h"
+#include "QXlsx/header/xlsxdocument.h"
+#include <QStandardPaths>
+#include <QDir>
+#include <QDateTime>
 #include <QApplication>
 #include <QDebug>
 #include <QDate>
@@ -74,6 +79,7 @@ MidtermGradeDialog::MidtermGradeDialog(QString classid, QWidget* parent) : QDial
                       "QPushButton:hover { background-color: #006400; }";
 
     btnAddRow = new QPushButton("添加行");
+    btnDeleteRow = new QPushButton("删除行");
     btnDeleteColumn = new QPushButton("删除列");
     btnAddColumn = new QPushButton("添加列");
     btnFontColor = new QPushButton("字体颜色");
@@ -85,6 +91,7 @@ MidtermGradeDialog::MidtermGradeDialog(QString classid, QWidget* parent) : QDial
     qDebug() << "创建上传按钮，按钮指针:" << btnUpload;
 
     btnAddRow->setStyleSheet(btnStyle);
+    btnDeleteRow->setStyleSheet(btnStyle);
     btnDeleteColumn->setStyleSheet(btnStyle);
     btnAddColumn->setStyleSheet(btnStyle);
     btnFontColor->setStyleSheet(btnStyle);
@@ -96,6 +103,7 @@ MidtermGradeDialog::MidtermGradeDialog(QString classid, QWidget* parent) : QDial
                              "QPushButton:hover { background-color: #0000CD; }");
 
     btnLayout->addWidget(btnAddRow);
+    btnLayout->addWidget(btnDeleteRow);
     btnLayout->addWidget(btnDeleteColumn);
     btnLayout->addWidget(btnAddColumn);
     btnLayout->addWidget(btnFontColor);
@@ -124,6 +132,12 @@ MidtermGradeDialog::MidtermGradeDialog(QString classid, QWidget* parent) : QDial
 
     // 表格
     table = new MidtermGradeTableWidget(this); // 使用自定义表格控件
+    table->setSelectionMode(QAbstractItemView::ExtendedSelection);   // 允许多选
+    table->setSelectionBehavior(QAbstractItemView::SelectItems);     // 支持按行/列/单元格选择
+    table->horizontalHeader()->setSectionsClickable(true);           // 允许点击表头选列
+    table->verticalHeader()->setSectionsClickable(true);             // 允许点击行号选行
+    // 统一选中高亮颜色
+    table->setStyleSheet("QTableWidget::item:selected { background-color: #4A90E2; color: white; }");
 
     // 添加示例数据
     if (table->item(0, 2)) table->item(0, 2)->setText("100");
@@ -143,6 +157,7 @@ MidtermGradeDialog::MidtermGradeDialog(QString classid, QWidget* parent) : QDial
 
     // 连接信号和槽
     connect(btnAddRow, &QPushButton::clicked, this, &MidtermGradeDialog::onAddRow);
+    connect(btnDeleteRow, &QPushButton::clicked, this, &MidtermGradeDialog::onDeleteRow);
     connect(btnDeleteColumn, &QPushButton::clicked, this, &MidtermGradeDialog::onDeleteColumn);
     connect(btnAddColumn, &QPushButton::clicked, this, &MidtermGradeDialog::onAddColumn);
     connect(btnFontColor, &QPushButton::clicked, this, &MidtermGradeDialog::onFontColor);
@@ -162,6 +177,9 @@ MidtermGradeDialog::MidtermGradeDialog(QString classid, QWidget* parent) : QDial
     connect(table, &QTableWidget::cellClicked, this, &MidtermGradeDialog::onCellClicked);
     connect(table, &QTableWidget::cellEntered, this, &MidtermGradeDialog::onCellEntered);
     table->setMouseTracking(true);
+    
+    // 监听单元格内容变化，自动更新总分
+    connect(table, &QTableWidget::itemChanged, this, &MidtermGradeDialog::onItemChanged);
 
     // 创建注释窗口
     commentWidget = new CellCommentWidget(this);
@@ -246,8 +264,17 @@ void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStr
 
     // 导入数据
     for (const QStringList& rowData : dataRows) {
-        if (rowData.size() != headers.size()) continue; // 跳过列数不匹配的行
-
+        // 检查是否为空行（所有列都为空）
+        bool isEmptyRow = true;
+        for (const QString& cell : rowData) {
+            if (!cell.trimmed().isEmpty()) {
+                isEmptyRow = false;
+                break;
+            }
+        }
+        if (isEmptyRow) continue; // 跳过空行
+        
+        // 允许数据行的列数少于表头列数（空列会被填充为空字符串）
         int row = table->rowCount();
         table->insertRow(row);
 
@@ -261,12 +288,20 @@ void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStr
         // 填充数据 - 根据导入的列头动态填充所有列
         for (int col = 0; col < headers.size(); ++col) {
             QString headerText = headers[col];
+            QTableWidgetItem* item = table->item(row, col);
             if (col < rowData.size()) {
-                table->item(row, col)->setText(rowData[col]);
+                item->setText(rowData[col]);
+            }
+            
+            // 学号、姓名列：不可编辑，清空注释
+            if (headerText == "学号" || headerText == "姓名") {
+                item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
+                item->setData(Qt::UserRole, QVariant());
+                continue;
             }
             
             // 如果是属性列（非学号、姓名、总分），尝试从全局存储中获取注释
-            if (headerText != "学号" && headerText != "姓名" && headerText != "总分") {
+            if (headerText != "总分") {
                 // 获取学生学号（从学号列）
                 QString studentId = "";
                 if (colId >= 0 && colId < rowData.size()) {
@@ -301,12 +336,20 @@ void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStr
                     // 从全局存储中获取注释
                     QString comment = CommentStorage::getComment(m_classid, "期中考试", term, studentId, headerText);
                     if (!comment.isEmpty()) {
-                        table->item(row, col)->setData(Qt::UserRole, comment);
+                        item->setData(Qt::UserRole, comment);
                     }
                 }
             }
         }
     }
+    
+    // 确保表格可见并刷新显示
+    table->setVisible(true);
+    table->show();
+    table->update();
+    table->repaint();
+    
+    qDebug() << "导入完成，共" << table->rowCount() << "行数据";
 }
 
 void MidtermGradeDialog::onAddRow()
@@ -318,11 +361,105 @@ void MidtermGradeDialog::onAddRow()
     int insertRow = currentRow + 1;
     table->insertRow(insertRow);
 
+    // 获取学号和姓名列的索引
+    int colId = -1, colName = -1;
+    for (int c = 0; c < table->columnCount(); ++c) {
+        QTableWidgetItem* headerItem = table->horizontalHeaderItem(c);
+        if (!headerItem) continue;
+        QString headerText = headerItem->text();
+        if (headerText == "学号") {
+            colId = c;
+        } else if (headerText == "姓名") {
+            colName = c;
+        }
+    }
+
     // 初始化新行的所有单元格
     for (int col = 0; col < table->columnCount(); ++col) {
         QTableWidgetItem* item = new QTableWidgetItem("");
         item->setTextAlignment(Qt::AlignCenter);
+        
+        QTableWidgetItem* headerItem = table->horizontalHeaderItem(col);
+        QString headerText = headerItem ? headerItem->text() : "";
+        
+        // 学号、姓名列去掉注释（保持可编辑），其他列默认值为"0"
+        if (headerText == "学号" || headerText == "姓名") {
+            item->setData(Qt::UserRole, QVariant());
+        } else {
+            // 除了学号和姓名，其他字段默认值都为0
+            item->setText("0");
+        }
+        
         table->setItem(insertRow, col, item);
+    }
+
+    // 为学号列填入当前最大且不同的学号+1（确保不与现有学号重复）
+    if (colId >= 0) {
+        // 收集所有现有学号（包括insertRow之后的行）
+        QSet<int> existingIds;
+        for (int r = 0; r < table->rowCount(); ++r) {
+            if (r == insertRow) continue; // 跳过新插入的行
+            QTableWidgetItem* idItem = table->item(r, colId);
+            if (!idItem) continue;
+            bool ok = false;
+            int v = idItem->text().trimmed().toInt(&ok);
+            if (ok && v > 0) {
+                existingIds.insert(v);
+            }
+        }
+        
+        // 找到最大学号
+        int maxId = 0;
+        if (!existingIds.isEmpty()) {
+            maxId = *std::max_element(existingIds.begin(), existingIds.end());
+        }
+        
+        // 生成新的学号，确保不与现有学号重复
+        int newId = maxId + 1;
+        while (existingIds.contains(newId)) {
+            newId++;
+        }
+        
+        QTableWidgetItem* newIdItem = table->item(insertRow, colId);
+        if (newIdItem) {
+            newIdItem->setText(QString::number(newId));
+        }
+    }
+}
+
+void MidtermGradeDialog::onDeleteRow()
+{
+    QList<QTableWidgetSelectionRange> ranges = table->selectedRanges();
+    if (ranges.isEmpty()) {
+        QMessageBox::information(this, "提示", "请先选择要删除的行");
+        return;
+    }
+
+    // 必须整行选中（选中了该行所有列）才允许删除
+    for (const auto& range : ranges) {
+        if (range.leftColumn() != 0 || range.rightColumn() != table->columnCount() - 1) {
+            QMessageBox::information(this, "提示", "请先整行选中后再删除该行");
+            return;
+        }
+    }
+
+    QSet<int> rowsToDelete;
+    for (const auto& range : ranges) {
+        for (int r = range.topRow(); r <= range.bottomRow(); ++r) {
+            rowsToDelete.insert(r);
+        }
+    }
+
+    if (rowsToDelete.isEmpty()) {
+        QMessageBox::information(this, "提示", "未选择有效的行");
+        return;
+    }
+
+    // 从下往上删除，避免行号变化影响
+    QList<int> rowsList = rowsToDelete.values();
+    std::sort(rowsList.begin(), rowsList.end(), std::greater<int>());
+    for (int r : rowsList) {
+        table->removeRow(r);
     }
 }
 
@@ -376,7 +513,7 @@ void MidtermGradeDialog::onAddColumn()
 
     // 初始化新列的所有单元格
     for (int row = 0; row < table->rowCount(); ++row) {
-        QTableWidgetItem* item = new QTableWidgetItem("");
+        QTableWidgetItem* item = new QTableWidgetItem("0"); // 新列默认值为0
         item->setTextAlignment(Qt::AlignCenter);
         table->setItem(row, insertCol, item);
     }
@@ -492,6 +629,60 @@ void MidtermGradeDialog::onUpload()
     qDebug() << "onUpload() 方法被调用！";
     qDebug() << "Excel文件路径:" << m_excelFilePath;
     qDebug() << "Excel文件名:" << m_excelFileName;
+
+    // 确保有可写入的本地Excel路径；如果不存在则创建文件并保存当前表格
+    {
+        QString excelPath = m_excelFilePath;
+        QString excelName = m_excelFileName;
+
+        // 目标目录：appDir/excel_files/<schoolId>/<classId>/
+        UserInfo userInfo = CommonInfo::GetData();
+        QString schoolId = userInfo.schoolId;
+        QString classId = m_classid;
+        QString baseDir = QCoreApplication::applicationDirPath() + "/excel_files";
+        QString targetDir;
+        if (!schoolId.isEmpty() && !classId.isEmpty()) {
+            targetDir = baseDir + "/" + schoolId + "/" + classId;
+        }
+
+        if (excelName.isEmpty()) {
+            excelName = QString("期中成绩表_%1.xlsx").arg(QDateTime::currentDateTime().toString("yyyyMMddHHmmss"));
+        }
+
+        // 如果有目标目录，则强制保存到该目录
+        if (!targetDir.isEmpty()) {
+            QDir().mkpath(targetDir);
+            excelPath = targetDir + "/" + excelName;
+        } else if (excelPath.isEmpty() || !QFile::exists(excelPath)) {
+            QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+            if (dir.isEmpty()) dir = QCoreApplication::applicationDirPath();
+            QDir().mkpath(dir);
+            excelPath = dir + "/" + excelName;
+        }
+
+        m_excelFilePath = excelPath;
+        m_excelFileName = excelName;
+
+        QXlsx::Document xlsx;
+        // 写表头
+        for (int col = 0; col < table->columnCount(); ++col) {
+            QTableWidgetItem* headerItem = table->horizontalHeaderItem(col);
+            QString headerText = headerItem ? headerItem->text() : "";
+            xlsx.write(1, col + 1, headerText);
+        }
+        // 写数据
+        for (int row = 0; row < table->rowCount(); ++row) {
+            for (int col = 0; col < table->columnCount(); ++col) {
+                QTableWidgetItem* item = table->item(row, col);
+                QString text = item ? item->text() : "";
+                xlsx.write(row + 2, col + 1, text);
+            }
+        }
+        if (!xlsx.saveAs(m_excelFilePath)) {
+            QMessageBox::warning(this, "错误", "保存本地Excel文件失败，无法上传！");
+            return;
+        }
+    }
     
     // 检查表格是否有数据
     if (table->rowCount() == 0) {
@@ -617,6 +808,27 @@ void MidtermGradeDialog::onUpload()
         return;
     }
 
+    // 校验学号与姓名非空、学号不重复
+    {
+        QSet<QString> idSet;
+        for (int row = 0; row < table->rowCount(); ++row) {
+            QTableWidgetItem* idItem = table->item(row, colId);
+            QTableWidgetItem* nameItem = table->item(row, colName);
+            if (!idItem || !nameItem) continue;
+            QString studentId = idItem->text().trimmed();
+            QString studentName = nameItem->text().trimmed();
+            if (studentId.isEmpty() || studentName.isEmpty()) {
+                QMessageBox::warning(this, "错误", "存在学号或姓名为空的行，无法上传！");
+                return;
+            }
+            if (idSet.contains(studentId)) {
+                QMessageBox::warning(this, "错误", QString("存在重复学号：%1，无法上传！").arg(studentId));
+                return;
+            }
+            idSet.insert(studentId);
+        }
+    }
+
     // 构造请求 JSON
     QJsonObject requestObj;
     requestObj["class_id"] = classId;
@@ -645,13 +857,14 @@ void MidtermGradeDialog::onUpload()
     // 构建 fields 数组（替换模式需要）
     QJsonArray fieldsArray;
     int fieldOrder = 1;
+    QStringList excelFieldNames;
     
     // 遍历所有属性列，构建字段定义
     for (auto it = attributeColumnMap.begin(); it != attributeColumnMap.end(); ++it) {
         QString columnName = it.key();
         
-        // 跳过固定列（学号、姓名、总分）
-        if (columnName == "学号" || columnName == "姓名" || columnName == "总分") {
+        // 跳过固定列（学号、姓名）
+        if (columnName == "学号" || columnName == "姓名") {
             continue;
         }
         
@@ -662,11 +875,44 @@ void MidtermGradeDialog::onUpload()
         fieldObj["is_total"] = (columnName == "总分") ? 1 : 0;
         
         fieldsArray.append(fieldObj);
+        excelFieldNames.append(columnName);
     }
     
     // 如果有字段定义，添加到请求中
     if (!fieldsArray.isEmpty()) {
         requestObj["fields"] = fieldsArray;
+    }
+    
+    // excel_files 列表（每个 Excel 的字段映射与描述）
+    if (!m_excelFileName.isEmpty()) {
+        QJsonArray excelFilesArray;
+        QJsonObject excelObj;
+        excelObj["filename"] = m_excelFileName;
+        excelObj["url"] = ""; // 客户端本地上传，无现成 URL
+        if (textDescription) {
+            QString desc = textDescription->toPlainText().trimmed();
+            if (!desc.isEmpty()) {
+                excelObj["description"] = desc;
+            }
+        }
+        // 如果 excelFieldNames 为空，尝试从 fieldsArray 提取
+        QJsonArray excelFieldsJson;
+        if (excelFieldNames.isEmpty()) {
+            for (const auto& f : fieldsArray) {
+                QJsonObject fObj = f.toObject();
+                QString name = fObj.value("field_name").toString();
+                if (!name.isEmpty()) {
+                    excelFieldsJson.append(name);
+                }
+            }
+        } else {
+            for (const QString& f : excelFieldNames) {
+                excelFieldsJson.append(f);
+            }
+        }
+        excelObj["fields"] = excelFieldsJson;
+        excelFilesArray.append(excelObj);
+        requestObj["excel_files"] = excelFilesArray;
     }
 
     QJsonDocument doc(requestObj);
@@ -823,15 +1069,25 @@ void MidtermGradeDialog::onCellClicked(int row, int column)
         table->setItem(row, column, item);
     }
     
+    // 获取列头名称，检查是否是学号或姓名列
+    QTableWidgetItem* headerItem = table->horizontalHeaderItem(column);
+    QString headerText = headerItem ? headerItem->text() : "";
+    
+    // 如果是学号或姓名列，直接进入编辑状态
+    if (headerText == "学号" || headerText == "姓名") {
+        table->editItem(item);
+        return;
+    }
+    
     QString comment = item->data(Qt::UserRole).toString();
-    // 如果已有注释，显示注释窗口；否则弹出编辑对话框
+    // 如果已有注释，显示注释窗口；否则直接进入编辑状态（双击也是直接编辑）
     if (!comment.isEmpty() && commentWidget) {
         QRect cellRect = table->visualItemRect(item);
         commentWidget->showComment(comment, cellRect, table);
         commentWidget->cancelHide();
     } else {
-        // 没有注释，弹出编辑对话框
-        showCellComment(row, column);
+        // 没有注释，直接进入编辑状态（注释编辑通过右键菜单）
+        table->editItem(item);
     }
 }
 
@@ -845,6 +1101,88 @@ void MidtermGradeDialog::onCellEntered(int row, int column)
         commentWidget->showComment(comment, cellRect, table);
         commentWidget->cancelHide();
     }
+}
+
+void MidtermGradeDialog::onItemChanged(QTableWidgetItem* item)
+{
+    if (!item) return;
+    
+    int row = item->row();
+    int column = item->column();
+    
+    // 获取列头名称
+    QTableWidgetItem* headerItem = table->horizontalHeaderItem(column);
+    QString headerText = headerItem ? headerItem->text() : "";
+    
+    // 如果修改的不是"总分"列，则更新该行的总分
+    if (headerText != "总分" && headerText != "学号" && headerText != "姓名") {
+        updateRowTotal(row);
+    }
+}
+
+void MidtermGradeDialog::updateRowTotal(int row)
+{
+    // 查找"总分"列的索引
+    int totalCol = -1;
+    int nameCol = -1;
+    int idCol = -1;
+    for (int c = 0; c < table->columnCount(); ++c) {
+        QTableWidgetItem* headerItem = table->horizontalHeaderItem(c);
+        if (!headerItem) continue;
+        QString headerText = headerItem->text();
+        if (headerText == "总分") {
+            totalCol = c;
+        } else if (headerText == "姓名") {
+            nameCol = c;
+        } else if (headerText == "学号") {
+            idCol = c;
+        }
+    }
+    
+    // 如果没有"总分"列，不需要更新
+    if (totalCol < 0) return;
+    
+    // 计算该行的总分
+    // 需要计算所有数值列，但排除：学号、姓名、总分列本身
+    double total = 0.0;
+    
+    for (int col = 0; col < table->columnCount(); ++col) {
+        // 跳过学号、姓名、总分列
+        if (col == idCol || col == nameCol || col == totalCol) {
+            continue;
+        }
+        
+        QTableWidgetItem* item = table->item(row, col);
+        if (!item) continue;
+        
+        // 获取列头名称，确保不是学号、姓名、总分列
+        QTableWidgetItem* headerItem = table->horizontalHeaderItem(col);
+        if (!headerItem) continue;
+        QString headerText = headerItem->text();
+        if (headerText == "学号" || headerText == "姓名" || headerText == "总分") {
+            continue;
+        }
+        
+        QString text = item->text().trimmed();
+        bool ok;
+        double value = text.toDouble(&ok);
+        if (ok) {
+            total += value;
+        }
+    }
+    
+    // 更新总分单元格
+    QTableWidgetItem* totalItem = table->item(row, totalCol);
+    if (!totalItem) {
+        totalItem = new QTableWidgetItem("");
+        totalItem->setTextAlignment(Qt::AlignCenter);
+        table->setItem(row, totalCol, totalItem);
+    }
+    
+    // 暂时断开信号，避免递归调用
+    table->blockSignals(true);
+    totalItem->setText(QString::number(total));
+    table->blockSignals(false);
 }
 
 void MidtermGradeDialog::onTableContextMenu(const QPoint& pos)

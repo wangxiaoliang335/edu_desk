@@ -82,6 +82,7 @@ protected:
 
 private slots:
     void onAddRow();
+    void onDeleteRow();
     void onDeleteColumn();
     void onAddColumn();
     void onFontColor();
@@ -93,6 +94,7 @@ private slots:
     void onCellClicked(int row, int column);
     void onCellEntered(int row, int column);
     void onTableContextMenu(const QPoint& pos);
+    void onItemChanged(QTableWidgetItem* item);
 
 private:
     void sortTable(bool ascending);
@@ -100,12 +102,14 @@ private:
     void showCellComment(int row, int column);
     void setCommentToServer(const QString& studentName, const QString& studentId, 
                            const QString& fieldName, const QString& comment);
+    void updateRowTotal(int row); // 更新指定行的总分
 
 private:
     MidtermGradeTableWidget* table;
     QTextEdit* textDescription;
     QLabel* m_lblTitle; // 标题标签
     QPushButton* btnAddRow;
+    QPushButton* btnDeleteRow;
     QPushButton* btnDeleteColumn;
     QPushButton* btnAddColumn;
     QPushButton* btnFontColor;
