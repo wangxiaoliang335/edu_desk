@@ -73,6 +73,8 @@
 #include "ArrangeSeatDialog.h"
 #include "GroupNotifyDialog.h"
 #include "StudentAttributeDialog.h"
+#include "ScoreHeaderIdStorage.h"
+#include "CommentStorage.h"
 #include "QXlsx/header/xlsxdocument.h"
 #include "QXlsx/header/xlsxworksheet.h"
 #include "QXlsx/header/xlsxcell.h"
@@ -153,6 +155,7 @@ public:
 private:
 	static QMap<QString, TempRoomInfo> s_tempRooms;
 };
+
 
 class ClickableWidget : public QWidget
 {
@@ -316,13 +319,24 @@ public:
 								
 								// 系统字段列表（需要排除的字段）
 								QSet<QString> systemFields;
-								systemFields << "id" << "student_id" << "student_name" << "total_score";
+								systemFields << "id" << "student_id" << "student_name" << "total_score" << "comments";
 								
 								// 动态读取所有属性字段（排除系统字段）
 								for (auto it = scoreObj.begin(); it != scoreObj.end(); ++it) {
 									QString key = it.key();
 									// 跳过系统字段
 									if (systemFields.contains(key)) {
+										continue;
+									}
+									
+									// 跳过注释字段（以 _comment 结尾的字段）
+									if (key.endsWith("_comment")) {
+										// 提取字段名（去掉 _comment 后缀）
+										QString fieldName = key.left(key.length() - 8); // "_comment" 长度为 8
+										QString comment = it.value().toString();
+										if (!comment.isEmpty()) {
+											student.comments[fieldName] = comment;
+										}
 										continue;
 									}
 									
@@ -338,6 +352,18 @@ public:
 											if (ok) {
 												student.attributes[key] = numValue;
 											}
+										}
+									}
+								}
+								
+								// 解析 comments 对象（如果存在）
+								if (scoreObj.contains("comments") && scoreObj["comments"].isObject()) {
+									QJsonObject commentsObj = scoreObj["comments"].toObject();
+									for (auto it = commentsObj.begin(); it != commentsObj.end(); ++it) {
+										QString fieldName = it.key();
+										QString comment = it.value().toString();
+										if (!comment.isEmpty()) {
+											student.comments[fieldName] = comment;
 										}
 									}
 								}
@@ -363,6 +389,42 @@ public:
 						}
 						
 						qDebug() << "从服务器获取成绩表成功，学生数量:" << m_students.size();
+						
+						// 获取 score_header_id（如果服务器返回）
+						if (dataObj.contains("id") && dataObj["id"].isDouble()) {
+							int scoreHeaderId = dataObj["id"].toInt();
+							qDebug() << "获取到 score_header_id:" << scoreHeaderId;
+							
+							// 计算学期（与 fetchStudentScoresFromServer 中的逻辑一致）
+							QDate currentDate = QDate::currentDate();
+							int year = currentDate.year();
+							int month = currentDate.month();
+							QString term;
+							if (month >= 9 || month <= 1) {
+								if (month >= 9) {
+									term = QString("%1-%2-1").arg(year).arg(year + 1);
+								} else {
+									term = QString("%1-%2-1").arg(year - 1).arg(year);
+								}
+							} else {
+								term = QString("%1-%2-2").arg(year - 1).arg(year);
+							}
+							
+							// 保存到全局存储
+							ScoreHeaderIdStorage::saveScoreHeaderId(m_classid, "期中考试", term, scoreHeaderId);
+							
+							// 清除该班级、考试、学期的旧注释
+							CommentStorage::clearComments(m_classid, "期中考试", term);
+							
+							// 保存所有学生的注释信息到全局存储
+							for (const StudentInfo& student : m_students) {
+								for (auto it = student.comments.begin(); it != student.comments.end(); ++it) {
+									QString fieldName = it.key();
+									QString comment = it.value();
+									CommentStorage::saveComment(m_classid, "期中考试", term, student.id, fieldName, comment);
+								}
+							}
+						}
 						
 						// 处理Excel文件URL（新格式：数组格式）
 						if (dataObj.contains("excel_file_url") && dataObj["excel_file_url"].isArray()) {

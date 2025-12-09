@@ -48,89 +48,18 @@
 #include <QMimeDatabase>
 #include <QMimeType>
 #include <QFileInfo>
+#include <QDate>
 #include "StudentPhysiqueTableWidget.h"
-
-// 单元格注释窗口
-class CellCommentWidget : public QWidget
-{
-    Q_OBJECT
-public:
-    CellCommentWidget(QWidget* parent = nullptr) : QWidget(parent)
-    {
-        setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
-        setAttribute(Qt::WA_TranslucentBackground);
-        setStyleSheet(
-            "QWidget { background-color: #ffa500; color: white; border: 1px solid #888; border-radius: 4px; padding: 8px; }"
-        );
-        
-        QVBoxLayout* layout = new QVBoxLayout(this);
-        layout->setContentsMargins(8, 8, 8, 8);
-        
-        commentLabel = new QLabel("");
-        commentLabel->setWordWrap(true);
-        commentLabel->setStyleSheet("color: white; font-size: 12px;");
-        layout->addWidget(commentLabel);
-        
-        hideTimer = new QTimer(this);
-        hideTimer->setSingleShot(true);
-        connect(hideTimer, &QTimer::timeout, this, &QWidget::hide);
-    }
-    
-    void showComment(const QString& text, const QRect& cellRect, QWidget* parentWidget, int spanCols = 1)
-    {
-        commentLabel->setText(text.isEmpty() ? "(无注释)" : text);
-        commentLabel->adjustSize();
-        
-        // 计算窗口大小
-        int width = cellRect.width() * spanCols + 16;
-        int height = commentLabel->height() + 16;
-        resize(width, qMax(height, 40));
-        
-        // 计算窗口位置（在单元格上方）
-        QPoint globalPos = parentWidget->mapToGlobal(cellRect.topLeft());
-        int x = globalPos.x();
-        int y = globalPos.y() - height - 5; // 在单元格上方5像素
-        
-        // 确保窗口不超出屏幕
-        QScreen* screen = QApplication::primaryScreen();
-        if (screen) {
-            QRect screenRect = screen->geometry();
-            if (x + width > screenRect.right()) {
-                x = screenRect.right() - width;
-            }
-            if (x < screenRect.left()) {
-                x = screenRect.left();
-            }
-            if (y < screenRect.top()) {
-                y = globalPos.y() + cellRect.height() + 5; // 改为在单元格下方
-            }
-        }
-        
-        move(x, y);
-        show();
-    }
-    
-    void hideWithDelay(int ms = 3000)
-    {
-        hideTimer->start(ms);
-    }
-    
-    void cancelHide()
-    {
-        hideTimer->stop();
-    }
-    
-private:
-    QLabel* commentLabel;
-    QTimer* hideTimer;
-};
+#include "CellCommentWidget.h"
+#include "CommentInputDialog.h"
+#include "CommentStorage.h"
 
 class StudentPhysiqueDialog : public QDialog
 {
     Q_OBJECT
 
 public:
-    StudentPhysiqueDialog(QWidget* parent = nullptr) : QDialog(parent)
+    StudentPhysiqueDialog(QString classid = "", QWidget* parent = nullptr) : QDialog(parent), m_classid(classid)
     {
         // 去掉标题栏
         setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
@@ -265,6 +194,9 @@ public:
         connect(table, &QTableWidget::itemChanged, this, &StudentPhysiqueDialog::onItemChanged);
     }
 
+    // 设置成绩表头ID
+    void setScoreHeaderId(int scoreHeaderId) { m_scoreHeaderId = scoreHeaderId; }
+    
     // 导入Excel数据
     void importData(const QStringList& headers, const QList<QStringList>& dataRows, const QString& excelFilePath = QString())
     {
@@ -405,6 +337,42 @@ public:
                 int targetCol = tableHeaders.indexOf(headerText);
                 if (targetCol >= 0 && col < rowData.size()) {
                     table->item(row, targetCol)->setText(rowData[col]);
+                    
+                    // 如果是属性列（非小组、学号、姓名、总分、小组总分），尝试从全局存储中获取注释
+                    if (headerText != "总分" && headerText != "小组总分") {
+                        // 获取学生学号（从学号列）
+                        QString studentId = "";
+                        if (colId >= 0 && headerMap.contains("学号")) {
+                            int srcCol = headerMap["学号"];
+                            if (srcCol < rowData.size()) {
+                                studentId = rowData[srcCol];
+                            }
+                        }
+                        
+                        // 如果学号不为空，尝试从全局存储中获取注释
+                        if (!studentId.isEmpty() && !m_classid.isEmpty()) {
+                            // 计算学期
+                            QDate currentDate = QDate::currentDate();
+                            int year = currentDate.year();
+                            int month = currentDate.month();
+                            QString term;
+                            if (month >= 9 || month <= 1) {
+                                if (month >= 9) {
+                                    term = QString("%1-%2-1").arg(year).arg(year + 1);
+                                } else {
+                                    term = QString("%1-%2-1").arg(year - 1).arg(year);
+                                }
+                            } else {
+                                term = QString("%1-%2-2").arg(year - 1).arg(year);
+                            }
+                            
+                            // 从全局存储中获取注释
+                            QString comment = CommentStorage::getComment(m_classid, "期中考试", term, studentId, headerText);
+                            if (!comment.isEmpty()) {
+                                table->item(row, targetCol)->setData(Qt::UserRole, comment);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1089,6 +1057,12 @@ private slots:
                         QString message = dataObj["message"].toString();
                         int insertedCount = dataObj.value("inserted_count").toInt();
                         
+                        // 尝试获取 score_header_id（如果服务器返回）
+                        if (dataObj.contains("id") && dataObj["id"].isDouble()) {
+                            m_scoreHeaderId = dataObj["id"].toInt();
+                            qDebug() << "获取到 score_header_id:" << m_scoreHeaderId;
+                        }
+                        
                         QString successMsg = QString("上传成功！\n\n%1").arg(message);
                         if (insertedCount > 0) {
                             successMsg += QString("\n共插入 %1 条记录").arg(insertedCount);
@@ -1117,8 +1091,51 @@ private slots:
 
     void onCellClicked(int row, int column)
     {
-        // 点击单元格时显示注释编辑对话框
-        showCellComment(row, column);
+        // 点击单元格时，如果已有注释则显示注释窗口，否则弹出编辑对话框
+        QTableWidgetItem* item = table->item(row, column);
+        if (!item) {
+            item = new QTableWidgetItem("");
+            item->setTextAlignment(Qt::AlignCenter);
+            table->setItem(row, column, item);
+        }
+        
+        // 检查是否是跨列注释的起始单元格
+        int spanCols = item->data(Qt::UserRole + 1).toInt();
+        QString comment = item->data(Qt::UserRole).toString();
+        
+        // 如果不是起始单元格，检查是否在跨列注释范围内
+        if (spanCols <= 1 && comment.isEmpty()) {
+            for (int c = column - 1; c >= 0; --c) {
+                QTableWidgetItem* checkItem = table->item(row, c);
+                if (checkItem) {
+                    int sc = checkItem->data(Qt::UserRole + 1).toInt();
+                    if (sc > 1 && c + sc > column) {
+                        // 当前单元格在跨列注释范围内
+                        item = checkItem;
+                        comment = checkItem->data(Qt::UserRole).toString();
+                        spanCols = sc;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // 如果已有注释，显示注释窗口；否则弹出编辑对话框
+        if (!comment.isEmpty() && commentWidget) {
+            QRect cellRect = table->visualItemRect(item);
+            // 计算跨列的宽度
+            int totalWidth = 0;
+            int startCol = table->column(item);
+            for (int i = 0; i < spanCols && startCol + i < table->columnCount(); ++i) {
+                totalWidth += table->columnWidth(startCol + i);
+            }
+            cellRect.setWidth(totalWidth);
+            commentWidget->showComment(comment, cellRect, table, spanCols);
+            commentWidget->cancelHide();
+        } else {
+            // 没有注释，弹出编辑对话框
+            showCellComment(row, column);
+        }
     }
 
     void onCellChanged(int row, int column)
@@ -1455,10 +1472,52 @@ private:
             if (!ok) return;
         }
 
+        // 获取学生信息
+        int colId = -1, colName = -1;
+        for (int col = 0; col < table->columnCount(); ++col) {
+            QTableWidgetItem* headerItem = table->horizontalHeaderItem(col);
+            if (!headerItem) continue;
+            QString headerText = headerItem->text();
+            if (headerText == "学号") {
+                colId = col;
+            } else if (headerText == "姓名") {
+                colName = col;
+            }
+        }
+        
+        QString studentName;
+        QString studentId;
+        if (colName >= 0) {
+            QTableWidgetItem* nameItem = table->item(row, colName);
+            if (nameItem) {
+                studentName = nameItem->text().trimmed();
+            }
+        }
+        if (colId >= 0) {
+            QTableWidgetItem* idItem = table->item(row, colId);
+            if (idItem) {
+                studentId = idItem->text().trimmed();
+            }
+        }
+        
+        // 获取字段名称（列头）
+        QString fieldName;
+        QTableWidgetItem* headerItem = table->horizontalHeaderItem(column);
+        if (headerItem) {
+            fieldName = headerItem->text();
+        }
+        
+        // 跳过固定列（小组、学号、姓名、总分、小组总分）
+        if (fieldName == "小组" || fieldName == "学号" || fieldName == "姓名" || 
+            fieldName == "总分" || fieldName == "小组总分" || fieldName.isEmpty()) {
+            QMessageBox::information(this, "提示", "该列不支持设置注释！");
+            return;
+        }
+        
         bool ok;
-        QString comment = QInputDialog::getMultiLineText(this, "单元格注释", 
-                                                         QString("单元格 (%1, %2) 的注释:").arg(row + 1).arg(column + 1),
-                                                         currentComment, &ok);
+        QString comment = CommentInputDialog::getMultiLineText(this, "单元格注释", 
+                                                               QString("单元格 (%1, %2) 的注释:").arg(row + 1).arg(column + 1),
+                                                               currentComment, &ok);
         if (ok) {
             // 清除该行之前的跨列注释
             clearSpanComment(row);
@@ -1490,6 +1549,11 @@ private:
                 
                 // 重新合并小组单元格
                 mergeGroupCells();
+            }
+            
+            // 调用服务器接口设置注释（点击确定按钮时发送，单单元格注释才调用，跨列注释暂不支持）
+            if (!isSpanMode && !studentName.isEmpty() && !fieldName.isEmpty()) {
+                setCommentToServer(studentName, studentId, fieldName, comment);
             }
         }
     }
@@ -1532,4 +1596,72 @@ private:
     QPoint m_dragPosition; // 用于窗口拖动
     QString m_excelFilePath; // Excel文件路径
     QString m_excelFileName; // Excel文件名
+    int m_scoreHeaderId = -1; // 成绩表头ID，用于设置注释
+    QString m_classid; // 班级ID
+    
+    void setCommentToServer(const QString& studentName, const QString& studentId, 
+                           const QString& fieldName, const QString& comment)
+    {
+        // 检查 score_header_id 是否有效
+        if (m_scoreHeaderId <= 0) {
+            qDebug() << "score_header_id 无效，无法设置注释到服务器";
+            // 不显示错误提示，因为可能是本地编辑，还没有上传到服务器
+            return;
+        }
+        
+        // 构造请求 JSON
+        QJsonObject requestObj;
+        requestObj["score_header_id"] = m_scoreHeaderId;
+        requestObj["student_name"] = studentName;
+        if (!studentId.isEmpty()) {
+            requestObj["student_id"] = studentId;
+        }
+        requestObj["field_name"] = fieldName;
+        requestObj["comment"] = comment;
+        
+        QJsonDocument doc(requestObj);
+        QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+        
+        // 发送 POST 请求
+        QString url = "http://47.100.126.194:5000/student-scores/set-comment";
+        QNetworkRequest request;
+        request.setUrl(QUrl(url));
+        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        
+        QNetworkReply* reply = networkManager->post(request, jsonData);
+        
+        // 处理响应
+        QObject::connect(reply, &QNetworkReply::finished, this, [=]() {
+            if (reply->error() == QNetworkReply::NoError) {
+                QByteArray responseData = reply->readAll();
+                QJsonDocument responseDoc = QJsonDocument::fromJson(responseData);
+                
+                if (responseDoc.isObject()) {
+                    QJsonObject responseObj = responseDoc.object();
+                    int code = responseObj["code"].toInt();
+                    
+                    if (code == 200) {
+                        qDebug() << "注释设置成功:" << studentName << fieldName;
+                        // 可以更新本地存储的注释信息
+                        QJsonObject dataObj = responseObj["data"].toObject();
+                        if (dataObj.contains("comments_json") && dataObj["comments_json"].isObject()) {
+                            QJsonObject commentsJson = dataObj["comments_json"].toObject();
+                            // 可以在这里更新本地注释缓存
+                        }
+                    } else {
+                        QString errorMsg = responseObj["message"].toString();
+                        qDebug() << "设置注释失败:" << errorMsg;
+                        QMessageBox::warning(this, "设置注释失败", 
+                            QString("服务器返回错误：\n%1").arg(errorMsg));
+                    }
+                }
+            } else {
+                QString errorString = reply->errorString();
+                qDebug() << "网络错误:" << errorString;
+                // 不显示错误提示，避免打断用户操作
+            }
+            
+            reply->deleteLater();
+        });
+    }
 };

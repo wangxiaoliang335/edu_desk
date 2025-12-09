@@ -33,6 +33,7 @@ struct StudentInfo {
     double score;    // 成绩（用于排序）
     int originalIndex; // 原始索引
     QMap<QString, double> attributes; // 多个属性值（如"背诵"、"语文"等）
+    QMap<QString, QString> comments; // 字段注释（如"数学" -> "需要加强练习"）
 };
 //#endif
 

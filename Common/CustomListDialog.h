@@ -29,9 +29,10 @@
 #include <QDebug>
 #include <QDir>
 #include <QCoreApplication>
+#include <QDate>
+#include "ScoreHeaderIdStorage.h"
 
 // 前向声明
-class ScheduleDialog;
 struct SeatInfo;
 
 class CustomListDialog : public QDialog
@@ -307,6 +308,26 @@ private slots:
             // 设置对话框标题为文件名（去掉扩展名）
             QFileInfo fileInfo(fileName);
             midtermDlg->setWindowTitle(fileInfo.baseName());
+            
+            // 从全局存储中获取 score_header_id 并设置
+            QDate currentDate = QDate::currentDate();
+            int year = currentDate.year();
+            int month = currentDate.month();
+            QString term;
+            if (month >= 9 || month <= 1) {
+                if (month >= 9) {
+                    term = QString("%1-%2-1").arg(year).arg(year + 1);
+                } else {
+                    term = QString("%1-%2-1").arg(year - 1).arg(year);
+                }
+            } else {
+                term = QString("%1-%2-2").arg(year - 1).arg(year);
+            }
+            int scoreHeaderId = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, "期中考试", term);
+            if (scoreHeaderId > 0) {
+                midtermDlg->setScoreHeaderId(scoreHeaderId);
+                qDebug() << "已为 MidtermGradeDialog 设置 score_header_id:" << scoreHeaderId;
+            }
             dialog = midtermDlg;
             
             QMessageBox::information(this, "导入成功", 
@@ -331,12 +352,33 @@ private slots:
                 }
             });
         } else if (isStudentPhysique) {
-            StudentPhysiqueDialog* physiqueDlg = new StudentPhysiqueDialog(this);
+            StudentPhysiqueDialog* physiqueDlg = new StudentPhysiqueDialog(m_classid, this);
             // 传递Excel文件路径
             physiqueDlg->importData(headers, dataRows, fileName);
             // 设置对话框标题为文件名（去掉扩展名）
             QFileInfo fileInfo2(fileName);
             physiqueDlg->setWindowTitle(fileInfo2.baseName());
+            
+            // 从全局存储中获取 score_header_id 并设置
+            QDate currentDate2 = QDate::currentDate();
+            int year2 = currentDate2.year();
+            int month2 = currentDate2.month();
+            QString term2;
+            if (month2 >= 9 || month2 <= 1) {
+                if (month2 >= 9) {
+                    term2 = QString("%1-%2-1").arg(year2).arg(year2 + 1);
+                } else {
+                    term2 = QString("%1-%2-1").arg(year2 - 1).arg(year2);
+                }
+            } else {
+                term2 = QString("%1-%2-2").arg(year2 - 1).arg(year2);
+            }
+            int scoreHeaderId2 = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, "期中考试", term2);
+            if (scoreHeaderId2 > 0) {
+                physiqueDlg->setScoreHeaderId(scoreHeaderId2);
+                qDebug() << "已为 StudentPhysiqueDialog 设置 score_header_id:" << scoreHeaderId2;
+            }
+            
             dialog = physiqueDlg;
             
             QMessageBox::information(this, "导入成功", 
@@ -764,12 +806,54 @@ inline void CustomListDialog::loadExcelFileAndCreateButton(const QString& filePa
         midtermDlg->importData(headers, dataRows, filePath);
         // 设置对话框标题为文件名（去掉扩展名）
         midtermDlg->setWindowTitle(fileInfo.baseName());
+        
+        // 从全局存储中获取 score_header_id 并设置
+        QDate currentDate = QDate::currentDate();
+        int year = currentDate.year();
+        int month = currentDate.month();
+        QString term;
+        if (month >= 9 || month <= 1) {
+            if (month >= 9) {
+                term = QString("%1-%2-1").arg(year).arg(year + 1);
+            } else {
+                term = QString("%1-%2-1").arg(year - 1).arg(year);
+            }
+        } else {
+            term = QString("%1-%2-2").arg(year - 1).arg(year);
+        }
+        int scoreHeaderId = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, "期中考试", term);
+        if (scoreHeaderId > 0) {
+            midtermDlg->setScoreHeaderId(scoreHeaderId);
+            qDebug() << "已为 MidtermGradeDialog 设置 score_header_id:" << scoreHeaderId;
+        }
+        
         dialog = midtermDlg;
     } else if (isStudentPhysique) {
-        StudentPhysiqueDialog* physiqueDlg = new StudentPhysiqueDialog(this);
+        StudentPhysiqueDialog* physiqueDlg = new StudentPhysiqueDialog(m_classid, this);
         physiqueDlg->importData(headers, dataRows, filePath);
         // 设置对话框标题为文件名（去掉扩展名）
         physiqueDlg->setWindowTitle(fileInfo.baseName());
+        
+        // 从全局存储中获取 score_header_id 并设置（学生体质表可能使用不同的 exam_name，这里先尝试期中考试）
+        QDate currentDate = QDate::currentDate();
+        int year = currentDate.year();
+        int month = currentDate.month();
+        QString term;
+        if (month >= 9 || month <= 1) {
+            if (month >= 9) {
+                term = QString("%1-%2-1").arg(year).arg(year + 1);
+            } else {
+                term = QString("%1-%2-1").arg(year - 1).arg(year);
+            }
+        } else {
+            term = QString("%1-%2-2").arg(year - 1).arg(year);
+        }
+        int scoreHeaderId = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, "期中考试", term);
+        if (scoreHeaderId > 0) {
+            physiqueDlg->setScoreHeaderId(scoreHeaderId);
+            qDebug() << "已为 StudentPhysiqueDialog 设置 score_header_id:" << scoreHeaderId;
+        }
+        
         dialog = physiqueDlg;
     }
     

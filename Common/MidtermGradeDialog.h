@@ -39,7 +39,11 @@
 #include <QCursor>
 #include <QRect>
 #include <QDesktopWidget>
+#include <QScreen>
+#include <QWidget>
 #include "MidtermGradeTableWidget.h"
+#include "CellCommentWidget.h"
+#include "CommentInputDialog.h"
 
 // 前向声明
 //class ScheduleDialog;
@@ -52,6 +56,9 @@ public:
     
     // 导入Excel数据
     void importData(const QStringList& headers, const QList<QStringList>& dataRows, const QString& excelFilePath = QString());
+    
+    // 设置成绩表头ID
+    void setScoreHeaderId(int scoreHeaderId) { m_scoreHeaderId = scoreHeaderId; }
 
 protected:
     // 重写鼠标事件以实现窗口拖动
@@ -91,6 +98,8 @@ private:
     void sortTable(bool ascending);
     void openSeatingArrangementDialog();
     void showCellComment(int row, int column);
+    void setCommentToServer(const QString& studentName, const QString& studentId, 
+                           const QString& fieldName, const QString& comment);
 
 private:
     MidtermGradeTableWidget* table;
@@ -114,4 +123,6 @@ private:
     QPoint m_dragPosition; // 用于窗口拖动
     QString m_excelFilePath; // Excel文件路径
     QString m_excelFileName; // Excel文件名
+    CellCommentWidget* commentWidget = nullptr; // 注释窗口
+    int m_scoreHeaderId = -1; // 成绩表头ID，用于设置注释
 };
