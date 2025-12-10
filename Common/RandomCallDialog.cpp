@@ -1165,17 +1165,21 @@ void RandomCallDialog::createStudentsFromExcelData(const QStringList& headers, c
 {
     m_students.clear();
     
-    // 找到学号和姓名列的索引
-    int colId = -1, colName = -1;
+    // 找到学号、姓名、小组列的索引
+    int colGroup = -1, colId = -1, colName = -1, colGroupTotal = -1;
     QMap<QString, int> attributeColumnMap;
     
     for (int i = 0; i < headers.size(); ++i) {
         QString header = headers[i];
-        if (header == "学号") {
+        if (header == "小组") {
+            colGroup = i;
+        } else if (header == "学号") {
             colId = i;
         } else if (header == "姓名") {
             colName = i;
-        } else if (header != "小组" && !header.isEmpty()) {
+        } else if (header == "小组总分") {
+            colGroupTotal = i;
+        } else if (header != "小组" && header != "小组总分" && !header.isEmpty()) {
             attributeColumnMap[header] = i;
         }
     }
@@ -1191,6 +1195,7 @@ void RandomCallDialog::createStudentsFromExcelData(const QStringList& headers, c
         
         StudentInfo student;
         student.id = (colId >= 0 && colId < rowData.size()) ? rowData[colId].trimmed() : "";
+        student.groupName = (colGroup >= 0 && colGroup < rowData.size()) ? rowData[colGroup].trimmed() : "";
         student.name = rowData[colName].trimmed();
         
         if (student.name.isEmpty()) continue;
@@ -1223,6 +1228,16 @@ void RandomCallDialog::createStudentsFromExcelData(const QStringList& headers, c
             if (total > 0) {
                 student.attributes["总分"] = total;
                 student.score = total;
+            }
+        }
+
+        // 读取小组总分（如果存在）
+        if (colGroupTotal >= 0 && colGroupTotal < rowData.size()) {
+            bool ok = false;
+            double groupTotal = rowData[colGroupTotal].trimmed().toDouble(&ok);
+            if (ok) {
+                student.groupTotalScore = groupTotal;
+                student.attributes["小组总分"] = groupTotal;
             }
         }
         

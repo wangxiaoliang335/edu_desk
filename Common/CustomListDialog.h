@@ -21,6 +21,7 @@
 #include <QDesktopWidget>
 #include "MidtermGradeDialog.h"
 #include "StudentPhysiqueDialog.h"
+#include "GroupScoreDialog.h"
 #include "xlsxdocument.h"
 #include "CommonInfo.h"
 #include <QRegularExpression>
@@ -244,6 +245,10 @@ private slots:
         // 判断表格类型
         bool isMidtermGrade = false; // 期中成绩单
         bool isStudentPhysique = false; // 学生体质统计表
+        bool isGroupScore = false; // 小组管理表
+        
+        // 检查第一列是否是"组号"或"小组"来判断是否为小组管理表
+        bool hasGroupNumber = !headers.isEmpty() && (headers[0] == "组号" || headers[0] == "小组");
         
         // 先判断是否包含"小组"列来区分是带小组的表还是不带小组的表
         bool hasGroup = headers.contains("小组");
@@ -252,8 +257,12 @@ private slots:
         bool hasStudentId = headers.contains("学号");
         bool hasStudentName = headers.contains("姓名");
         
-        // 如果带"小组"列，且包含学号和姓名，则是学生体质统计表（带小组的表）
-        if (hasGroup && hasStudentId && hasStudentName) {
+        // 如果第一列是"组号"或"小组"，且包含学号和姓名，则是小组管理表
+        if (hasGroupNumber && hasStudentId && hasStudentName) {
+            isGroupScore = true;
+        }
+        // 如果带"小组"列（但不是第一列），且包含学号和姓名，则是学生体质统计表（带小组的表）
+        else if (hasGroup && hasStudentId && hasStudentName) {
             isStudentPhysique = true;
         }
         // 如果不带"小组"列，且包含学号和姓名，则是期中成绩单（不带小组的表）
@@ -315,6 +324,20 @@ private slots:
                         physiqueDlg->show();
                         physiqueDlg->raise();
                         physiqueDlg->activateWindow();
+                        updated = true;
+                    }
+                } else if (isGroupScore) {
+                    GroupScoreDialog* groupScoreDlg = qobject_cast<GroupScoreDialog*>(existingDialog);
+                    if (groupScoreDlg) {
+                        // 重新导入数据
+                        groupScoreDlg->importData(headers, dataRows, fileName);
+                        qDebug() << "已更新已有对话框的数据:" << excelFileName << "学期:" << term;
+                        
+                        QMessageBox::information(this, "更新成功", 
+                            QString("已成功更新小组管理表！\n共%1行数据。").arg(dataRows.size()));
+                        groupScoreDlg->show();
+                        groupScoreDlg->raise();
+                        groupScoreDlg->activateWindow();
                         updated = true;
                     }
                 }
@@ -469,6 +492,44 @@ private slots:
                 if (ret == QMessageBox::Yes) {
                     // 直接调用上传方法
                     QMetaObject::invokeMethod(physiqueDlg, "onUpload", Qt::QueuedConnection);
+                }
+            });
+        } else if (isGroupScore) {
+            GroupScoreDialog* groupScoreDlg = new GroupScoreDialog(m_classid, this);
+            // 传递Excel文件路径
+            groupScoreDlg->importData(headers, dataRows, fileName);
+            // 设置对话框标题为文件名（去掉扩展名）
+            QFileInfo fileInfo3(fileName);
+            groupScoreDlg->setWindowTitle(fileInfo3.baseName());
+            
+            // 从全局存储中获取 score_header_id 并设置（小组管理表可能使用不同的 exam_name，这里先尝试期中考试）
+            int scoreHeaderId3 = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, "期中考试", term);
+            if (scoreHeaderId3 > 0) {
+                groupScoreDlg->setScoreHeaderId(scoreHeaderId3);
+                qDebug() << "已为 GroupScoreDialog 设置 score_header_id:" << scoreHeaderId3;
+            }
+            
+            dialog = groupScoreDlg;
+            
+            QMessageBox::information(this, "导入成功", 
+                QString("已成功导入小组管理表！\n共%1行数据。").arg(dataRows.size()));
+            
+            groupScoreDlg->show();
+            
+            // 延迟询问是否立即上传（等待对话框显示完成）
+            QTimer::singleShot(300, this, [=]() {
+                QMessageBox msgBox(groupScoreDlg);
+                msgBox.setWindowTitle("上传确认");
+                msgBox.setText("是否立即上传到服务器？");
+                msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+                msgBox.setDefaultButton(QMessageBox::Yes);
+                msgBox.button(QMessageBox::Yes)->setText("立即上传");
+                msgBox.button(QMessageBox::No)->setText("稍后上传");
+                
+                int ret = msgBox.exec();
+                if (ret == QMessageBox::Yes) {
+                    // 直接调用上传方法
+                    QMetaObject::invokeMethod(groupScoreDlg, "onUpload", Qt::QueuedConnection);
                 }
             });
         } else {
@@ -855,14 +916,24 @@ inline void CustomListDialog::loadExcelFileAndCreateButton(const QString& filePa
     // 判断表格类型
     bool isMidtermGrade = false;
     bool isStudentPhysique = false;
+    bool isGroupScore = false;
     
+    // 检查第一列是否是"组号"或"小组"来判断是否为小组管理表
+    bool hasGroupNumber = !headers.isEmpty() && (headers[0] == "组号" || headers[0] == "小组");
     bool hasGroup = headers.contains("小组");
     bool hasStudentId = headers.contains("学号");
     bool hasStudentName = headers.contains("姓名");
     
-    if (hasGroup && hasStudentId && hasStudentName) {
+    // 如果第一列是"组号"或"小组"，且包含学号和姓名，则是小组管理表
+    if (hasGroupNumber && hasStudentId && hasStudentName) {
+        isGroupScore = true;
+    }
+    // 如果带"小组"列（但不是第一列），且包含学号和姓名，则是学生体质统计表
+    else if (hasGroup && hasStudentId && hasStudentName) {
         isStudentPhysique = true;
-    } else if (!hasGroup && hasStudentId && hasStudentName) {
+    }
+    // 如果不带"小组"列，且包含学号和姓名，则是期中成绩单
+    else if (!hasGroup && hasStudentId && hasStudentName) {
         isMidtermGrade = true;
     } else {
         qWarning() << "无法识别表格类型:" << fileName;
@@ -908,6 +979,14 @@ inline void CustomListDialog::loadExcelFileAndCreateButton(const QString& filePa
                     qDebug() << "已更新已有对话框的数据:" << fileName << "学期:" << term;
                     return;
                 }
+            } else if (isGroupScore) {
+                GroupScoreDialog* groupScoreDlg = qobject_cast<GroupScoreDialog*>(existingDialog);
+                if (groupScoreDlg) {
+                    // 重新导入数据
+                    groupScoreDlg->importData(headers, dataRows, filePath);
+                    qDebug() << "已更新已有对话框的数据:" << fileName << "学期:" << term;
+                    return;
+                }
             }
         }
     }
@@ -945,6 +1024,20 @@ inline void CustomListDialog::loadExcelFileAndCreateButton(const QString& filePa
         }
         
         dialog = physiqueDlg;
+    } else if (isGroupScore) {
+        GroupScoreDialog* groupScoreDlg = new GroupScoreDialog(m_classid, this);
+        groupScoreDlg->importData(headers, dataRows, filePath);
+        // 设置对话框标题为文件名（去掉扩展名）
+        groupScoreDlg->setWindowTitle(fileInfo.baseName());
+        
+        // 从全局存储中获取 score_header_id 并设置（小组管理表可能使用不同的 exam_name，这里先尝试期中考试）
+        int scoreHeaderId = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, "期中考试", term);
+        if (scoreHeaderId > 0) {
+            groupScoreDlg->setScoreHeaderId(scoreHeaderId);
+            qDebug() << "已为 GroupScoreDialog 设置 score_header_id:" << scoreHeaderId;
+        }
+        
+        dialog = groupScoreDlg;
     }
     
     if (!dialog) {

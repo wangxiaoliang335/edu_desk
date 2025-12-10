@@ -164,6 +164,7 @@
     <QtMoc Include="CommentInputDialog.h" />
     <QtMoc Include="MidtermGradeDialog.h" />
     <QtMoc Include="StudentPhysiqueDialog.h" />
+    <QtMoc Include="GroupScoreDialog.h" />
     <QtMoc Include="ArrangeSeatDialog.h" />
     <QtMoc Include="SeatingArrangementDialog.h" />
     <QtMoc Include="HeatmapSegmentDialog.h" />
@@ -214,6 +215,7 @@
     <ClCompile Include="RandomCallMessageDialog.cpp" />
     <ClCompile Include="CellCommentWidget.cpp" />
     <ClCompile Include="MidtermGradeDialog.cpp" />
+    <ClCompile Include="GroupScoreDialog.cpp" />
     <ClCompile Include="HeatmapSegmentDialog.cpp" />
     <ClCompile Include="HeatmapViewDialog.cpp" />
     <ClCompile Include="ScheduleDialog_Heatmap.cpp" />

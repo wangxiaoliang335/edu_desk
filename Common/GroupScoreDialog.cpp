@@ -1,5 +1,5 @@
 #include "ScheduleDialog.h"
-#include "MidtermGradeDialog.h"
+#include "GroupScoreDialog.h"
 #include <QMessageBox>
 #include <QInputDialog>
 #include <QFileDialog>
@@ -33,12 +33,13 @@
 #include <QHttpPart>
 #include <QMimeDatabase>
 #include <QMimeType>
+#include <QCoreApplication>
 
-MidtermGradeDialog::MidtermGradeDialog(QString classid, QWidget* parent) : QDialog(parent)
+GroupScoreDialog::GroupScoreDialog(QString classid, QWidget* parent) : QDialog(parent)
 {
     // 去掉标题栏
     setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
-    setWindowTitle("期中成绩表");
+    setWindowTitle("小组管理表");
     resize(1200, 800);
     setStyleSheet("background-color: #808080; font-size:14px;");
     
@@ -66,7 +67,7 @@ MidtermGradeDialog::MidtermGradeDialog(QString classid, QWidget* parent) : QDial
     mainLayout->setContentsMargins(15, 40, 15, 15);
 
     // 标题
-    m_lblTitle = new QLabel("期中成绩表");
+    m_lblTitle = new QLabel("小组管理表");
     m_lblTitle->setStyleSheet("background-color: #d3d3d3; color: black; font-size: 16px; font-weight: bold; padding: 8px; border-radius: 4px;");
     m_lblTitle->setAlignment(Qt::AlignCenter);
     mainLayout->addWidget(m_lblTitle);
@@ -127,11 +128,11 @@ MidtermGradeDialog::MidtermGradeDialog(QString classid, QWidget* parent) : QDial
     textDescription->setPlaceholderText("在此处添加表格说明...");
     textDescription->setFixedHeight(60);
     textDescription->setStyleSheet("background-color: #ffa500; color: black; padding: 5px; border: 1px solid #888;");
-    textDescription->setPlainText("说明:该表为期中成绩表。语文总分120、数学总分120");
+    textDescription->setPlainText("说明:该表为小组管理表。第一列为组号或小组，倒数第二列为个人总分，最后一列为小组总分");
     mainLayout->addWidget(textDescription);
 
     // 表格
-    table = new MidtermGradeTableWidget(this); // 使用自定义表格控件
+    table = new GroupScoreTableWidget(this); // 使用自定义表格控件
     table->setSelectionMode(QAbstractItemView::ExtendedSelection);   // 允许多选
     table->setSelectionBehavior(QAbstractItemView::SelectItems);     // 支持按行/列/单元格选择
     table->horizontalHeader()->setSectionsClickable(true);           // 允许点击表头选列
@@ -139,32 +140,25 @@ MidtermGradeDialog::MidtermGradeDialog(QString classid, QWidget* parent) : QDial
     // 统一选中高亮颜色
     table->setStyleSheet("QTableWidget::item:selected { background-color: #4A90E2; color: white; }");
 
-    // 添加示例数据
-    if (table->item(0, 2)) table->item(0, 2)->setText("100");
-    if (table->item(0, 3)) table->item(0, 3)->setText("89");
-    if (table->item(1, 2)) table->item(1, 2)->setText("90");
-    if (table->item(1, 3)) table->item(1, 3)->setText("78");
-    if (table->item(2, 2)) table->item(2, 2)->setText("97");
-    if (table->item(2, 3)) table->item(2, 3)->setText("80");
-    if (table->item(3, 2)) table->item(3, 2)->setText("67");
-    if (table->item(3, 3)) table->item(3, 3)->setText("97");
-
     mainLayout->addWidget(table);
 
     // 固定列索引（不能删除的列）- 初始为空，导入数据时根据实际列头动态设置
     fixedColumns.clear();
     nameColumnIndex = -1; // 姓名列索引，导入数据时设置
+    groupColumnIndex = -1; // 组号列索引
+    totalColumnIndex = -1; // 个人总分列索引
+    groupTotalColumnIndex = -1; // 小组总分列索引
 
     // 连接信号和槽
-    connect(btnAddRow, &QPushButton::clicked, this, &MidtermGradeDialog::onAddRow);
-    connect(btnDeleteRow, &QPushButton::clicked, this, &MidtermGradeDialog::onDeleteRow);
-    connect(btnDeleteColumn, &QPushButton::clicked, this, &MidtermGradeDialog::onDeleteColumn);
-    connect(btnAddColumn, &QPushButton::clicked, this, &MidtermGradeDialog::onAddColumn);
-    connect(btnFontColor, &QPushButton::clicked, this, &MidtermGradeDialog::onFontColor);
-    connect(btnBgColor, &QPushButton::clicked, this, &MidtermGradeDialog::onBgColor);
-    connect(btnDescOrder, &QPushButton::clicked, this, &MidtermGradeDialog::onDescOrder);
-    connect(btnAscOrder, &QPushButton::clicked, this, &MidtermGradeDialog::onAscOrder);
-    connect(btnExport, &QPushButton::clicked, this, &MidtermGradeDialog::onExport);
+    connect(btnAddRow, &QPushButton::clicked, this, &GroupScoreDialog::onAddRow);
+    connect(btnDeleteRow, &QPushButton::clicked, this, &GroupScoreDialog::onDeleteRow);
+    connect(btnDeleteColumn, &QPushButton::clicked, this, &GroupScoreDialog::onDeleteColumn);
+    connect(btnAddColumn, &QPushButton::clicked, this, &GroupScoreDialog::onAddColumn);
+    connect(btnFontColor, &QPushButton::clicked, this, &GroupScoreDialog::onFontColor);
+    connect(btnBgColor, &QPushButton::clicked, this, &GroupScoreDialog::onBgColor);
+    connect(btnDescOrder, &QPushButton::clicked, this, &GroupScoreDialog::onDescOrder);
+    connect(btnAscOrder, &QPushButton::clicked, this, &GroupScoreDialog::onAscOrder);
+    connect(btnExport, &QPushButton::clicked, this, &GroupScoreDialog::onExport);
     connect(btnUpload, &QPushButton::clicked, this, [this]() {
         qDebug() << "上传按钮被点击！";
         this->onUpload();
@@ -174,12 +168,12 @@ MidtermGradeDialog::MidtermGradeDialog(QString classid, QWidget* parent) : QDial
     networkManager = new QNetworkAccessManager(this);
 
     // 单元格点击和悬浮事件
-    connect(table, &QTableWidget::cellClicked, this, &MidtermGradeDialog::onCellClicked);
-    connect(table, &QTableWidget::cellEntered, this, &MidtermGradeDialog::onCellEntered);
+    connect(table, &QTableWidget::cellClicked, this, &GroupScoreDialog::onCellClicked);
+    connect(table, &QTableWidget::cellEntered, this, &GroupScoreDialog::onCellEntered);
     table->setMouseTracking(true);
     
     // 监听单元格内容变化，自动更新总分
-    connect(table, &QTableWidget::itemChanged, this, &MidtermGradeDialog::onItemChanged);
+    connect(table, &QTableWidget::itemChanged, this, &GroupScoreDialog::onItemChanged);
 
     // 创建注释窗口
     commentWidget = new CellCommentWidget(this);
@@ -189,10 +183,10 @@ MidtermGradeDialog::MidtermGradeDialog(QString classid, QWidget* parent) : QDial
 
     // 右键菜单用于删除行
     table->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(table, &QTableWidget::customContextMenuRequested, this, &MidtermGradeDialog::onTableContextMenu);
+    connect(table, &QTableWidget::customContextMenuRequested, this, &GroupScoreDialog::onTableContextMenu);
 }
 
-void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStringList>& dataRows, const QString& excelFilePath)
+void GroupScoreDialog::importData(const QStringList& headers, const QList<QStringList>& dataRows, const QString& excelFilePath)
 {
     if (!table) return;
 
@@ -214,14 +208,14 @@ void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStr
     table->setHorizontalHeaderLabels(headers);
     
     // 根据实际列头动态生成说明文本
-    QStringList attributeColumns; // 属性列（除了学号、姓名、总分）
+    QStringList attributeColumns; // 属性列（除了组号/小组、学号、姓名、总分、小组总分）
     for (const QString& header : headers) {
-        if (header != "学号" && header != "姓名" && header != "总分" && !header.isEmpty()) {
+        if (header != "组号" && header != "小组" && header != "学号" && header != "姓名" && header != "总分" && header != "小组总分" && !header.isEmpty()) {
             attributeColumns.append(header);
         }
     }
     
-    QString description = "说明:该表为统计表。";
+    QString description = "说明:该表为小组管理表。";
     if (!attributeColumns.isEmpty()) {
         description += "包含以下科目/属性: " + attributeColumns.join("、");
     }
@@ -239,13 +233,19 @@ void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStr
     }
 
     // 获取固定列的索引（根据导入的列头）
-    int colId = -1, colName = -1;
+    // 小组管理表：第一列为组号或小组，倒数第二列为个人总分，最后一列为小组总分
+    int colGroup = -1, colId = -1, colName = -1, colTotal = -1, colGroupTotal = -1;
     
     // 在导入的列头中找到对应的列
     for (int col = 0; col < headers.size(); ++col) {
         QString headerText = headers[col];
         
-        if (headerText == "学号") {
+        if (headerText == "组号" || headerText == "小组") {
+            colGroup = col;
+            groupColumnIndex = col;
+            fixedColumns.insert(col); // 组号/小组是固定列
+        }
+        else if (headerText == "学号") {
             colId = col;
             fixedColumns.insert(col); // 学号是固定列
         }
@@ -254,9 +254,19 @@ void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStr
             fixedColumns.insert(col); // 姓名是固定列
             nameColumnIndex = col; // 设置姓名列索引
         }
+        else if (headerText == "总分") {
+            colTotal = col;
+            totalColumnIndex = col;
+            fixedColumns.insert(col); // 个人总分是固定列
+        }
+        else if (headerText == "小组总分") {
+            colGroupTotal = col;
+            groupTotalColumnIndex = col;
+            fixedColumns.insert(col); // 小组总分是固定列
+        }
     }
     
-    // 确保学号和姓名列都存在
+    // 确保必要的列都存在（组号、学号、姓名是必需的）
     if (colId < 0 || colName < 0) {
         QMessageBox::warning(this, "错误", "导入的数据中必须包含'学号'和'姓名'列！");
         return;
@@ -293,27 +303,19 @@ void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStr
                 item->setText(rowData[col]);
             }
             
-            // 学号、姓名列：不可编辑，清空注释
-            if (headerText == "学号" || headerText == "姓名") {
+            // 组号/小组、学号、姓名列：不可编辑，清空注释
+            if (headerText == "组号" || headerText == "小组" || headerText == "学号" || headerText == "姓名") {
                 item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
                 item->setData(Qt::UserRole, QVariant());
                 continue;
             }
             
-            // 如果是属性列（非学号、姓名、总分），尝试从全局存储中获取注释
-            if (headerText != "总分") {
+            // 如果是属性列（非组号/小组、学号、姓名、总分、小组总分），尝试从全局存储中获取注释
+            if (headerText != "组号" && headerText != "小组" && headerText != "总分" && headerText != "小组总分") {
                 // 获取学生学号（从学号列）
                 QString studentId = "";
                 if (colId >= 0 && colId < rowData.size()) {
                     studentId = rowData[colId];
-                }
-                
-                // 如果学号为空，尝试使用姓名匹配
-                if (studentId.isEmpty() && colName >= 0 && colName < rowData.size()) {
-                    QString studentName = rowData[colName];
-                    // 从全局存储中查找注释（使用姓名作为键的一部分）
-                    // 注意：这里需要知道 classId、examName、term
-                    // 暂时跳过，因为 importData 方法没有这些参数
                 }
                 
                 // 如果学号不为空，尝试从全局存储中获取注释
@@ -333,8 +335,8 @@ void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStr
                         term = QString("%1-%2-2").arg(year - 1).arg(year);
                     }
                     
-                    // 从全局存储中获取注释
-                    QString comment = CommentStorage::getComment(m_classid, "期中考试", term, studentId, headerText);
+                    // 从全局存储中获取注释（使用小组管理表相关的examName）
+                    QString comment = CommentStorage::getComment(m_classid, "小组管理", term, studentId, headerText);
                     if (!comment.isEmpty()) {
                         item->setData(Qt::UserRole, comment);
                     }
@@ -342,6 +344,12 @@ void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStr
             }
         }
     }
+    
+    // 导入完成后，更新所有行的个人总分和小组总分
+    for (int row = 0; row < table->rowCount(); ++row) {
+        updateRowTotal(row);
+    }
+    updateGroupTotal();
     
     // 确保表格可见并刷新显示
     table->setVisible(true);
@@ -352,7 +360,7 @@ void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStr
     qDebug() << "导入完成，共" << table->rowCount() << "行数据";
 }
 
-void MidtermGradeDialog::onAddRow()
+void GroupScoreDialog::onAddRow()
 {
     int currentRow = table->currentRow();
     if (currentRow < 0) {
@@ -361,13 +369,15 @@ void MidtermGradeDialog::onAddRow()
     int insertRow = currentRow + 1;
     table->insertRow(insertRow);
 
-    // 获取学号和姓名列的索引
-    int colId = -1, colName = -1;
+    // 获取组号、学号、姓名列的索引
+    int colGroup = -1, colId = -1, colName = -1;
     for (int c = 0; c < table->columnCount(); ++c) {
         QTableWidgetItem* headerItem = table->horizontalHeaderItem(c);
         if (!headerItem) continue;
         QString headerText = headerItem->text();
-        if (headerText == "学号") {
+        if (headerText == "组号" || headerText == "小组") {
+            colGroup = c;
+        } else if (headerText == "学号") {
             colId = c;
         } else if (headerText == "姓名") {
             colName = c;
@@ -382,11 +392,14 @@ void MidtermGradeDialog::onAddRow()
         QTableWidgetItem* headerItem = table->horizontalHeaderItem(col);
         QString headerText = headerItem ? headerItem->text() : "";
         
-        // 学号、姓名列去掉注释（保持可编辑），其他列默认值为"0"
-        if (headerText == "学号" || headerText == "姓名") {
+        // 组号/小组、学号、姓名列去掉注释（保持可编辑），其他列默认值为"0"
+        if (headerText == "组号" || headerText == "小组" || headerText == "学号" || headerText == "姓名") {
+            item->setData(Qt::UserRole, QVariant());
+        } else if (headerText == "总分" || headerText == "小组总分") {
+            // 总分和小组总分列初始为空，会自动计算
             item->setData(Qt::UserRole, QVariant());
         } else {
-            // 除了学号和姓名，其他字段默认值都为0
+            // 除了组号、学号、姓名、总分、小组总分，其他字段默认值都为0
             item->setText("0");
         }
         
@@ -425,9 +438,13 @@ void MidtermGradeDialog::onAddRow()
             newIdItem->setText(QString::number(newId));
         }
     }
+    
+    // 更新该行的个人总分和小组总分
+    updateRowTotal(insertRow);
+    updateGroupTotal();
 }
 
-void MidtermGradeDialog::onDeleteRow()
+void GroupScoreDialog::onDeleteRow()
 {
     QList<QTableWidgetSelectionRange> ranges = table->selectedRanges();
     if (ranges.isEmpty()) {
@@ -461,9 +478,12 @@ void MidtermGradeDialog::onDeleteRow()
     for (int r : rowsList) {
         table->removeRow(r);
     }
+    
+    // 删除行后，更新小组总分
+    updateGroupTotal();
 }
 
-void MidtermGradeDialog::onDeleteColumn()
+void GroupScoreDialog::onDeleteColumn()
 {
     int currentCol = table->currentColumn();
     if (currentCol < 0) {
@@ -471,7 +491,7 @@ void MidtermGradeDialog::onDeleteColumn()
         return;
     }
 
-    // 检查是否是固定列
+    // 检查是否是固定列（组号、学号、姓名、总分、小组总分）
     if (fixedColumns.contains(currentCol)) {
         QTableWidgetItem* headerItem = table->horizontalHeaderItem(currentCol);
         QString headerText = headerItem ? headerItem->text() : "";
@@ -496,10 +516,25 @@ void MidtermGradeDialog::onDeleteColumn()
         if (nameColumnIndex > currentCol) {
             nameColumnIndex--;
         }
+        if (groupColumnIndex > currentCol) {
+            groupColumnIndex--;
+        }
+        if (totalColumnIndex > currentCol) {
+            totalColumnIndex--;
+        }
+        if (groupTotalColumnIndex > currentCol) {
+            groupTotalColumnIndex--;
+        }
+        
+        // 删除列后，更新所有行的个人总分和小组总分
+        for (int row = 0; row < table->rowCount(); ++row) {
+            updateRowTotal(row);
+        }
+        updateGroupTotal();
     }
 }
 
-void MidtermGradeDialog::onAddColumn()
+void GroupScoreDialog::onAddColumn()
 {
     bool ok;
     QString columnName = QInputDialog::getText(this, "添加列", "请输入列名:", 
@@ -508,8 +543,12 @@ void MidtermGradeDialog::onAddColumn()
         return;
     }
 
-    // 在姓名列后添加（如果姓名列存在）
+    // 在姓名列后添加（如果姓名列存在），但要确保在总分列之前
     int insertCol = nameColumnIndex >= 0 ? nameColumnIndex + 1 : table->columnCount();
+    // 如果总分列存在，确保新列插入在总分列之前
+    if (totalColumnIndex >= 0 && insertCol > totalColumnIndex) {
+        insertCol = totalColumnIndex;
+    }
     table->insertColumn(insertCol);
     table->setHorizontalHeaderItem(insertCol, new QTableWidgetItem(columnName));
 
@@ -520,20 +559,37 @@ void MidtermGradeDialog::onAddColumn()
         table->setItem(row, insertCol, item);
     }
 
-    // 更新固定列索引（插入列后，姓名列之后的固定列索引会变化）
+    // 更新固定列索引（插入列后，插入位置之后的固定列索引会变化）
     QSet<int> newFixedColumns;
     for (int col : fixedColumns) {
-        if (col <= nameColumnIndex) {
-            newFixedColumns.insert(col); // 姓名列及其之前的列索引不变
+        if (col < insertCol) {
+            newFixedColumns.insert(col); // 插入位置之前的列索引不变
         } else {
-            newFixedColumns.insert(col + 1); // 姓名列之后的列索引+1
+            newFixedColumns.insert(col + 1); // 插入位置之后的列索引+1
         }
     }
     fixedColumns = newFixedColumns;
-    // nameColumnIndex 不变，因为姓名列索引没有变化
+    if (nameColumnIndex >= insertCol) {
+        nameColumnIndex++;
+    }
+    if (groupColumnIndex >= insertCol) {
+        groupColumnIndex++;
+    }
+    if (totalColumnIndex >= insertCol) {
+        totalColumnIndex++;
+    }
+    if (groupTotalColumnIndex >= insertCol) {
+        groupTotalColumnIndex++;
+    }
+    
+    // 添加列后，更新所有行的个人总分和小组总分
+    for (int row = 0; row < table->rowCount(); ++row) {
+        updateRowTotal(row);
+    }
+    updateGroupTotal();
 }
 
-void MidtermGradeDialog::onFontColor()
+void GroupScoreDialog::onFontColor()
 {
     QTableWidgetItem* item = table->currentItem();
     if (!item) {
@@ -547,7 +603,7 @@ void MidtermGradeDialog::onFontColor()
     }
 }
 
-void MidtermGradeDialog::onBgColor()
+void GroupScoreDialog::onBgColor()
 {
     QTableWidgetItem* item = table->currentItem();
     if (!item) {
@@ -561,17 +617,17 @@ void MidtermGradeDialog::onBgColor()
     }
 }
 
-void MidtermGradeDialog::onDescOrder()
+void GroupScoreDialog::onDescOrder()
 {
     sortTable(false); // false表示倒序
 }
 
-void MidtermGradeDialog::onAscOrder()
+void GroupScoreDialog::onAscOrder()
 {
     sortTable(true); // true表示正序
 }
 
-void MidtermGradeDialog::onExport()
+void GroupScoreDialog::onExport()
 {
     QString fileName = QFileDialog::getSaveFileName(this, "导出成绩表", "", "CSV文件 (*.csv);;所有文件 (*.*)");
     if (fileName.isEmpty()) {
@@ -626,7 +682,7 @@ void MidtermGradeDialog::onExport()
     QMessageBox::information(this, "成功", "导出完成！");
 }
 
-void MidtermGradeDialog::onUpload()
+void GroupScoreDialog::onUpload()
 {
     qDebug() << "onUpload() 方法被调用！";
     qDebug() << "Excel文件路径:" << m_excelFilePath;
@@ -648,7 +704,7 @@ void MidtermGradeDialog::onUpload()
         }
 
         if (excelName.isEmpty()) {
-            excelName = QString("期中成绩表_%1.xlsx").arg(QDateTime::currentDateTime().toString("yyyyMMddHHmmss"));
+            excelName = QString("小组管理表_%1.xlsx").arg(QDateTime::currentDateTime().toString("yyyyMMddHHmmss"));
         }
 
         // 如果有目标目录，则强制保存到该目录
@@ -702,8 +758,8 @@ void MidtermGradeDialog::onUpload()
         return;
     }
 
-    // 考试名称默认为"期中考试"
-    QString examName = "期中考试";
+    // 考试名称默认为"小组管理"
+    QString examName = "小组管理";
 
     // 根据当前日期计算学期
     QDate currentDate = QDate::currentDate();
@@ -713,29 +769,24 @@ void MidtermGradeDialog::onUpload()
     QString term;
     // 9月-1月是上学期（第一学期），2月-8月是下学期（第二学期）
     if (month >= 9 || month <= 1) {
-        // 上学期：如果月份是9-12月，学年是 year-year+1-1；如果是1月，学年是 year-1-year-1
         if (month >= 9) {
             term = QString("%1-%2-1").arg(year).arg(year + 1);
         } else {
             term = QString("%1-%2-1").arg(year - 1).arg(year);
         }
     } else {
-        // 下学期：2-8月，学年是 year-1-year-2
         term = QString("%1-%2-2").arg(year - 1).arg(year);
     }
     
     qDebug() << "当前日期:" << currentDate.toString("yyyy-MM-dd") << "，计算出的学期:" << term;
 
     // 备注（可选）
-    QString remark = QString("%1年%2学期期中考试")
+    QString remark = QString("%1年%2学期小组管理")
                      .arg(currentDate.year())
                      .arg(month >= 9 || month <= 1 ? "第一" : "第二");
 
-    // 从表格中读取数据
-    QJsonArray scoresArray;
-    
-    // 获取列索引（只查找学号和姓名）
-    int colId = -1, colName = -1;
+    // 获取列索引
+    int colGroup = -1, colId = -1, colName = -1, colTotal = -1, colGroupTotal = -1;
     QMap<QString, int> attributeColumnMap; // 存储所有属性列的映射（列名 -> 列索引）
     
     for (int col = 0; col < table->columnCount(); ++col) {
@@ -743,10 +794,16 @@ void MidtermGradeDialog::onUpload()
         if (!headerItem) continue;
         QString headerText = headerItem->text();
         
-        if (headerText == "学号") {
+        if (headerText == "组号" || headerText == "小组") {
+            colGroup = col;
+        } else if (headerText == "学号") {
             colId = col;
         } else if (headerText == "姓名") {
             colName = col;
+        } else if (headerText == "总分") {
+            colTotal = col;
+        } else if (headerText == "小组总分") {
+            colGroupTotal = col;
         } else if (!headerText.isEmpty()) {
             // 其他所有列都作为属性列
             attributeColumnMap[headerText] = col;
@@ -758,6 +815,13 @@ void MidtermGradeDialog::onUpload()
         return;
     }
 
+    // 按组号分组数据
+    QMap<QString, QJsonArray> groupScoresMap; // 组号 -> 该组的学生成绩数组
+    
+    qDebug() << "开始遍历表格，总行数:" << table->rowCount();
+    
+    QString currentGroupName = ""; // 当前组号，用于向下填充
+    
     // 读取每一行数据
     for (int row = 0; row < table->rowCount(); ++row) {
         QTableWidgetItem* idItem = table->item(row, colId);
@@ -773,6 +837,34 @@ void MidtermGradeDialog::onUpload()
             continue; // 跳过空行
         }
 
+        // 获取组号
+        QString groupName = "";
+        if (colGroup >= 0) {
+            QTableWidgetItem* groupItem = table->item(row, colGroup);
+            if (groupItem) {
+                QString groupText = groupItem->text().trimmed();
+                // 如果当前行的组号不为空，更新当前组号
+                if (!groupText.isEmpty()) {
+                    currentGroupName = groupText;
+                    groupName = currentGroupName;
+                } else {
+                    // 如果当前行的组号为空，使用之前保存的组号（向下填充）
+                    groupName = currentGroupName;
+                }
+            } else {
+                // 如果单元格不存在，使用之前保存的组号（向下填充）
+                groupName = currentGroupName;
+            }
+        }
+        
+        // 如果组号仍为空（说明从第一行开始就没有组号），跳过该行
+        if (groupName.isEmpty()) {
+            qDebug() << "第" << row << "行组号为空且没有可用的前序组号，跳过";
+            continue;
+        }
+        
+        qDebug() << "处理第" << row << "行，组号:" << groupName << "，学号:" << studentId << "，姓名:" << studentName;
+
         QJsonObject scoreObj;
         if (!studentId.isEmpty()) {
             scoreObj["student_id"] = studentId;
@@ -781,7 +873,10 @@ void MidtermGradeDialog::onUpload()
             scoreObj["student_name"] = studentName;
         }
 
-        // 动态读取所有属性列（除了学号和姓名之外的所有列）
+        // 构建嵌套的 scores 对象
+        QJsonObject scoresNested;
+        
+        // 读取所有属性列（除了组号/小组、学号、姓名、总分、小组总分）
         for (auto it = attributeColumnMap.begin(); it != attributeColumnMap.end(); ++it) {
             QString columnName = it.key();
             int col = it.value();
@@ -794,18 +889,40 @@ void MidtermGradeDialog::onUpload()
                 double score = text.toDouble(&ok);
                 if (ok) {
                     // 直接使用列名作为字段名（支持中文列名）
-                    scoreObj[columnName] = score;
+                    scoresNested[columnName] = score;
                 } else {
                     // 如果不是数字，作为字符串存储（支持中文列名）
-                    scoreObj[columnName] = text;
+                    scoresNested[columnName] = text;
                 }
             }
         }
+        
+        // 添加个人总分（如果存在）
+        if (colTotal >= 0) {
+            QTableWidgetItem* totalItem = table->item(row, colTotal);
+            if (totalItem && !totalItem->text().trimmed().isEmpty()) {
+                QString totalText = totalItem->text().trimmed();
+                bool ok;
+                double totalScore = totalText.toDouble(&ok);
+                if (ok) {
+                    scoresNested["总分"] = totalScore;
+                }
+            }
+        }
+        
+        // 将嵌套的 scores 对象添加到 scoreObj（即使为空也添加，确保学生信息被上传）
+        scoreObj["scores"] = scoresNested;
 
-        scoresArray.append(scoreObj);
+        // 按组号分组
+        if (!groupScoresMap.contains(groupName)) {
+            groupScoresMap[groupName] = QJsonArray();
+        }
+        groupScoresMap[groupName].append(scoreObj);
+        
+        qDebug() << "添加学生到组" << groupName << ":" << studentId << studentName << "，当前组学生数:" << groupScoresMap[groupName].size();
     }
 
-    if (scoresArray.isEmpty()) {
+    if (groupScoresMap.isEmpty()) {
         QMessageBox::warning(this, "错误", "没有有效的学生数据！");
         return;
     }
@@ -831,6 +948,40 @@ void MidtermGradeDialog::onUpload()
         }
     }
 
+    // 构造请求 JSON - 按组号分组
+    QJsonArray groupScoresArray;
+    qDebug() << "开始构造group_scores数组，共有" << groupScoresMap.size() << "个组";
+    for (auto it = groupScoresMap.begin(); it != groupScoresMap.end(); ++it) {
+        QString groupName = it.key();
+        QJsonArray studentsArray = it.value();
+        
+        qDebug() << "组" << groupName << "包含" << studentsArray.size() << "个学生";
+        
+        // 获取小组总分（从该组第一行的数据中获取，或者计算）
+        double groupTotalScore = 0.0;
+        if (colGroupTotal >= 0) {
+            // 找到该组的第一行
+            for (int row = 0; row < table->rowCount(); ++row) {
+                QTableWidgetItem* groupItem = table->item(row, colGroup);
+                if (groupItem && groupItem->text().trimmed() == groupName) {
+                    QTableWidgetItem* groupTotalItem = table->item(row, colGroupTotal);
+                    if (groupTotalItem && !groupTotalItem->text().trimmed().isEmpty()) {
+                        bool ok;
+                        groupTotalScore = groupTotalItem->text().trimmed().toDouble(&ok);
+                        if (!ok) groupTotalScore = 0.0;
+                    }
+                    break;
+                }
+            }
+        }
+        
+        QJsonObject groupObj;
+        groupObj["group_name"] = groupName;
+        groupObj["group_total_score"] = groupTotalScore;
+        groupObj["students"] = studentsArray;
+        groupScoresArray.append(groupObj);
+    }
+
     // 构造请求 JSON
     QJsonObject requestObj;
     requestObj["class_id"] = classId;
@@ -849,13 +1000,13 @@ void MidtermGradeDialog::onUpload()
         }
     }
     
-    requestObj["scores"] = scoresArray;
+    requestObj["group_scores"] = groupScoresArray;
     
     // 如果有Excel文件，添加文件名
     if (!m_excelFileName.isEmpty()) {
         requestObj["excel_file_name"] = m_excelFileName;
     }
-    
+
     // 构建 fields 数组（替换模式需要）
     QJsonArray fieldsArray;
     int fieldOrder = 1;
@@ -865,8 +1016,9 @@ void MidtermGradeDialog::onUpload()
     for (auto it = attributeColumnMap.begin(); it != attributeColumnMap.end(); ++it) {
         QString columnName = it.key();
         
-        // 跳过固定列（学号、姓名）
-        if (columnName == "学号" || columnName == "姓名") {
+        // 跳过固定列（组号/小组、学号、姓名、总分、小组总分）
+        if (columnName == "组号" || columnName == "小组" || columnName == "学号" || columnName == "姓名" || 
+            columnName == "总分" || columnName == "小组总分") {
             continue;
         }
         
@@ -878,6 +1030,17 @@ void MidtermGradeDialog::onUpload()
         
         fieldsArray.append(fieldObj);
         excelFieldNames.append(columnName);
+    }
+    
+    // 添加总分字段（如果存在）
+    if (colTotal >= 0) {
+        QJsonObject fieldObj;
+        fieldObj["field_name"] = "总分";
+        fieldObj["field_type"] = "number";
+        fieldObj["field_order"] = fieldOrder++;
+        fieldObj["is_total"] = 1;
+        fieldsArray.append(fieldObj);
+        excelFieldNames.append("总分");
     }
     
     // 如果有字段定义，添加到请求中
@@ -897,20 +1060,9 @@ void MidtermGradeDialog::onUpload()
                 excelObj["description"] = desc;
             }
         }
-        // 如果 excelFieldNames 为空，尝试从 fieldsArray 提取
         QJsonArray excelFieldsJson;
-        if (excelFieldNames.isEmpty()) {
-            for (const auto& f : fieldsArray) {
-                QJsonObject fObj = f.toObject();
-                QString name = fObj.value("field_name").toString();
-                if (!name.isEmpty()) {
-                    excelFieldsJson.append(name);
-                }
-            }
-        } else {
-            for (const QString& f : excelFieldNames) {
-                excelFieldsJson.append(f);
-            }
+        for (const QString& f : excelFieldNames) {
+            excelFieldsJson.append(f);
         }
         excelObj["fields"] = excelFieldsJson;
         excelFilesArray.append(excelObj);
@@ -920,8 +1072,8 @@ void MidtermGradeDialog::onUpload()
     QJsonDocument doc(requestObj);
     QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
 
-    // 发送 POST 请求
-    QString url = "http://47.100.126.194:5000/student-scores/save";
+    // 发送 POST 请求 - 使用 /group-scores/save 接口
+    QString url = "http://47.100.126.194:5000/group-scores/save";
     QNetworkRequest request;
     request.setUrl(QUrl(url));
     
@@ -1062,7 +1214,7 @@ void MidtermGradeDialog::onUpload()
     });
 }
 
-void MidtermGradeDialog::onCellClicked(int row, int column)
+void GroupScoreDialog::onCellClicked(int row, int column)
 {
     QTableWidgetItem* item = table->item(row, column);
     if (!item) {
@@ -1071,12 +1223,12 @@ void MidtermGradeDialog::onCellClicked(int row, int column)
         table->setItem(row, column, item);
     }
     
-    // 获取列头名称，检查是否是学号或姓名列
+    // 获取列头名称，检查是否是组号、学号或姓名列
     QTableWidgetItem* headerItem = table->horizontalHeaderItem(column);
     QString headerText = headerItem ? headerItem->text() : "";
     
-    // 如果是学号或姓名列，直接进入编辑状态
-    if (headerText == "学号" || headerText == "姓名") {
+    // 如果是组号/小组、学号或姓名列，直接进入编辑状态
+    if (headerText == "组号" || headerText == "小组" || headerText == "学号" || headerText == "姓名") {
         table->editItem(item);
         return;
     }
@@ -1093,7 +1245,7 @@ void MidtermGradeDialog::onCellClicked(int row, int column)
     }
 }
 
-void MidtermGradeDialog::onCellEntered(int row, int column)
+void GroupScoreDialog::onCellEntered(int row, int column)
 {
     // 鼠标悬浮时显示注释提示窗口
     QTableWidgetItem* item = table->item(row, column);
@@ -1105,7 +1257,7 @@ void MidtermGradeDialog::onCellEntered(int row, int column)
     }
 }
 
-void MidtermGradeDialog::onItemChanged(QTableWidgetItem* item)
+void GroupScoreDialog::onItemChanged(QTableWidgetItem* item)
 {
     if (!item) return;
     
@@ -1116,18 +1268,25 @@ void MidtermGradeDialog::onItemChanged(QTableWidgetItem* item)
     QTableWidgetItem* headerItem = table->horizontalHeaderItem(column);
     QString headerText = headerItem ? headerItem->text() : "";
     
-    // 如果修改的不是"总分"列，则更新该行的总分
-    if (headerText != "总分" && headerText != "学号" && headerText != "姓名") {
+    // 如果修改的不是"总分"列、"小组总分"列、"组号/小组"列、"学号"列、"姓名"列，则更新该行的总分和小组总分
+    if (headerText != "总分" && headerText != "小组总分" && headerText != "组号" && headerText != "小组" &&
+        headerText != "学号" && headerText != "姓名") {
         updateRowTotal(row);
+        updateGroupTotal();
+    } else if (headerText == "总分") {
+        // 如果修改的是个人总分，只更新小组总分
+        updateGroupTotal();
     }
 }
 
-void MidtermGradeDialog::updateRowTotal(int row)
+void GroupScoreDialog::updateRowTotal(int row)
 {
     // 查找"总分"列的索引
     int totalCol = -1;
     int nameCol = -1;
     int idCol = -1;
+    int groupCol = -1;
+    int groupTotalCol = -1;
     for (int c = 0; c < table->columnCount(); ++c) {
         QTableWidgetItem* headerItem = table->horizontalHeaderItem(c);
         if (!headerItem) continue;
@@ -1138,30 +1297,35 @@ void MidtermGradeDialog::updateRowTotal(int row)
             nameCol = c;
         } else if (headerText == "学号") {
             idCol = c;
+        } else if (headerText == "组号" || headerText == "小组") {
+            groupCol = c;
+        } else if (headerText == "小组总分") {
+            groupTotalCol = c;
         }
     }
     
     // 如果没有"总分"列，不需要更新
     if (totalCol < 0) return;
     
-    // 计算该行的总分
-    // 需要计算所有数值列，但排除：学号、姓名、总分列本身
+    // 计算该行的个人总分
+    // 需要计算所有数值列，但排除：组号、学号、姓名、总分、小组总分列本身
     double total = 0.0;
     
     for (int col = 0; col < table->columnCount(); ++col) {
-        // 跳过学号、姓名、总分列
-        if (col == idCol || col == nameCol || col == totalCol) {
+        // 跳过组号、学号、姓名、总分、小组总分列
+        if (col == idCol || col == nameCol || col == totalCol || col == groupCol || col == groupTotalCol) {
             continue;
         }
         
         QTableWidgetItem* item = table->item(row, col);
         if (!item) continue;
         
-        // 获取列头名称，确保不是学号、姓名、总分列
+        // 获取列头名称，确保不是组号、学号、姓名、总分、小组总分列
         QTableWidgetItem* headerItem = table->horizontalHeaderItem(col);
         if (!headerItem) continue;
         QString headerText = headerItem->text();
-        if (headerText == "学号" || headerText == "姓名" || headerText == "总分") {
+        if (headerText == "组号" || headerText == "小组" || headerText == "学号" || headerText == "姓名" || 
+            headerText == "总分" || headerText == "小组总分") {
             continue;
         }
         
@@ -1187,7 +1351,118 @@ void MidtermGradeDialog::updateRowTotal(int row)
     table->blockSignals(false);
 }
 
-void MidtermGradeDialog::onTableContextMenu(const QPoint& pos)
+void GroupScoreDialog::updateGroupTotal()
+{
+    // 查找"小组总分"列和"组号"列的索引
+    int groupTotalCol = -1;
+    int groupCol = -1;
+    int totalCol = -1;
+    for (int c = 0; c < table->columnCount(); ++c) {
+        QTableWidgetItem* headerItem = table->horizontalHeaderItem(c);
+        if (!headerItem) continue;
+        QString headerText = headerItem->text();
+        if (headerText == "小组总分") {
+            groupTotalCol = c;
+        } else if (headerText == "组号" || headerText == "小组") {
+            groupCol = c;
+        } else if (headerText == "总分") {
+            totalCol = c;
+        }
+    }
+    
+    // 如果没有"小组总分"列或"组号"列，不需要更新
+    if (groupTotalCol < 0 || groupCol < 0 || totalCol < 0) return;
+    
+    // 按组号分组，计算每组的个人总分之和
+    QMap<QString, double> groupTotals; // 组号 -> 该组的总分之和
+    QString currentGroupName = ""; // 当前组号，用于向下填充
+    
+    for (int row = 0; row < table->rowCount(); ++row) {
+        QTableWidgetItem* totalItem = table->item(row, totalCol);
+        if (!totalItem) continue;
+        
+        // 获取组号（支持向下填充）
+        QString groupName = "";
+        if (groupCol >= 0) {
+            QTableWidgetItem* groupItem = table->item(row, groupCol);
+            if (groupItem) {
+                QString groupText = groupItem->text().trimmed();
+                // 如果当前行的组号不为空，更新当前组号
+                if (!groupText.isEmpty()) {
+                    currentGroupName = groupText;
+                    groupName = currentGroupName;
+                } else {
+                    // 如果当前行的组号为空，使用之前保存的组号（向下填充）
+                    groupName = currentGroupName;
+                }
+            } else {
+                // 如果单元格不存在，使用之前保存的组号（向下填充）
+                groupName = currentGroupName;
+            }
+        }
+        
+        // 如果组号为空，跳过该行
+        if (groupName.isEmpty()) continue;
+        
+        QString totalText = totalItem->text().trimmed();
+        bool ok;
+        double total = totalText.toDouble(&ok);
+        if (ok) {
+            groupTotals[groupName] += total;
+        }
+    }
+    
+    // 更新每组的"小组总分"列（只写在每个小组的第一行）
+    table->blockSignals(true);
+    currentGroupName = ""; // 重置当前组号
+    QString lastGroupName = ""; // 上一行的组号，用于判断是否是小组的第一行
+    
+    for (int row = 0; row < table->rowCount(); ++row) {
+        // 获取组号（支持向下填充）
+        QString groupName = "";
+        if (groupCol >= 0) {
+            QTableWidgetItem* groupItem = table->item(row, groupCol);
+            if (groupItem) {
+                QString groupText = groupItem->text().trimmed();
+                // 如果当前行的组号不为空，更新当前组号
+                if (!groupText.isEmpty()) {
+                    currentGroupName = groupText;
+                    groupName = currentGroupName;
+                } else {
+                    // 如果当前行的组号为空，使用之前保存的组号（向下填充）
+                    groupName = currentGroupName;
+                }
+            } else {
+                // 如果单元格不存在，使用之前保存的组号（向下填充）
+                groupName = currentGroupName;
+            }
+        }
+        
+        // 如果组号为空，跳过该行
+        if (groupName.isEmpty()) continue;
+        
+        // 确保小组总分单元格存在
+        QTableWidgetItem* groupTotalItem = table->item(row, groupTotalCol);
+        if (!groupTotalItem) {
+            groupTotalItem = new QTableWidgetItem("");
+            groupTotalItem->setTextAlignment(Qt::AlignCenter);
+            table->setItem(row, groupTotalCol, groupTotalItem);
+        }
+        
+        // 只在该小组的第一行写入小组总分
+        if (groupName != lastGroupName && groupTotals.contains(groupName)) {
+            groupTotalItem->setText(QString::number(groupTotals[groupName]));
+        } else {
+            // 如果不是第一行，清空小组总分
+            groupTotalItem->setText("");
+        }
+        
+        lastGroupName = groupName; // 更新上一行的组号
+    }
+    table->blockSignals(false);
+}
+
+void GroupScoreDialog::onTableContextMenu(const QPoint& pos)
 {
     QTableWidgetItem* item = table->itemAt(pos);
     if (!item) return;
@@ -1207,11 +1482,13 @@ void MidtermGradeDialog::onTableContextMenu(const QPoint& pos)
                                         QMessageBox::Yes | QMessageBox::No);
         if (ret == QMessageBox::Yes) {
             table->removeRow(row);
+            // 删除行后，更新小组总分
+            updateGroupTotal();
         }
     }
 }
 
-void MidtermGradeDialog::sortTable(bool ascending)
+void GroupScoreDialog::sortTable(bool ascending)
 {
     int sortColumn = table->currentColumn();
     if (sortColumn < 0) {
@@ -1263,127 +1540,7 @@ void MidtermGradeDialog::sortTable(bool ascending)
     }
 }
 
-void MidtermGradeDialog::openSeatingArrangementDialog()
-{
-    // 从表格中读取学生数据
-    QList<StudentInfo> students;
-    
-    // 获取列索引（只查找学号和姓名，其他列都作为属性列）
-    int colId = -1, colName = -1;
-    QMap<QString, int> attributeColumns; // 存储所有属性列（列名 -> 列索引）
-    
-    for (int col = 0; col < table->columnCount(); ++col) {
-        QTableWidgetItem* headerItem = table->horizontalHeaderItem(col);
-        if (!headerItem) continue;
-        QString headerText = headerItem->text();
-        
-        if (headerText == "学号") {
-            colId = col;
-        } else if (headerText == "姓名") {
-            colName = col;
-        } else if (!headerText.isEmpty()) {
-            // 其他所有列都作为属性列
-            attributeColumns[headerText] = col;
-        }
-    }
-    
-    if (colName < 0) {
-        QMessageBox::warning(this, "错误", "表格中缺少姓名列！");
-        return;
-    }
-    
-    // 读取每一行数据
-    for (int row = 0; row < table->rowCount(); ++row) {
-        QTableWidgetItem* nameItem = table->item(row, colName);
-        if (!nameItem || nameItem->text().trimmed().isEmpty()) {
-            continue; // 跳过空行
-        }
-        
-        StudentInfo student;
-        student.name = nameItem->text().trimmed();
-        if (colId >= 0) {
-            QTableWidgetItem* idItem = table->item(row, colId);
-            if (idItem) {
-                student.id = idItem->text().trimmed();
-            }
-        }
-        
-        // 读取所有属性列并填充到 attributes 中
-        double totalScore = 0.0;
-        for (auto it = attributeColumns.begin(); it != attributeColumns.end(); ++it) {
-            QString columnName = it.key();
-            int col = it.value();
-            QTableWidgetItem* item = table->item(row, col);
-            if (item && !item->text().trimmed().isEmpty()) {
-                bool ok;
-                double score = item->text().toDouble(&ok);
-                if (ok) {
-                    student.attributes[columnName] = score;
-                    // 如果列名是"总分"，则作为排序依据
-                    if (columnName == "总分") {
-                        student.score = score;
-                    } else {
-                        // 累加所有数值列作为总分（如果总分列不存在）
-                        totalScore += score;
-                    }
-                }
-            }
-        }
-        
-        // 如果没有"总分"列，使用累加值
-        if (student.score == 0 && totalScore > 0) {
-            student.score = totalScore;
-        }
-        
-        student.originalIndex = students.size();
-        students.append(student);
-    }
-    
-    if (students.isEmpty()) {
-        QMessageBox::warning(this, "错误", "没有有效的学生数据！");
-        return;
-    }
-    
-    // 找到所有打开的 ScheduleDialog 实例
-    QList<ScheduleDialog*> scheduleDialogs;
-    QWidgetList widgets = QApplication::allWidgets();
-    for (QWidget* widget : widgets) {
-        ScheduleDialog* scheduleDlg = qobject_cast<ScheduleDialog*>(widget);
-        if (scheduleDlg && !scheduleDlg->isHidden()) {
-            scheduleDialogs.append(scheduleDlg);
-            qDebug() << "找到打开的 ScheduleDialog:" << scheduleDlg;
-        }
-    }
-    
-    qDebug() << "共找到" << scheduleDialogs.size() << "个打开的 ScheduleDialog 实例";
-    
-    if (scheduleDialogs.isEmpty()) {
-        QMessageBox::information(this, "提示", "请先打开一个班级群聊窗口！");
-        return;
-    }
-    
-    // 显示排座方式选择对话框
-    ArrangeSeatDialog* arrangeDialog = new ArrangeSeatDialog(this);
-    if (arrangeDialog->exec() == QDialog::Accepted) {
-        QString method = arrangeDialog->getSelectedMethod();
-        qDebug() << "用户选择的排座方式:" << method;
-        qDebug() << "学生数据数量:" << students.size();
-        
-        // 对所有打开的 ScheduleDialog 执行排座
-        for (ScheduleDialog* scheduleDlg : scheduleDialogs) {
-            qDebug() << "正在为 ScheduleDialog 执行排座...";
-            scheduleDlg->arrangeSeats(students, method);
-        }
-        
-        QMessageBox::information(this, "排座完成", 
-            QString("已为 %1 个班级群聊窗口完成排座！\n排座方式：%2").arg(scheduleDialogs.size()).arg(method), 
-            QMessageBox::Ok);
-    }
-    
-    arrangeDialog->deleteLater();
-}
-
-void MidtermGradeDialog::showCellComment(int row, int column)
+void GroupScoreDialog::showCellComment(int row, int column)
 {
     QTableWidgetItem* item = table->item(row, column);
     if (!item) {
@@ -1427,8 +1584,9 @@ void MidtermGradeDialog::showCellComment(int row, int column)
         fieldName = headerItem->text();
     }
     
-    // 跳过固定列（学号、姓名、总分）
-    if (fieldName == "学号" || fieldName == "姓名" || fieldName == "总分" || fieldName.isEmpty()) {
+    // 跳过固定列（组号/小组、学号、姓名、总分、小组总分）
+    if (fieldName == "组号" || fieldName == "小组" || fieldName == "学号" || fieldName == "姓名" || 
+        fieldName == "总分" || fieldName == "小组总分" || fieldName.isEmpty()) {
         QMessageBox::information(this, "提示", "该列不支持设置注释！");
         return;
     }
@@ -1454,8 +1612,74 @@ void MidtermGradeDialog::showCellComment(int row, int column)
     }
 }
 
+void GroupScoreDialog::setCommentToServer(const QString& studentName, const QString& studentId, 
+                                            const QString& fieldName, const QString& comment)
+{
+    // 检查 score_header_id 是否有效
+    if (m_scoreHeaderId <= 0) {
+        qDebug() << "score_header_id 无效，无法设置注释到服务器";
+        // 不显示错误提示，因为可能是本地编辑，还没有上传到服务器
+        return;
+    }
+    
+    // 构造请求 JSON
+    QJsonObject requestObj;
+    requestObj["score_header_id"] = m_scoreHeaderId;
+    requestObj["student_name"] = studentName;
+    if (!studentId.isEmpty()) {
+        requestObj["student_id"] = studentId;
+    }
+    requestObj["field_name"] = fieldName;
+    requestObj["comment"] = comment;
+    
+    QJsonDocument doc(requestObj);
+    QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+    
+    // 发送 POST 请求 - 使用 /group-scores/set-comment 接口
+    QString url = "http://47.100.126.194:5000/group-scores/set-comment";
+    QNetworkRequest request;
+    request.setUrl(QUrl(url));
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    
+    QNetworkReply* reply = networkManager->post(request, jsonData);
+    
+    // 处理响应
+    connect(reply, &QNetworkReply::finished, this, [=]() {
+        if (reply->error() == QNetworkReply::NoError) {
+            QByteArray responseData = reply->readAll();
+            QJsonDocument responseDoc = QJsonDocument::fromJson(responseData);
+            
+            if (responseDoc.isObject()) {
+                QJsonObject responseObj = responseDoc.object();
+                int code = responseObj["code"].toInt();
+                
+                if (code == 200) {
+                    qDebug() << "注释设置成功:" << studentName << fieldName;
+                    // 可以更新本地存储的注释信息
+                    QJsonObject dataObj = responseObj["data"].toObject();
+                    if (dataObj.contains("comments_json") && dataObj["comments_json"].isObject()) {
+                        QJsonObject commentsJson = dataObj["comments_json"].toObject();
+                        // 可以在这里更新本地注释缓存
+                    }
+                } else {
+                    QString errorMsg = responseObj["message"].toString();
+                    qDebug() << "设置注释失败:" << errorMsg;
+                    QMessageBox::warning(this, "设置注释失败", 
+                        QString("服务器返回错误：\n%1").arg(errorMsg));
+                }
+            }
+        } else {
+            QString errorString = reply->errorString();
+            qDebug() << "网络错误:" << errorString;
+            // 不显示错误提示，避免打断用户操作
+        }
+        
+        reply->deleteLater();
+    });
+}
+
 // 重写鼠标事件以实现窗口拖动
-void MidtermGradeDialog::mousePressEvent(QMouseEvent *event)
+void GroupScoreDialog::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
         m_dragPosition = event->globalPos() - frameGeometry().topLeft();
@@ -1463,7 +1687,7 @@ void MidtermGradeDialog::mousePressEvent(QMouseEvent *event)
     }
 }
 
-void MidtermGradeDialog::mouseMoveEvent(QMouseEvent *event)
+void GroupScoreDialog::mouseMoveEvent(QMouseEvent *event)
 {
     if (event->buttons() & Qt::LeftButton && !m_dragPosition.isNull()) {
         move(event->globalPos() - m_dragPosition);
@@ -1472,7 +1696,7 @@ void MidtermGradeDialog::mouseMoveEvent(QMouseEvent *event)
 }
 
 // 鼠标进入窗口时显示关闭按钮
-void MidtermGradeDialog::enterEvent(QEvent *event)
+void GroupScoreDialog::enterEvent(QEvent *event)
 {
     if (m_btnClose) {
         m_btnClose->show();
@@ -1481,7 +1705,7 @@ void MidtermGradeDialog::enterEvent(QEvent *event)
 }
 
 // 鼠标离开窗口时隐藏关闭按钮
-void MidtermGradeDialog::leaveEvent(QEvent *event)
+void GroupScoreDialog::leaveEvent(QEvent *event)
 {
     // 检查鼠标是否真的离开了窗口（包括关闭按钮）
     QPoint globalPos = QCursor::pos();
@@ -1497,7 +1721,7 @@ void MidtermGradeDialog::leaveEvent(QEvent *event)
 }
 
 // 事件过滤器，处理关闭按钮的鼠标事件和表格的鼠标移动事件
-bool MidtermGradeDialog::eventFilter(QObject *obj, QEvent *event)
+bool GroupScoreDialog::eventFilter(QObject *obj, QEvent *event)
 {
     // 先处理关闭按钮的事件
     if (obj == m_btnClose) {
@@ -1541,7 +1765,7 @@ bool MidtermGradeDialog::eventFilter(QObject *obj, QEvent *event)
 }
 
 // 窗口大小改变时更新关闭按钮位置
-void MidtermGradeDialog::resizeEvent(QResizeEvent *event)
+void GroupScoreDialog::resizeEvent(QResizeEvent *event)
 {
     if (m_btnClose) {
         m_btnClose->move(width() - 35, 5);
@@ -1550,7 +1774,7 @@ void MidtermGradeDialog::resizeEvent(QResizeEvent *event)
 }
 
 // 窗口显示时更新关闭按钮位置
-void MidtermGradeDialog::showEvent(QShowEvent *event)
+void GroupScoreDialog::showEvent(QShowEvent *event)
 {
     if (m_btnClose) {
         m_btnClose->move(width() - 35, 5);
@@ -1571,71 +1795,5 @@ void MidtermGradeDialog::showEvent(QShowEvent *event)
     raise();
     activateWindow();
     QDialog::showEvent(event);
-}
-
-void MidtermGradeDialog::setCommentToServer(const QString& studentName, const QString& studentId, 
-                                            const QString& fieldName, const QString& comment)
-{
-    // 检查 score_header_id 是否有效
-    if (m_scoreHeaderId <= 0) {
-        qDebug() << "score_header_id 无效，无法设置注释到服务器";
-        // 不显示错误提示，因为可能是本地编辑，还没有上传到服务器
-        return;
-    }
-    
-    // 构造请求 JSON
-    QJsonObject requestObj;
-    requestObj["score_header_id"] = m_scoreHeaderId;
-    requestObj["student_name"] = studentName;
-    if (!studentId.isEmpty()) {
-        requestObj["student_id"] = studentId;
-    }
-    requestObj["field_name"] = fieldName;
-    requestObj["comment"] = comment;
-    
-    QJsonDocument doc(requestObj);
-    QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
-    
-    // 发送 POST 请求
-    QString url = "http://47.100.126.194:5000/student-scores/set-comment";
-    QNetworkRequest request;
-    request.setUrl(QUrl(url));
-    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-    
-    QNetworkReply* reply = networkManager->post(request, jsonData);
-    
-    // 处理响应
-    connect(reply, &QNetworkReply::finished, this, [=]() {
-        if (reply->error() == QNetworkReply::NoError) {
-            QByteArray responseData = reply->readAll();
-            QJsonDocument responseDoc = QJsonDocument::fromJson(responseData);
-            
-            if (responseDoc.isObject()) {
-                QJsonObject responseObj = responseDoc.object();
-                int code = responseObj["code"].toInt();
-                
-                if (code == 200) {
-                    qDebug() << "注释设置成功:" << studentName << fieldName;
-                    // 可以更新本地存储的注释信息
-                    QJsonObject dataObj = responseObj["data"].toObject();
-                    if (dataObj.contains("comments_json") && dataObj["comments_json"].isObject()) {
-                        QJsonObject commentsJson = dataObj["comments_json"].toObject();
-                        // 可以在这里更新本地注释缓存
-                    }
-                } else {
-                    QString errorMsg = responseObj["message"].toString();
-                    qDebug() << "设置注释失败:" << errorMsg;
-                    QMessageBox::warning(this, "设置注释失败", 
-                        QString("服务器返回错误：\n%1").arg(errorMsg));
-                }
-            }
-        } else {
-            QString errorString = reply->errorString();
-            qDebug() << "网络错误:" << errorString;
-            // 不显示错误提示，避免打断用户操作
-        }
-        
-        reply->deleteLater();
-    });
 }
 

@@ -27,6 +27,7 @@ public:
         setRowCount(6);
         setColumnCount(8);
 
+        // 默认列：学号、姓名、语文、数学、英语、总分
         QStringList headers = { "学号", "姓名", "语文", "数学", "英语", "总分", "", "" };
         setHorizontalHeaderLabels(headers);
 
