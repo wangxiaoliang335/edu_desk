@@ -8,6 +8,17 @@
 #include <QFrame>
 #include <QBrush>
 #include <QColor>
+#include <QDir>
+#include <QFileInfo>
+#include <QFileInfoList>
+#include <QCoreApplication>
+#include <QMap>
+#include <QDebug>
+#include <QShowEvent>
+#include <QFile>
+#include <QTextStream>
+#include "QXlsx/header/xlsxdocument.h"
+#include "CommonInfo.h"
 
 class ArrangeSeatDialog : public QDialog
 {
@@ -98,24 +109,101 @@ public:
         QString grayStyle = "background-color: #808080; color: white; padding: 6px 12px; border-radius: 4px; font-size: 14px;";
         QString greenStyle = "background-color: green; color: white; padding: 6px 12px; border-radius: 4px; font-size: 14px;";
 
-        btnMidtermGrade = new QPushButton("期中成绩单");
-        btnSubject = new QPushButton("数学");
+        midtermComboBox = new QComboBox(this);
+        midtermComboBox->setStyleSheet(
+            "QComboBox { color: white; background-color: #808080; padding: 6px 12px; border-radius: 4px; font-size: 14px; }"
+            "QComboBox QAbstractItemView { color: white; background-color: #5C5C5C; selection-background-color: #ff8c00; }"
+        );
+        subjectComboBox = new QComboBox(this);
+        subjectComboBox->setStyleSheet(
+            "QComboBox { color: white; background-color: #808080; padding: 6px 12px; border-radius: 4px; font-size: 14px; }"
+            "QComboBox QAbstractItemView { color: white; background-color: #5C5C5C; selection-background-color: #ff8c00; }"
+        );
         btnConfirm = new QPushButton("确定");
 
-        btnMidtermGrade->setStyleSheet(grayStyle);
-        btnSubject->setStyleSheet(grayStyle);
         btnConfirm->setStyleSheet(greenStyle);
 
-        buttonLayout->addWidget(btnMidtermGrade);
-        buttonLayout->addWidget(btnSubject);
+        buttonLayout->addWidget(midtermComboBox);
+        buttonLayout->addWidget(subjectComboBox);
         buttonLayout->addStretch();
         buttonLayout->addWidget(btnConfirm);
 
         mainLayout->addLayout(buttonLayout);
 
         // 连接确定按钮
-        connect(btnConfirm, &QPushButton::clicked, this, &QDialog::accept);
+        connect(btnConfirm, &QPushButton::clicked, this, [this]() {
+            emit arrangeRequested(midtermComboBox->currentText(),
+                                  subjectComboBox->currentText(),
+                                  rightComboBox->currentText(),
+                                  isGroupMode());
+            accept();
+        });
+
+        // 下拉联动：选择文件后更新属性字段
+        connect(midtermComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+            updateAttributesFromSelectedFile();
+        });
     }
+
+    // 加载已下载的Excel文件并更新科目下拉框
+    void loadExcelFiles(const QString& classId)
+    {
+        m_classId = classId;
+
+        // 获取学校ID和班级ID
+        UserInfo userInfo = CommonInfo::GetData();
+        QString schoolId = userInfo.schoolId;
+
+        if (schoolId.isEmpty() || classId.isEmpty()) {
+            qDebug() << "学校ID或班级ID为空，无法加载Excel文件";
+            return;
+        }
+
+        // 构建Excel文件目录路径
+        QString baseDir = QCoreApplication::applicationDirPath() + "/excel_files";
+        QString schoolDir = baseDir + "/" + schoolId;
+        QString classDir = schoolDir + "/" + classId;
+
+        QDir dir(classDir);
+        if (!dir.exists()) {
+            qDebug() << "Excel文件目录不存在:" << classDir;
+            return;
+        }
+
+        // 获取目录中的所有Excel文件
+        QStringList filters;
+        filters << "*.xlsx" << "*.xls" << "*.csv";
+        QFileInfoList fileList = dir.entryInfoList(filters, QDir::Files);
+
+        qDebug() << "找到" << fileList.size() << "个Excel文件";
+
+        // 收集所有Excel文件
+        midtermComboBox->clear();
+        subjectComboBox->clear();
+        m_excelFileMap.clear();
+
+        for (const QFileInfo& fileInfo : fileList) {
+            QString filePath = fileInfo.absoluteFilePath();
+            QString fileName = fileInfo.baseName(); // 去掉扩展名的文件名
+
+            midtermComboBox->addItem(fileName);
+            subjectComboBox->addItem(fileName);
+            m_excelFileMap[fileName] = filePath;
+        }
+
+        // 如果有Excel文件，默认选中第一个
+        if (midtermComboBox->count() > 0) {
+            midtermComboBox->setCurrentIndex(0);
+        }
+        if (subjectComboBox->count() > 0) {
+            subjectComboBox->setCurrentIndex(0);
+        }
+
+        // 加载首个文件的字段
+        updateAttributesFromSelectedFile();
+    }
+
+    void setClassId(const QString& classId) { m_classId = classId; }
 
     // 获取选中的左侧选项（true=小组, false=不分组）
     bool isGroupMode() const
@@ -129,7 +217,69 @@ public:
         return rightComboBox->currentText();
     }
 
+protected:
+    void showEvent(QShowEvent* event) override
+    {
+        QDialog::showEvent(event);
+        if (!m_classId.isEmpty()) {
+            loadExcelFiles(m_classId);
+        }
+    }
+
 private:
+    // 读取指定文件的表头并更新右侧下拉框
+    void updateAttributesFromSelectedFile()
+    {
+        subjectComboBox->clear();
+        QString fileName = midtermComboBox->currentText();
+        if (fileName.isEmpty() || !m_excelFileMap.contains(fileName)) return;
+
+        QString filePath = m_excelFileMap[fileName];
+        QStringList headers;
+        if (!readHeaders(filePath, headers)) return;
+
+        for (const QString& h : headers) {
+            QString trimmed = h.trimmed();
+            if (trimmed.isEmpty()) continue;
+            // 排除常规标识列
+            if (trimmed == "学号" || trimmed == "姓名" || trimmed == "小组" || trimmed == "组号") continue;
+            subjectComboBox->addItem(trimmed);
+        }
+        if (subjectComboBox->count() > 0) {
+            subjectComboBox->setCurrentIndex(0);
+        }
+    }
+
+    // 读取表头（首行），支持 xlsx/xls/csv
+    bool readHeaders(const QString& filePath, QStringList& headers)
+    {
+        QFileInfo info(filePath);
+        QString suffix = info.suffix().toLower();
+        if (suffix == "xlsx" || suffix == "xls") {
+            QXlsx::Document xlsx(filePath);
+            int col = 1;
+            while (true) {
+                QString val = xlsx.read(1, col).toString();
+                if (val.isEmpty()) break;
+                headers << val;
+                ++col;
+            }
+            return !headers.isEmpty();
+        } else if (suffix == "csv") {
+            QFile f(filePath);
+            if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return false;
+            QTextStream ts(&f);
+            ts.setCodec("UTF-8");
+            if (!ts.atEnd()) {
+                QString line = ts.readLine();
+                headers = line.split(',', Qt::KeepEmptyParts);
+            }
+            f.close();
+            return !headers.isEmpty();
+        }
+        return false;
+    }
+
     void updateRightList(bool isGroup)
     {
         rightComboBox->clear();
@@ -154,8 +304,13 @@ private:
 private:
     QComboBox* leftComboBox;
     QComboBox* rightComboBox;
-    QPushButton* btnMidtermGrade;
-    QPushButton* btnSubject;
+    QComboBox* midtermComboBox;
+    QComboBox* subjectComboBox;
     QPushButton* btnConfirm;
+    QString m_classId;
+    QMap<QString, QString> m_excelFileMap;
+
+signals:
+    void arrangeRequested(const QString& fileName, const QString& fieldName, const QString& mode, bool isGroupMode);
 };
 

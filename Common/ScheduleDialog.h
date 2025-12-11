@@ -78,6 +78,7 @@
 #include "QXlsx/header/xlsxdocument.h"
 #include "QXlsx/header/xlsxworksheet.h"
 #include "QXlsx/header/xlsxcell.h"
+#include <QRandomGenerator>
 #include "QXlsx/header/xlsxglobal.h"
 QT_BEGIN_NAMESPACE_XLSX
 QT_END_NAMESPACE_XLSX
@@ -1459,15 +1460,35 @@ public:
 
 		// 创建排座对话框
 		arrangeSeatDlg = new ArrangeSeatDialog(this);
+		if (arrangeSeatDlg) {
+			arrangeSeatDlg->setClassId(m_classid);
+			arrangeSeatDlg->loadExcelFiles(m_classid);
+			connect(arrangeSeatDlg, &ArrangeSeatDialog::arrangeRequested, this,
+				[this](const QString& fileName, const QString& fieldName, const QString& mode, bool isGroup) {
+					Q_UNUSED(fileName);
+					arrangeSeatsByField(fieldName, mode, isGroup);
+					uploadSeatTableToServer();
+				});
+		}
 
 		// 连接排座按钮点击事件
 		connect(btnArrange, &QPushButton::clicked, this, [=]() {
 			if (arrangeSeatDlg && arrangeSeatDlg->isHidden()) {
+				arrangeSeatDlg->setClassId(m_classid);
+				arrangeSeatDlg->loadExcelFiles(m_classid);
 				arrangeSeatDlg->show();
 			} else if (arrangeSeatDlg && !arrangeSeatDlg->isHidden()) {
 				arrangeSeatDlg->hide();
 			} else {
 				arrangeSeatDlg = new ArrangeSeatDialog(this);
+				arrangeSeatDlg->setClassId(m_classid);
+				arrangeSeatDlg->loadExcelFiles(m_classid);
+				connect(arrangeSeatDlg, &ArrangeSeatDialog::arrangeRequested, this,
+					[this](const QString& fileName, const QString& fieldName, const QString& mode, bool isGroup) {
+						Q_UNUSED(fileName);
+						arrangeSeatsByField(fieldName, mode, isGroup);
+						uploadSeatTableToServer();
+					});
 				arrangeSeatDlg->show();
 			}
 		});
@@ -2031,6 +2052,9 @@ public:
 	// 排座功能：根据学生数据自动排座
 	// method: "随机排座", "正序", "倒序", "2人组排座", "4人组排座", "6人组排座"
 	void arrangeSeats(const QList<StudentInfo>& students, const QString& method = "随机排座");
+	double extractStudentValue(const StudentInfo& stu, const QString& field) const;
+	QVector<StudentInfo> groupWheelAssign(QVector<StudentInfo> sorted, int groupSize);
+	void arrangeSeatsByField(const QString& fieldName, const QString& modeText, bool isGroupMode);
 	void importSeatTable(); // 导入座位表格
 	void importSeatFromExcel(const QString& filePath); // 从Excel导入座位表
 	void importSeatFromCsv(const QString& filePath); // 从CSV导入座位表
@@ -2464,7 +2488,7 @@ private:
 	QString prepareClassCacheKey(const QString& subject, const QString& time) const;
 	QMap<QString, QString> m_prepareClassCache; // 课前准备内容缓存（科目|时间 -> 内容）
 	QJsonArray m_prepareClassHistoryData; // 课前准备历史原始数据
-	
+
 	// 对讲房间相关
 	QString m_roomId; // 临时房间ID
 	QString m_whipUrl; // 推流地址
@@ -3589,6 +3613,142 @@ inline void ScheduleDialog::showStudentAttributeDialog(int row, int col)
 	dialog->deleteLater();
 }
 
+// 从学生信息中提取字段值（若不存在则返回0）
+inline double ScheduleDialog::extractStudentValue(const StudentInfo& stu, const QString& field) const
+{
+	if (field == "总分" || field == "total_score") {
+		if (stu.attributes.contains("总分")) return stu.attributes.value("总分");
+		if (stu.attributes.contains("total_score")) return stu.attributes.value("total_score");
+		return stu.score;
+	}
+	if (stu.attributes.contains(field)) {
+		return stu.attributes.value(field);
+	}
+	return 0.0;
+}
+
+// 按“等分→轮抽”方式组队（groupSize=2/4/6）
+inline QVector<StudentInfo> ScheduleDialog::groupWheelAssign(QVector<StudentInfo> sorted, int groupSize)
+{
+	QVector<StudentInfo> result;
+	if (sorted.isEmpty() || groupSize <= 0) return result;
+
+	int n = sorted.size();
+	int bucketCnt = groupSize;
+	QVector<QVector<StudentInfo>> buckets;
+	buckets.resize(bucketCnt);
+
+	// 将已按降序的列表切成 bucketCnt 份，前 remainder 份+1
+	int base = n / bucketCnt;
+	int rem = n % bucketCnt;
+	int idx = 0;
+	for (int b = 0; b < bucketCnt; ++b) {
+		int take = base + (b < rem ? 1 : 0);
+		for (int k = 0; k < take && idx < n; ++k, ++idx) {
+			buckets[b].append(sorted[idx]);
+		}
+	}
+
+	// 轮抽：依次从每个桶随机取一人（无放回），直到桶空
+	bool any = true;
+	while (any) {
+		any = false;
+		for (int b = 0; b < bucketCnt; ++b) {
+			if (buckets[b].isEmpty()) continue;
+			any = true;
+			int pick = QRandomGenerator::global()->bounded(buckets[b].size());
+			result.append(buckets[b][pick]);
+			buckets[b].removeAt(pick);
+		}
+	}
+
+	return result;
+}
+
+// 根据字段与模式排座：modeText 来自 rightComboBox，isGroupMode 对应左侧是否“小组”
+inline void ScheduleDialog::arrangeSeatsByField(const QString& fieldName, const QString& modeText, bool isGroupMode)
+{
+	if (m_students.isEmpty() || !seatTable) {
+		qWarning() << "没有学生数据或座位表未初始化";
+		return;
+	}
+
+	QList<StudentInfo> students = m_students;
+	// 基准：降序
+	std::sort(students.begin(), students.end(), [=](const StudentInfo& a, const StudentInfo& b) {
+		return extractStudentValue(a, fieldName) > extractStudentValue(b, fieldName);
+	});
+
+	QList<StudentInfo> ordered;
+	if (!isGroupMode) {
+		if (modeText.contains("随机")) {
+			// 全体随机
+			QVector<StudentInfo> vec = students.toVector();
+			for (int i = vec.size() - 1; i > 0; --i) {
+				int j = QRandomGenerator::global()->bounded(i + 1);
+				std::swap(vec[i], vec[j]);
+			}
+			ordered = vec.toList();
+		} else if (modeText.contains("正序")) {
+			std::sort(students.begin(), students.end(), [=](const StudentInfo& a, const StudentInfo& b) {
+				return extractStudentValue(a, fieldName) < extractStudentValue(b, fieldName);
+			});
+			ordered = students;
+		} else if (modeText.contains("倒序")) {
+			ordered = students; // 已降序
+		} else {
+			ordered = students;
+		}
+	} else {
+		// 小组模式
+		if (modeText.contains("2人组")) {
+			ordered = groupWheelAssign(students.toVector(), 2).toList();
+		} else if (modeText.contains("4人组")) {
+			ordered = groupWheelAssign(students.toVector(), 4).toList();
+		} else if (modeText.contains("6人组")) {
+			ordered = groupWheelAssign(students.toVector(), 6).toList();
+		} else {
+			ordered = students;
+		}
+	}
+
+	// 收集座位按钮（只取 isSeat=true），按行左->右
+	QVector<QPushButton*> seats;
+	for (int row = 0; row < seatTable->rowCount(); ++row) {
+		for (int col = 0; col < seatTable->columnCount(); ++col) {
+			QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
+			if (btn && btn->property("isSeat").toBool()) {
+				seats.append(btn);
+			}
+		}
+	}
+
+	// 填充座位
+	int n = qMin(seats.size(), ordered.size());
+	for (int i = 0; i < seats.size(); ++i) {
+		QPushButton* btn = seats[i];
+		if (!btn) continue;
+		if (i < n) {
+			const StudentInfo& stu = ordered[i];
+			QString text;
+			if (!stu.name.isEmpty() && !stu.id.isEmpty()) {
+				text = QString("%1/%2").arg(stu.name).arg(stu.id); // 同时显示姓名和学号
+			} else if (!stu.name.isEmpty()) {
+				text = stu.name;
+			} else {
+				text = stu.id;
+			}
+			setSeatButtonTextAndIcon(btn, text);
+			btn->setProperty("studentId", stu.id);
+			btn->setProperty("studentName", stu.name);
+		} else {
+			setSeatButtonTextAndIcon(btn, "");
+			btn->setProperty("studentId", QVariant());
+			btn->setProperty("studentName", QVariant());
+		}
+	}
+}
+
 // 上传座位表到服务器
 inline void ScheduleDialog::uploadSeatTableToServer()
 {
@@ -3611,36 +3771,50 @@ inline void ScheduleDialog::uploadSeatTableToServer()
 			QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
 			if (btn && btn->property("isSeat").toBool()) {
 				QString studentLabel = btn->text().trimmed();
-				if (!studentLabel.isEmpty()) {
+				QString propId = btn->property("studentId").toString().trimmed();
+				QString propName = btn->property("studentName").toString().trimmed();
+
+				if (!studentLabel.isEmpty() || !propName.isEmpty() || !propId.isEmpty()) {
 					QJsonObject seatObj;
 					seatObj["row"] = row + 1; // 行号从1开始
 					seatObj["col"] = col + 1; // 列号从1开始
-					seatObj["student_name"] = studentLabel;
 
-					QString beforeSlash = studentLabel;
-					QString studentId;
-					int slashIndex = studentLabel.lastIndexOf('/');
-					if (slashIndex >= 0) {
-						studentId = studentLabel.mid(slashIndex + 1).trimmed();
-						beforeSlash = studentLabel.left(slashIndex).trimmed();
-					}
+					QString resolvedName = propName;
+					QString resolvedId = propId;
 
-					QString extractedName;
-					QStringList parts = beforeSlash.split(QRegExp("[\\s-]+"), Qt::SkipEmptyParts);
-					if (!parts.isEmpty()) {
-						extractedName = parts.first();
-						if (studentId.isEmpty() && parts.size() >= 2) {
-							studentId = parts.last();
+					if (!studentLabel.isEmpty()) {
+						seatObj["student_name"] = studentLabel;
+
+						QString beforeSlash = studentLabel;
+						QString parsedId;
+						int slashIndex = studentLabel.lastIndexOf('/');
+						if (slashIndex >= 0) {
+							parsedId = studentLabel.mid(slashIndex + 1).trimmed();
+							beforeSlash = studentLabel.left(slashIndex).trimmed();
 						}
+
+						QString extractedName;
+						QStringList parts = beforeSlash.split(QRegExp("[\\s-]+"), Qt::SkipEmptyParts);
+						if (!parts.isEmpty()) {
+							extractedName = parts.first();
+							if (parsedId.isEmpty() && parts.size() >= 2) {
+								parsedId = parts.last();
+							}
+						} else {
+							extractedName = beforeSlash;
+						}
+
+						if (resolvedName.isEmpty()) resolvedName = extractedName;
+						if (resolvedId.isEmpty()) resolvedId = parsedId;
 					} else {
-						extractedName = beforeSlash;
+						if (!propName.isEmpty()) seatObj["student_name"] = propName;
 					}
 
-					if (!extractedName.isEmpty()) {
-						seatObj["name"] = extractedName;
+					if (!resolvedName.isEmpty()) {
+						seatObj["name"] = resolvedName;
 					}
-					if (!studentId.isEmpty()) {
-						seatObj["student_id"] = studentId;
+					if (!resolvedId.isEmpty()) {
+						seatObj["student_id"] = resolvedId;
 					}
 					
 					seatsArray.append(seatObj);
