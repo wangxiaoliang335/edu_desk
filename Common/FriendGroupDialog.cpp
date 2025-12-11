@@ -1245,7 +1245,8 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
                 req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
                 QNetworkReply* r = mgr->post(req, postData);
 
-                QObject::connect(r, &QNetworkReply::finished, nullptr, [mgr, r]() {
+                // 使用 ths 作为接收者，确保信号能正确触发
+                QObject::connect(r, &QNetworkReply::finished, ths, [mgr, r]() {
                     auto cleanup = [mgr, r]() {
                         if (r) r->deleteLater();
                         if (mgr) mgr->deleteLater();

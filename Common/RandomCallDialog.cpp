@@ -36,20 +36,20 @@ RandomCallDialog::RandomCallDialog(QWidget* parent)
     QHBoxLayout* topLayout = new QHBoxLayout;
     topLayout->addStretch();
     
-    // 黄色圆圈带红色数字2
-    QPushButton* btnNumber = new QPushButton("2");
-    btnNumber->setFixedSize(30, 30);
-    btnNumber->setStyleSheet(
-        "QPushButton {"
-        "background-color: yellow;"
-        "color: red;"
-        "border-radius: 15px;"
-        "font-weight: bold;"
-        "font-size: 16px;"
-        "border: none;"
-        "}"
-    );
-    topLayout->addWidget(btnNumber);
+    //// 黄色圆圈带红色数字2
+    //QPushButton* btnNumber = new QPushButton("2");
+    //btnNumber->setFixedSize(30, 30);
+    //btnNumber->setStyleSheet(
+    //    "QPushButton {"
+    //    "background-color: yellow;"
+    //    "color: red;"
+    //    "border-radius: 15px;"
+    //    "font-weight: bold;"
+    //    "font-size: 16px;"
+    //    "border: none;"
+    //    "}"
+    //);
+    //topLayout->addWidget(btnNumber);
     
     // 绿色X关闭按钮
     QPushButton* btnClose = new QPushButton("✕");
@@ -138,6 +138,7 @@ RandomCallDialog::RandomCallDialog(QWidget* parent)
 
     // 隐藏的ComboBox（用于实际功能）
     tableComboBox = new QComboBox(this);
+    tableComboBox->setStyleSheet("QComboBox { color: white; } QAbstractItemView { color: white; }");
     tableComboBox->addItem("期中成绩表");
     tableComboBox->addItem("学生体质统计表");
     tableComboBox->hide();
@@ -199,6 +200,7 @@ RandomCallDialog::RandomCallDialog(QWidget* parent)
     });
 
     attributeComboBox = new QComboBox(this);
+    attributeComboBox->setStyleSheet("QComboBox { color: white; } QAbstractItemView { color: white; }");
     // 属性下拉框将在加载Excel文件时动态填充
     attributeComboBox->hide();
     connect(attributeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, btnAttr](int index) {
