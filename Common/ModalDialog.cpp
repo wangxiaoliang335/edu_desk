@@ -107,12 +107,13 @@ ModalDialog::ModalDialog(QWidget* parent)
     pwdLoginButton->setStyleSheet("color: white; font-size:14px;");
 
     // 关闭按钮（右上角）
-    closeButton = new QPushButton(this);
-    closeButton->setIcon(QIcon(":/res/img/widget-close.png"));
-    closeButton->setIconSize(QSize(22, 22));
-    closeButton->setFixedSize(QSize(22, 22));
-    closeButton->setStyleSheet("background: transparent;");
-    closeButton->move(width() - 24, 4);
+    closeButton = new QPushButton("X", this);
+    closeButton->setFixedSize(26, 26);
+    closeButton->setStyleSheet(
+        "QPushButton { background-color: #666666; color: white; border: none; border-radius: 4px; font-weight: bold; }"
+        "QPushButton:hover { background-color: #777777; }"
+    );
+    closeButton->move(width() - closeButton->width() - 6, 6);
     closeButton->hide();
     connect(closeButton, &QPushButton::clicked, this, &QDialog::reject);
 
@@ -329,7 +330,7 @@ void ModalDialog::resizeEvent(QResizeEvent* event)
 {
     QDialog::resizeEvent(event);
     //initShow();
-    closeButton->move(this->width() - 22, 0);
+    closeButton->move(this->width() - closeButton->width() - 6, 6);
 }
 
 void ModalDialog::InitData()

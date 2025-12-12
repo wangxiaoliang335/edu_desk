@@ -51,20 +51,20 @@ RandomCallDialog::RandomCallDialog(QWidget* parent)
     //);
     //topLayout->addWidget(btnNumber);
     
-    // 绿色X关闭按钮
+    // 关闭按钮
     QPushButton* btnClose = new QPushButton("✕");
     btnClose->setFixedSize(30, 30);
     btnClose->setStyleSheet(
         "QPushButton {"
-        "background-color: green;"
+        "background-color: #666666;"
         "color: white;"
-        "border-radius: 15px;"
+        "border-radius: 4px;"
         "font-weight: bold;"
         "font-size: 18px;"
         "border: none;"
         "}"
         "QPushButton:hover {"
-        "background-color: #00cc00;"
+        "background-color: #777777;"
         "}"
     );
     connect(btnClose, &QPushButton::clicked, this, &QDialog::reject);
@@ -94,7 +94,7 @@ RandomCallDialog::RandomCallDialog(QWidget* parent)
     QPushButton* btnTable = new QPushButton("期中成绩表");
     btnTable->setStyleSheet(
         "QPushButton {"
-        "background-color: green;"
+        "background-color: #666666;"
         "color: white;"
         "font-size: 14px;"
         "padding: 8px 16px;"
@@ -102,7 +102,7 @@ RandomCallDialog::RandomCallDialog(QWidget* parent)
         "border-radius: 4px;"
         "}"
         "QPushButton:hover {"
-        "background-color: #00cc00;"
+        "background-color: #777777;"
         "}"
     );
     btnTable->setFixedHeight(35);
@@ -116,7 +116,7 @@ RandomCallDialog::RandomCallDialog(QWidget* parent)
     QPushButton* btnAttr = new QPushButton("数学");
     btnAttr->setStyleSheet(
         "QPushButton {"
-        "background-color: green;"
+        "background-color: #666666;"
         "color: white;"
         "font-size: 14px;"
         "padding: 8px 16px;"
@@ -124,7 +124,7 @@ RandomCallDialog::RandomCallDialog(QWidget* parent)
         "border-radius: 4px;"
         "}"
         "QPushButton:hover {"
-        "background-color: #00cc00;"
+        "background-color: #777777;"
         "}"
     );
     btnAttr->setFixedHeight(35);
@@ -275,7 +275,7 @@ RandomCallDialog::RandomCallDialog(QWidget* parent)
     btnConfirm = new QPushButton("确定");
     btnConfirm->setStyleSheet(
         "QPushButton {"
-        "background-color: green;"
+        "background-color: #666666;"
         "color: white;"
         "font-size: 14px;"
         "padding: 8px 20px;"
@@ -283,7 +283,7 @@ RandomCallDialog::RandomCallDialog(QWidget* parent)
         "border-radius: 4px;"
         "}"
         "QPushButton:hover {"
-        "background-color: #00cc00;"
+        "background-color: #777777;"
         "}"
     );
     btnConfirm->setFixedHeight(35);
@@ -574,14 +574,33 @@ void RandomCallDialog::updateParticipants()
     // 根据当前选择的属性筛选参与者
     QString selectedAttr = currentAttribute;
     for (const auto& student : m_students) {
-        double value = 0;
+        // 使用新的辅助函数获取属性值（优先级：attributesByExcel → attributesFull → attributes）
+        double value = student.getAttributeValue(selectedAttr);
         
-        // 直接从学生属性中获取值
-        if (student.attributes.contains(selectedAttr)) {
-            value = student.attributes[selectedAttr];
-        } else {
-            // 如果学生没有该属性，跳过该学生
-            continue;
+        // 如果学生没有该属性，跳过该学生
+        if (value == 0.0 && !student.attributes.contains(selectedAttr) && 
+            !student.attributesByExcel.isEmpty() && !student.attributesFull.isEmpty()) {
+            // 检查是否真的没有该属性（在所有Excel文件中都没有）
+            bool hasAttribute = false;
+            for (auto it = student.attributesByExcel.begin(); it != student.attributesByExcel.end(); ++it) {
+                if (it.value().contains(selectedAttr)) {
+                    hasAttribute = true;
+                    break;
+                }
+            }
+            if (!hasAttribute) {
+                for (auto it = student.attributesFull.begin(); it != student.attributesFull.end(); ++it) {
+                    QString key = it.key();
+                    int underscorePos = key.lastIndexOf('_');
+                    if (underscorePos > 0 && key.left(underscorePos) == selectedAttr) {
+                        hasAttribute = true;
+                        break;
+                    }
+                }
+            }
+            if (!hasAttribute) {
+                continue;
+            }
         }
         
         if (value >= minValue && value <= maxValue) {
@@ -883,16 +902,35 @@ void RandomCallDialog::loadExcelFiles(const QString& classId)
     QString schoolDir = baseDir + "/" + schoolId;
     QString classDir = schoolDir + "/" + classId;
     
-    QDir dir(classDir);
-    if (!dir.exists()) {
-        qDebug() << "Excel文件目录不存在:" << classDir;
-        return;
-    }
-    
-    // 获取目录中的所有Excel文件
     QStringList filters;
     filters << "*.xlsx" << "*.xls" << "*.csv";
-    QFileInfoList fileList = dir.entryInfoList(filters, QDir::Files);
+    QFileInfoList fileList;
+    
+    // 扫描主目录（向后兼容）
+    QDir dir(classDir);
+    if (dir.exists()) {
+        QFileInfoList mainFiles = dir.entryInfoList(filters, QDir::Files);
+        fileList.append(mainFiles);
+    }
+    
+    // 扫描 group/ 子目录
+    QDir groupDir(classDir + "/group");
+    if (groupDir.exists()) {
+        QFileInfoList groupFiles = groupDir.entryInfoList(filters, QDir::Files);
+        fileList.append(groupFiles);
+    }
+    
+    // 扫描 student/ 子目录
+    QDir studentDir(classDir + "/student");
+    if (studentDir.exists()) {
+        QFileInfoList studentFiles = studentDir.entryInfoList(filters, QDir::Files);
+        fileList.append(studentFiles);
+    }
+    
+    if (fileList.isEmpty()) {
+        qDebug() << "Excel文件目录不存在或没有文件:" << classDir;
+        return;
+    }
     
     qDebug() << "找到" << fileList.size() << "个Excel文件";
     
@@ -1221,11 +1259,42 @@ void RandomCallDialog::createStudentsFromExcelData(const QStringList& headers, c
             }
         }
         
-        // 如果没有总分，尝试计算
-        if (!student.attributes.contains("总分") && student.score == 0) {
+        // 如果没有总分，尝试计算（从所有Excel文件的属性中计算）
+        double totalFromAttrs = student.getAttributeValue("总分");
+        if (totalFromAttrs == 0.0 && student.score == 0) {
             double total = 0;
+            // 从所有Excel文件的属性中计算总和
+            QSet<QString> processedAttrs; // 避免重复计算
+            for (auto excelIt = student.attributesByExcel.begin(); excelIt != student.attributesByExcel.end(); ++excelIt) {
+                const QMap<QString, double>& excelAttrs = excelIt.value();
+                for (auto it = excelAttrs.begin(); it != excelAttrs.end(); ++it) {
+                    QString attrName = it.key();
+                    // 只计算数值属性，排除"总分"和"小组总分"
+                    if (attrName != "总分" && attrName != "小组总分" && !processedAttrs.contains(attrName)) {
+                        total += it.value();
+                        processedAttrs.insert(attrName);
+                    }
+                }
+            }
+            // 从 attributesFull 中计算
+            for (auto it = student.attributesFull.begin(); it != student.attributesFull.end(); ++it) {
+                QString compositeKey = it.key();
+                int underscorePos = compositeKey.lastIndexOf('_');
+                if (underscorePos > 0) {
+                    QString attrName = compositeKey.left(underscorePos);
+                    if (attrName != "总分" && attrName != "小组总分" && !processedAttrs.contains(attrName)) {
+                        total += it.value();
+                        processedAttrs.insert(attrName);
+                    }
+                }
+            }
+            // 向后兼容：从 attributes 中计算
             for (auto it = student.attributes.begin(); it != student.attributes.end(); ++it) {
-                total += it.value();
+                QString attrName = it.key();
+                if (attrName != "总分" && attrName != "小组总分" && !processedAttrs.contains(attrName)) {
+                    total += it.value();
+                    processedAttrs.insert(attrName);
+                }
             }
             if (total > 0) {
                 student.attributes["总分"] = total;

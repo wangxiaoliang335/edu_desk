@@ -21,8 +21,8 @@ StudentAttributeDialog::StudentAttributeDialog(QWidget* parent)
     m_btnClose = new QPushButton("X", this);
     m_btnClose->setFixedSize(30, 30);
     m_btnClose->setStyleSheet(
-        "QPushButton { background-color: orange; color: white; font-weight:bold; font-size: 14px; border: 1px solid #555; border-radius: 4px; }"
-        "QPushButton:hover { background-color: #cc6600; }"
+        "QPushButton { background-color: #666666; color: white; font-weight: bold; font-size: 14px; border: none; border-radius: 4px; }"
+        "QPushButton:hover { background-color: #777777; }"
     );
     m_btnClose->hide(); // 初始隐藏
     connect(m_btnClose, &QPushButton::clicked, this, &QDialog::close);
@@ -77,9 +77,10 @@ void StudentAttributeDialog::setStudentInfo(const struct StudentInfo& student)
     
     // 为每个属性创建一行
     for (const QString& attrName : m_availableAttributes) {
-        // 获取属性值（如果不存在，默认为0）
-        double value = m_student.attributes.value(attrName, 0.0);
-        if (value == 0.0 && !m_student.attributes.contains(attrName)) {
+        // 使用新的辅助函数获取属性值（优先级：attributesByExcel → attributesFull → attributes）
+        double value = m_student.getAttributeValue(attrName);
+        if (value == 0.0 && !m_student.attributes.contains(attrName) && 
+            !m_student.attributesByExcel.isEmpty() && !m_student.attributesFull.isEmpty()) {
             // 如果属性不存在，尝试从score获取（用于兼容旧数据）
             if (attrName == "总分" || attrName == "数学") {
                 value = m_student.score;
@@ -138,8 +139,10 @@ void StudentAttributeDialog::updateAttributeRow(const QString& attributeName, do
         clearAllHighlights();
         m_selectedAttribute = attributeName;
         // 重新创建该行以显示高亮
-        double value = m_student.attributes.value(attributeName, 0.0);
-        if (value == 0.0 && !m_student.attributes.contains(attributeName)) {
+        // 使用新的辅助函数获取属性值（优先级：attributesByExcel → attributesFull → attributes）
+        double value = m_student.getAttributeValue(attributeName);
+        if (value == 0.0 && !m_student.attributes.contains(attributeName) && 
+            !m_student.attributesByExcel.isEmpty() && !m_student.attributesFull.isEmpty()) {
             if (attributeName == "总分" || attributeName == "数学") {
                 value = m_student.score;
             }
@@ -227,9 +230,10 @@ void StudentAttributeDialog::onAttributeValueClicked()
     QString attributeName = btn->property("attributeName").toString();
     if (attributeName.isEmpty()) return;
     
-    // 获取当前值
-    double currentValue = m_student.attributes.value(attributeName, 0.0);
-    if (currentValue == 0.0 && !m_student.attributes.contains(attributeName)) {
+    // 使用新的辅助函数获取当前值（优先级：attributesByExcel → attributesFull → attributes）
+    double currentValue = m_student.getAttributeValue(attributeName);
+    if (currentValue == 0.0 && !m_student.attributes.contains(attributeName) && 
+        !m_student.attributesByExcel.isEmpty() && !m_student.attributesFull.isEmpty()) {
         if (attributeName == "总分" || attributeName == "数学") {
             currentValue = m_student.score;
         }

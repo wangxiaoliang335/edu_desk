@@ -52,8 +52,8 @@ GroupScoreDialog::GroupScoreDialog(QString classid, QWidget* parent) : QDialog(p
     m_btnClose = new QPushButton("X", this);
     m_btnClose->setFixedSize(30, 30);
     m_btnClose->setStyleSheet(
-        "QPushButton { background-color: orange; color: white; font-weight:bold; font-size: 14px; border: 1px solid #555; border-radius: 4px; }"
-        "QPushButton:hover { background-color: #cc6600; }"
+        "QPushButton { background-color: #666666; color: white; font-weight: bold; font-size: 14px; border: none; border-radius: 4px; }"
+        "QPushButton:hover { background-color: #777777; }"
     );
     m_btnClose->hide(); // 初始隐藏
     connect(m_btnClose, &QPushButton::clicked, this, &QDialog::close);
@@ -693,14 +693,14 @@ void GroupScoreDialog::onUpload()
         QString excelPath = m_excelFilePath;
         QString excelName = m_excelFileName;
 
-        // 目标目录：appDir/excel_files/<schoolId>/<classId>/
+        // 目标目录：appDir/excel_files/<schoolId>/<classId>/group/（小组表格保存到group子目录）
         UserInfo userInfo = CommonInfo::GetData();
         QString schoolId = userInfo.schoolId;
         QString classId = m_classid;
         QString baseDir = QCoreApplication::applicationDirPath() + "/excel_files";
         QString targetDir;
         if (!schoolId.isEmpty() && !classId.isEmpty()) {
-            targetDir = baseDir + "/" + schoolId + "/" + classId;
+            targetDir = baseDir + "/" + schoolId + "/" + classId + "/group";
         }
 
         if (excelName.isEmpty()) {
@@ -1089,6 +1089,14 @@ void GroupScoreDialog::onUpload()
         jsonPart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant("application/json"));
         jsonPart.setBody(jsonData);
         multiPart->append(jsonPart);
+        
+        // 添加 excel_file_name 作为独立的表单字段（确保服务器能正确获取文件名）
+        if (!m_excelFileName.isEmpty()) {
+            QHttpPart fileNamePart;
+            fileNamePart.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("form-data; name=\"excel_file_name\""));
+            fileNamePart.setBody(m_excelFileName.toUtf8());
+            multiPart->append(fileNamePart);
+        }
         
         // 添加Excel文件部分
         QFile* file = new QFile(m_excelFilePath);

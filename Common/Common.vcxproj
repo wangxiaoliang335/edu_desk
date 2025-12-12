@@ -39,12 +39,12 @@
   </ImportGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="QtSettings">
     <QtInstall>D:\Qt\5.15.2\msvc2019_64</QtInstall>
-    <QtModules>core;gui;network;widgets;websockets;multimedia</QtModules>
+    <QtModules>core;gui;network;widgets;websockets;multimedia;printsupport</QtModules>
     <QtBuildConfig>debug</QtBuildConfig>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="QtSettings">
     <QtInstall>C:\Qt\5.15.2\msvc2019_64</QtInstall>
-    <QtModules>core;gui;widgets;websockets;network;multimedia</QtModules>
+    <QtModules>core;gui;widgets;websockets;network;multimedia;printsupport</QtModules>
     <QtBuildConfig>release</QtBuildConfig>
   </PropertyGroup>
   <Target Name="QtMsBuildNotFound" BeforeTargets="CustomBuild;ClCompile" Condition="!Exists('$(QtMsBuild)\qt.targets') or !Exists('$(QtMsBuild)\qt.props')">
@@ -169,6 +169,7 @@
     <QtMoc Include="SeatingArrangementDialog.h" />
     <QtMoc Include="HeatmapSegmentDialog.h" />
     <QtMoc Include="HeatmapViewDialog.h" />
+    <QtMoc Include="qcustomplot.h" />
     <QtMoc Include="RandomCallDialog.h" />
     <QtMoc Include="RandomCallMessageDialog.h" />
     <QtMoc Include="StudentAttributeDialog.h" />
@@ -218,6 +219,7 @@
     <ClCompile Include="GroupScoreDialog.cpp" />
     <ClCompile Include="HeatmapSegmentDialog.cpp" />
     <ClCompile Include="HeatmapViewDialog.cpp" />
+    <ClCompile Include="qcustomplot.cpp" />
     <ClCompile Include="ScheduleDialog_Heatmap.cpp" />
     <ClCompile Include="ScheduleDialog_RandomCall.cpp" />
     <ClCompile Include="RandomCallDialog.cpp" />

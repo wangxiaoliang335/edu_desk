@@ -17,6 +17,11 @@
 #include <QShowEvent>
 #include <QFile>
 #include <QTextStream>
+#include <QCursor>
+#include <QEvent>
+#include <QPoint>
+#include <QRect>
+#include <QMouseEvent>
 #include "QXlsx/header/xlsxdocument.h"
 #include "CommonInfo.h"
 
@@ -27,9 +32,23 @@ class ArrangeSeatDialog : public QDialog
 public:
     ArrangeSeatDialog(QWidget* parent = nullptr) : QDialog(parent)
     {
+        setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
         setWindowTitle("排座");
         resize(400, 350);
-        setStyleSheet("background-color: #e0f0ff; font-size:14px;");
+        setStyleSheet(
+            "QDialog { background-color: #2d2f32; font-size:14px; color: white; }"
+        );
+
+        // 关闭按钮
+        m_btnClose = new QPushButton("X", this);
+        m_btnClose->setFixedSize(30, 30);
+        m_btnClose->setStyleSheet(
+            "QPushButton { background-color: #666666; color: white; font-weight: bold; font-size: 14px; border: none; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #777777; }"
+        );
+        m_btnClose->hide();
+        m_btnClose->installEventFilter(this);
+        connect(m_btnClose, &QPushButton::clicked, this, &QDialog::close);
 
         QVBoxLayout* mainLayout = new QVBoxLayout(this);
         mainLayout->setSpacing(15);
@@ -42,17 +61,17 @@ public:
         // 左侧下拉框：小组/不分组
         QFrame* leftFrame = new QFrame;
         leftFrame->setFrameShape(QFrame::StyledPanel);
-        leftFrame->setStyleSheet("background-color: #e0f0ff; border: 2px solid #87ceeb;");
+        leftFrame->setStyleSheet("background-color: #1f1f1f; border: 1px solid #3a3a3a;");
         QVBoxLayout* leftLayout = new QVBoxLayout(leftFrame);
         leftLayout->setContentsMargins(5, 5, 5, 5);
 
         leftComboBox = new QComboBox;
         leftComboBox->setEditable(false); // 设置为不可编辑，确保显示选中的项
         leftComboBox->setStyleSheet(
-            "QComboBox { background-color: white; border: 1px solid #ccc; padding: 8px; min-width: 120px; color: black; }"
+            "QComboBox { background-color: #1f1f1f; border: 1px solid #555; padding: 8px; min-width: 120px; color: white; }"
             "QComboBox::drop-down { border: none; }"
-            "QComboBox QAbstractItemView { background-color: white; selection-background-color: #ff8c00; color: black; }"
-            "QComboBox QAbstractItemView::item { padding: 8px; color: black; }"
+            "QComboBox QAbstractItemView { background-color: #1f1f1f; selection-background-color: #ff8c00; color: white; }"
+            "QComboBox QAbstractItemView::item { padding: 8px; color: white; }"
             "QComboBox QAbstractItemView::item:selected { background-color: #ff8c00; color: white; }"
         );
 
@@ -70,17 +89,17 @@ public:
         // 右侧下拉框：根据左侧选择动态变化
         QFrame* rightFrame = new QFrame;
         rightFrame->setFrameShape(QFrame::StyledPanel);
-        rightFrame->setStyleSheet("background-color: #e0f0ff; border: 2px solid #87ceeb;");
+        rightFrame->setStyleSheet("background-color: #1f1f1f; border: 1px solid #3a3a3a;");
         QVBoxLayout* rightLayout = new QVBoxLayout(rightFrame);
         rightLayout->setContentsMargins(5, 5, 5, 5);
 
         rightComboBox = new QComboBox;
         rightComboBox->setEditable(false); // 设置为不可编辑，确保显示选中的项
         rightComboBox->setStyleSheet(
-            "QComboBox { background-color: white; border: 1px solid #ccc; padding: 8px; min-width: 120px; color: black; }"
+            "QComboBox { background-color: #1f1f1f; border: 1px solid #555; padding: 8px; min-width: 120px; color: white; }"
             "QComboBox::drop-down { border: none; }"
-            "QComboBox QAbstractItemView { background-color: white; selection-background-color: #ff8c00; color: black; }"
-            "QComboBox QAbstractItemView::item { padding: 8px; color: black; }"
+            "QComboBox QAbstractItemView { background-color: #1f1f1f; selection-background-color: #ff8c00; color: white; }"
+            "QComboBox QAbstractItemView::item { padding: 8px; color: white; }"
             "QComboBox QAbstractItemView::item:selected { background-color: #ff8c00; color: white; }"
         );
 
@@ -106,22 +125,22 @@ public:
         QHBoxLayout* buttonLayout = new QHBoxLayout;
         buttonLayout->setSpacing(10);
 
-        QString grayStyle = "background-color: #808080; color: white; padding: 6px 12px; border-radius: 4px; font-size: 14px;";
-        QString greenStyle = "background-color: green; color: white; padding: 6px 12px; border-radius: 4px; font-size: 14px;";
+        QString grayStyle = "background-color: #1f1f1f; color: white; padding: 6px 12px; border-radius: 4px; font-size: 14px; border: 1px solid #555;";
+        QString buttonStyle = "background-color: #666666; color: white; padding: 6px 12px; border-radius: 4px; font-size: 14px; border: 1px solid #555555;";
 
         midtermComboBox = new QComboBox(this);
         midtermComboBox->setStyleSheet(
-            "QComboBox { color: white; background-color: #808080; padding: 6px 12px; border-radius: 4px; font-size: 14px; }"
-            "QComboBox QAbstractItemView { color: white; background-color: #5C5C5C; selection-background-color: #ff8c00; }"
+            "QComboBox { color: white; background-color: #1f1f1f; padding: 6px 12px; border-radius: 4px; font-size: 14px; border: 1px solid #555; }"
+            "QComboBox QAbstractItemView { color: white; background-color: #1f1f1f; selection-background-color: #ff8c00; }"
         );
         subjectComboBox = new QComboBox(this);
         subjectComboBox->setStyleSheet(
-            "QComboBox { color: white; background-color: #808080; padding: 6px 12px; border-radius: 4px; font-size: 14px; }"
-            "QComboBox QAbstractItemView { color: white; background-color: #5C5C5C; selection-background-color: #ff8c00; }"
+            "QComboBox { color: white; background-color: #1f1f1f; padding: 6px 12px; border-radius: 4px; font-size: 14px; border: 1px solid #555; }"
+            "QComboBox QAbstractItemView { color: white; background-color: #1f1f1f; selection-background-color: #ff8c00; }"
         );
         btnConfirm = new QPushButton("确定");
 
-        btnConfirm->setStyleSheet(greenStyle);
+        btnConfirm->setStyleSheet(buttonStyle);
 
         buttonLayout->addWidget(midtermComboBox);
         buttonLayout->addWidget(subjectComboBox);
@@ -164,16 +183,35 @@ public:
         QString schoolDir = baseDir + "/" + schoolId;
         QString classDir = schoolDir + "/" + classId;
 
-        QDir dir(classDir);
-        if (!dir.exists()) {
-            qDebug() << "Excel文件目录不存在:" << classDir;
-            return;
-        }
-
-        // 获取目录中的所有Excel文件
         QStringList filters;
         filters << "*.xlsx" << "*.xls" << "*.csv";
-        QFileInfoList fileList = dir.entryInfoList(filters, QDir::Files);
+        QFileInfoList fileList;
+        
+        // 扫描主目录（向后兼容）
+        QDir dir(classDir);
+        if (dir.exists()) {
+            QFileInfoList mainFiles = dir.entryInfoList(filters, QDir::Files);
+            fileList.append(mainFiles);
+        }
+        
+        // 扫描 group/ 子目录
+        QDir groupDir(classDir + "/group");
+        if (groupDir.exists()) {
+            QFileInfoList groupFiles = groupDir.entryInfoList(filters, QDir::Files);
+            fileList.append(groupFiles);
+        }
+        
+        // 扫描 student/ 子目录
+        QDir studentDir(classDir + "/student");
+        if (studentDir.exists()) {
+            QFileInfoList studentFiles = studentDir.entryInfoList(filters, QDir::Files);
+            fileList.append(studentFiles);
+        }
+        
+        if (fileList.isEmpty()) {
+            qDebug() << "Excel文件目录不存在或没有文件:" << classDir;
+            return;
+        }
 
         qDebug() << "找到" << fileList.size() << "个Excel文件";
 
@@ -224,6 +262,72 @@ protected:
         if (!m_classId.isEmpty()) {
             loadExcelFiles(m_classId);
         }
+        // 调整关闭按钮位置并显示
+        if (m_btnClose) {
+            m_btnClose->move(width() - 35, 5);
+            m_btnClose->show();
+        }
+    }
+    void enterEvent(QEvent* event) override
+    {
+        if (m_btnClose) m_btnClose->show();
+        QDialog::enterEvent(event);
+    }
+    void leaveEvent(QEvent* event) override
+    {
+        QPoint globalPos = QCursor::pos();
+        QRect widgetRect = QRect(mapToGlobal(QPoint(0, 0)), size());
+        if (!widgetRect.contains(globalPos) && m_btnClose) {
+            QRect btnRect = QRect(m_btnClose->mapToGlobal(QPoint(0, 0)), m_btnClose->size());
+            if (!btnRect.contains(globalPos)) {
+                m_btnClose->hide();
+            }
+        }
+        QDialog::leaveEvent(event);
+    }
+    void resizeEvent(QResizeEvent* event) override
+    {
+        if (m_btnClose) {
+            m_btnClose->move(width() - 35, 5);
+        }
+        QDialog::resizeEvent(event);
+    }
+    bool eventFilter(QObject* obj, QEvent* event) override
+    {
+        if (obj == m_btnClose) {
+            if (event->type() == QEvent::Enter) {
+                m_btnClose->show();
+            } else if (event->type() == QEvent::Leave) {
+                QPoint globalPos = QCursor::pos();
+                QRect widgetRect = QRect(mapToGlobal(QPoint(0, 0)), size());
+                if (!widgetRect.contains(globalPos)) {
+                    m_btnClose->hide();
+                }
+            }
+        }
+        return QDialog::eventFilter(obj, event);
+    }
+    void mousePressEvent(QMouseEvent* event) override
+    {
+        if (event->button() == Qt::LeftButton) {
+            m_dragging = true;
+            m_dragPos = event->globalPos() - frameGeometry().topLeft();
+        }
+        QDialog::mousePressEvent(event);
+    }
+    void mouseMoveEvent(QMouseEvent* event) override
+    {
+        if (m_dragging && (event->buttons() & Qt::LeftButton)) {
+            move(event->globalPos() - m_dragPos);
+        }
+        QDialog::mouseMoveEvent(event);
+    }
+    void mouseReleaseEvent(QMouseEvent* event) override
+    {
+        if (event->button() == Qt::LeftButton) {
+            m_dragging = false;
+        }
+        QDialog::mouseReleaseEvent(event);
     }
 
 private:
@@ -307,6 +411,9 @@ private:
     QComboBox* midtermComboBox;
     QComboBox* subjectComboBox;
     QPushButton* btnConfirm;
+    QPushButton* m_btnClose = nullptr;
+    bool m_dragging = false;
+    QPoint m_dragPos;
     QString m_classId;
     QMap<QString, QString> m_excelFileMap;
 

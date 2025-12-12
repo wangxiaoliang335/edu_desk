@@ -63,8 +63,8 @@ public:
         m_btnClose = new QPushButton("X", this);
         m_btnClose->setFixedSize(30, 30);
         m_btnClose->setStyleSheet(
-            "QPushButton { background-color: orange; color: white; font-weight:bold; font-size: 14px; border: 1px solid #555; border-radius: 4px; }"
-            "QPushButton:hover { background-color: #cc6600; }"
+            "QPushButton { background-color: #666666; color: white; font-weight: bold; font-size: 14px; border: none; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #777777; }"
         );
         m_btnClose->hide(); // 初始隐藏
         connect(m_btnClose, &QPushButton::clicked, this, &QDialog::close);
@@ -99,6 +99,9 @@ public:
 
         // 连接"+"按钮点击事件，导入Excel表格
         connect(btnAdd, &QPushButton::clicked, this, &CustomListDialog::onImportExcel);
+        
+        // 扫描并加载已下载的Excel文件（在初始化时调用）
+        loadDownloadedExcelFiles();
     }
     
 protected:
@@ -187,9 +190,6 @@ protected:
         if (!screenGeometry.intersects(windowGeometry)) {
             move(screenGeometry.center() - QPoint(windowGeometry.width() / 2, windowGeometry.height() / 2));
         }
-        
-        // 扫描并加载已下载的Excel文件
-        loadDownloadedExcelFiles();
         
         // 确保窗口显示在最前面
         raise();
@@ -840,6 +840,7 @@ private:
 };
 
 // 扫描并加载已下载的Excel文件
+// 现在支持扫描 group/ 和 student/ 两个子目录
 inline void CustomListDialog::loadDownloadedExcelFiles()
 {
     // 获取学校ID和班级ID
@@ -857,16 +858,35 @@ inline void CustomListDialog::loadDownloadedExcelFiles()
     QString schoolDir = baseDir + "/" + schoolId;
     QString classDir = schoolDir + "/" + classId;
     
-    QDir dir(classDir);
-    if (!dir.exists()) {
-        qDebug() << "Excel文件目录不存在:" << classDir;
-        return;
-    }
-    
-    // 获取目录中的所有Excel文件
     QStringList filters;
     filters << "*.xlsx" << "*.xls" << "*.csv";
-    QFileInfoList fileList = dir.entryInfoList(filters, QDir::Files);
+    QFileInfoList fileList;
+    
+    // 扫描主目录（向后兼容）
+    QDir dir(classDir);
+    if (dir.exists()) {
+        QFileInfoList mainFiles = dir.entryInfoList(filters, QDir::Files);
+        fileList.append(mainFiles);
+    }
+    
+    // 扫描 group/ 子目录
+    QDir groupDir(classDir + "/group");
+    if (groupDir.exists()) {
+        QFileInfoList groupFiles = groupDir.entryInfoList(filters, QDir::Files);
+        fileList.append(groupFiles);
+    }
+    
+    // 扫描 student/ 子目录
+    QDir studentDir(classDir + "/student");
+    if (studentDir.exists()) {
+        QFileInfoList studentFiles = studentDir.entryInfoList(filters, QDir::Files);
+        fileList.append(studentFiles);
+    }
+    
+    if (fileList.isEmpty()) {
+        qDebug() << "Excel文件目录不存在或没有文件:" << classDir;
+        return;
+    }
     
     qDebug() << "找到" << fileList.size() << "个Excel文件";
     

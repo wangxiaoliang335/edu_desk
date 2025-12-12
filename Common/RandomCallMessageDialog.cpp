@@ -43,7 +43,7 @@ RandomCallMessageDialog::RandomCallMessageDialog(QWidget* parent)
     m_closeButton->setFixedSize(30, 30);
     m_closeButton->setStyleSheet(
         "QPushButton {"
-        "background-color: transparent;"
+        "background-color: #666666;"
         "color: white;"
         "font-size: 18px;"
         "font-weight: bold;"
@@ -51,7 +51,7 @@ RandomCallMessageDialog::RandomCallMessageDialog(QWidget* parent)
         "border-radius: 4px;"
         "}"
         "QPushButton:hover {"
-        "background-color: rgba(255, 255, 255, 0.2);"
+        "background-color: #777777;"
         "}"
     );
     connect(m_closeButton, &QPushButton::clicked, this, &QDialog::accept);

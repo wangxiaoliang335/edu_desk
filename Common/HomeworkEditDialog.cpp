@@ -23,14 +23,15 @@ HomeworkEditDialog::HomeworkEditDialog(QWidget* parent)
     btnCloseTop->setFixedSize(30, 30);
     btnCloseTop->setStyleSheet(
         "QPushButton {"
-        "background-color: transparent;"
+        "background-color: #666666;"
         "color: white;"
         "font-size: 18px;"
         "font-weight: bold;"
         "border: none;"
+        "border-radius: 4px;"
         "}"
         "QPushButton:hover {"
-        "background-color: #444;"
+        "background-color: #777777;"
         "}"
     );
     connect(btnCloseTop, &QPushButton::clicked, this, &HomeworkEditDialog::onCloseClicked);

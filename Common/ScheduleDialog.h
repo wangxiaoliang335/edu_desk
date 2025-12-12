@@ -93,6 +93,7 @@ class HeatmapViewDialog;
 #include <random>
 #include <algorithm>
 #include <exception>
+#include <functional>
 
 //// 学生信息结构（用于排座）
 //#ifndef STUDENT_INFO_DEFINED
@@ -211,10 +212,12 @@ public:
 		
 		// 关闭按钮（右上角）
 		closeButton = new QPushButton(this);
-		closeButton->setIcon(QIcon(":/res/img/widget-close.png"));
-		closeButton->setIconSize(QSize(22, 22));
-		closeButton->setFixedSize(QSize(22, 22));
-		closeButton->setStyleSheet("background: transparent;");
+		closeButton->setText("X");
+		closeButton->setFixedSize(26, 26);
+		closeButton->setStyleSheet(
+			"QPushButton { background-color: #666666; color: white; border: none; border-radius: 4px; font-weight: bold; }"
+			"QPushButton:hover { background-color: #777777; }"
+		);
         closeButton->move(width() - closeButton->width() - 4, 4);
 		closeButton->hide();
 		connect(closeButton, &QPushButton::clicked, this, &QDialog::reject);
@@ -326,9 +329,83 @@ public:
                                     // 系统字段列表（需要排除的字段）
                                     QSet<QString> systemFields;
                                     systemFields << "id" << "student_id" << "student_name" << "total_score"
-                                                 << "comments" << "group_name" << "group_total_score" << "scores";
+                                                 << "comments" << "group_name" << "group_total_score" << "scores"
+                                                 << "scores_json_full" << "field_sources"; // 新增系统字段
 
-                                    // 动态读取所有属性字段（排除系统字段）
+                                    // 解析 scores_json_full（包含所有复合键名的完整数据）
+                                    if (scoreObj.contains("scores_json_full") && scoreObj["scores_json_full"].isObject()) {
+                                        QJsonObject scoresFullObj = scoreObj["scores_json_full"].toObject();
+                                        for (auto it = scoresFullObj.begin(); it != scoresFullObj.end(); ++it) {
+                                            QString compositeKey = it.key(); // 如 "语文_期中成绩单.xlsx"
+                                            QJsonValue value = it.value();
+                                            if (!value.isNull()) {
+                                                double numValue = 0.0;
+                                                if (value.isDouble()) {
+                                                    numValue = value.toDouble();
+                                                } else if (value.isString()) {
+                                                    bool ok;
+                                                    numValue = value.toString().toDouble(&ok);
+                                                    if (!ok) continue;
+                                                } else {
+                                                    continue;
+                                                }
+                                                
+                                                // 保存到 attributesFull
+                                                student.attributesFull[compositeKey] = numValue;
+                                                
+                                                // 解析复合键名，提取字段名和Excel文件名
+                                                int underscorePos = compositeKey.lastIndexOf('_');
+                                                if (underscorePos > 0 && underscorePos < compositeKey.length() - 1) {
+                                                    QString fieldName = compositeKey.left(underscorePos);
+                                                    QString excelFileName = compositeKey.mid(underscorePos + 1);
+                                                    
+                                                    // 保存到 attributesByExcel
+                                                    student.attributesByExcel[excelFileName][fieldName] = numValue;
+                                                    
+                                                    // 向后兼容：如果 attributes 中还没有该字段，使用第一个值
+                                                    if (!student.attributes.contains(fieldName)) {
+                                                        student.attributes[fieldName] = numValue;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // 解析 field_sources（字段来源详细信息）
+                                    if (scoreObj.contains("field_sources") && scoreObj["field_sources"].isObject()) {
+                                        QJsonObject fieldSourcesObj = scoreObj["field_sources"].toObject();
+                                        for (auto it = fieldSourcesObj.begin(); it != fieldSourcesObj.end(); ++it) {
+                                            QString fieldName = it.key();
+                                            QJsonObject fieldSourceObj = it.value().toObject();
+                                            
+                                            // 获取默认值
+                                            if (fieldSourceObj.contains("value")) {
+                                                double defaultValue = fieldSourceObj["value"].toDouble();
+                                                if (!student.attributes.contains(fieldName)) {
+                                                    student.attributes[fieldName] = defaultValue;
+                                                }
+                                            }
+                                            
+                                            // 获取所有来源
+                                            if (fieldSourceObj.contains("sources") && fieldSourceObj["sources"].isArray()) {
+                                                QJsonArray sourcesArray = fieldSourceObj["sources"].toArray();
+                                                for (const auto& source : sourcesArray) {
+                                                    QJsonObject sourceObj = source.toObject();
+                                                    QString excelFileName = sourceObj["excel_filename"].toString();
+                                                    double value = sourceObj["value"].toDouble();
+                                                    
+                                                    // 保存到 attributesByExcel
+                                                    student.attributesByExcel[excelFileName][fieldName] = value;
+                                                    
+                                                    // 保存到 attributesFull
+                                                    QString compositeKey = QString("%1_%2").arg(fieldName).arg(excelFileName);
+                                                    student.attributesFull[compositeKey] = value;
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // 动态读取所有属性字段（排除系统字段）- 向后兼容
                                     for (auto it = scoreObj.begin(); it != scoreObj.end(); ++it) {
                                         QString key = it.key();
                                         if (systemFields.contains(key)) {
@@ -346,11 +423,14 @@ public:
                                         QJsonValue value = it.value();
                                         if (!value.isNull()) {
                                             if (value.isDouble()) {
-                                                student.attributes[key] = value.toDouble();
+                                                // 向后兼容：如果还没有该字段，才添加
+                                                if (!student.attributes.contains(key)) {
+                                                    student.attributes[key] = value.toDouble();
+                                                }
                                             } else if (value.isString()) {
                                                 bool ok;
                                                 double numValue = value.toString().toDouble(&ok);
-                                                if (ok) {
+                                                if (ok && !student.attributes.contains(key)) {
                                                     student.attributes[key] = numValue;
                                                 }
                                             }
@@ -381,10 +461,38 @@ public:
                                     if (scoreObj.contains("comments") && scoreObj["comments"].isObject()) {
                                         QJsonObject commentsObj = scoreObj["comments"].toObject();
                                         for (auto it = commentsObj.begin(); it != commentsObj.end(); ++it) {
-                                            QString fieldName = it.key();
+                                            QString key = it.key();
                                             QString comment = it.value().toString();
-                                            if (!comment.isEmpty()) {
-                                                student.comments[fieldName] = comment;
+                                            if (comment.isEmpty()) continue;
+                                            
+                                            // 判断是否是复合键名（包含下划线和可能的Excel文件名）
+                                            int underscorePos = key.lastIndexOf('_');
+                                            if (underscorePos > 0 && underscorePos < key.length() - 1) {
+                                                // 可能是复合键名，检查是否以 .xlsx 或 .xls 结尾
+                                                QString possibleFileName = key.mid(underscorePos + 1);
+                                                if (possibleFileName.endsWith(".xlsx") || possibleFileName.endsWith(".xls") || 
+                                                    possibleFileName.endsWith(".csv")) {
+                                                    // 是复合键名注释
+                                                    QString fieldName = key.left(underscorePos);
+                                                    QString excelFileName = possibleFileName;
+                                                    
+                                                    // 保存到 commentsFull
+                                                    student.commentsFull[key] = comment;
+                                                    
+                                                    // 保存到 commentsByExcel
+                                                    student.commentsByExcel[excelFileName][fieldName] = comment;
+                                                    
+                                                    // 向后兼容：如果还没有该字段的注释，使用第一个
+                                                    if (!student.comments.contains(fieldName)) {
+                                                        student.comments[fieldName] = comment;
+                                                    }
+                                                } else {
+                                                    // 普通字段注释
+                                                    student.comments[key] = comment;
+                                                }
+                                            } else {
+                                                // 普通字段注释
+                                                student.comments[key] = comment;
                                             }
                                         }
                                     }
@@ -396,10 +504,14 @@ public:
                                         if (!student.attributes.contains("总分")) {
                                             student.attributes["总分"] = total;
                                         }
-                                    } else if (student.attributes.contains("总分")) {
-                                        student.score = student.attributes["总分"];
                                     } else {
-                                        student.score = 0;
+                                        // 使用新的辅助函数获取"总分"（优先级：attributesByExcel → attributesFull → attributes）
+                                        double total = student.getAttributeValue("总分");
+                                        if (total > 0.0) {
+                                            student.score = total;
+                                        } else {
+                                            student.score = 0;
+                                        }
                                     }
 
                                     // 记录小组总分
@@ -434,9 +546,83 @@ public:
                                 // 系统字段列表（需要排除的字段）
                                 QSet<QString> systemFields;
                                 systemFields << "id" << "student_id" << "student_name" << "total_score" << "comments"
-                                             << "group_name" << "group_total_score" << "scores";
+                                             << "group_name" << "group_total_score" << "scores"
+                                             << "scores_json_full" << "field_sources"; // 新增系统字段
+
+                                // 解析 scores_json_full（包含所有复合键名的完整数据）
+                                if (scoreObj.contains("scores_json_full") && scoreObj["scores_json_full"].isObject()) {
+                                    QJsonObject scoresFullObj = scoreObj["scores_json_full"].toObject();
+                                    for (auto it = scoresFullObj.begin(); it != scoresFullObj.end(); ++it) {
+                                        QString compositeKey = it.key(); // 如 "语文_期中成绩单.xlsx"
+                                        QJsonValue value = it.value();
+                                        if (!value.isNull()) {
+                                            double numValue = 0.0;
+                                            if (value.isDouble()) {
+                                                numValue = value.toDouble();
+                                            } else if (value.isString()) {
+                                                bool ok;
+                                                numValue = value.toString().toDouble(&ok);
+                                                if (!ok) continue;
+                                            } else {
+                                                continue;
+                                            }
+                                            
+                                            // 保存到 attributesFull
+                                            student.attributesFull[compositeKey] = numValue;
+                                            
+                                            // 解析复合键名，提取字段名和Excel文件名
+                                            int underscorePos = compositeKey.lastIndexOf('_');
+                                            if (underscorePos > 0 && underscorePos < compositeKey.length() - 1) {
+                                                QString fieldName = compositeKey.left(underscorePos);
+                                                QString excelFileName = compositeKey.mid(underscorePos + 1);
+                                                
+                                                // 保存到 attributesByExcel
+                                                student.attributesByExcel[excelFileName][fieldName] = numValue;
+                                                
+                                                // 向后兼容：如果 attributes 中还没有该字段，使用第一个值
+                                                if (!student.attributes.contains(fieldName)) {
+                                                    student.attributes[fieldName] = numValue;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // 解析 field_sources（字段来源详细信息）
+                                if (scoreObj.contains("field_sources") && scoreObj["field_sources"].isObject()) {
+                                    QJsonObject fieldSourcesObj = scoreObj["field_sources"].toObject();
+                                    for (auto it = fieldSourcesObj.begin(); it != fieldSourcesObj.end(); ++it) {
+                                        QString fieldName = it.key();
+                                        QJsonObject fieldSourceObj = it.value().toObject();
+                                        
+                                        // 获取默认值
+                                        if (fieldSourceObj.contains("value")) {
+                                            double defaultValue = fieldSourceObj["value"].toDouble();
+                                            if (!student.attributes.contains(fieldName)) {
+                                                student.attributes[fieldName] = defaultValue;
+                                            }
+                                        }
+                                        
+                                        // 获取所有来源
+                                        if (fieldSourceObj.contains("sources") && fieldSourceObj["sources"].isArray()) {
+                                            QJsonArray sourcesArray = fieldSourceObj["sources"].toArray();
+                                            for (const auto& source : sourcesArray) {
+                                                QJsonObject sourceObj = source.toObject();
+                                                QString excelFileName = sourceObj["excel_filename"].toString();
+                                                double value = sourceObj["value"].toDouble();
+                                                
+                                                // 保存到 attributesByExcel
+                                                student.attributesByExcel[excelFileName][fieldName] = value;
+                                                
+                                                // 保存到 attributesFull
+                                                QString compositeKey = QString("%1_%2").arg(fieldName).arg(excelFileName);
+                                                student.attributesFull[compositeKey] = value;
+                                            }
+                                        }
+                                    }
+                                }
                                 
-                                // 动态读取所有属性字段（排除系统字段）
+                                // 动态读取所有属性字段（排除系统字段）- 向后兼容
                                 for (auto it = scoreObj.begin(); it != scoreObj.end(); ++it) {
                                     QString key = it.key();
                                     // 跳过系统字段
@@ -459,12 +645,15 @@ public:
                                     QJsonValue value = it.value();
                                     if (!value.isNull()) {
                                         if (value.isDouble()) {
-                                            student.attributes[key] = value.toDouble();
+                                            // 向后兼容：如果还没有该字段，才添加
+                                            if (!student.attributes.contains(key)) {
+                                                student.attributes[key] = value.toDouble();
+                                            }
                                         } else if (value.isString()) {
                                             // 尝试转换为数字
                                             bool ok;
                                             double numValue = value.toString().toDouble(&ok);
-                                            if (ok) {
+                                            if (ok && !student.attributes.contains(key)) {
                                                 student.attributes[key] = numValue;
                                             }
                                         }
@@ -478,11 +667,13 @@ public:
                                         QString key = it.key();
                                         QJsonValue value = it.value();
                                         if (value.isDouble()) {
-                                            student.attributes[key] = value.toDouble();
+                                            if (!student.attributes.contains(key)) {
+                                                student.attributes[key] = value.toDouble();
+                                            }
                                         } else if (value.isString()) {
                                             bool ok = false;
                                             double numValue = value.toString().toDouble(&ok);
-                                            if (ok) {
+                                            if (ok && !student.attributes.contains(key)) {
                                                 student.attributes[key] = numValue;
                                             }
                                         }
@@ -493,10 +684,38 @@ public:
                                 if (scoreObj.contains("comments") && scoreObj["comments"].isObject()) {
                                     QJsonObject commentsObj = scoreObj["comments"].toObject();
                                     for (auto it = commentsObj.begin(); it != commentsObj.end(); ++it) {
-                                        QString fieldName = it.key();
+                                        QString key = it.key();
                                         QString comment = it.value().toString();
-                                        if (!comment.isEmpty()) {
-                                            student.comments[fieldName] = comment;
+                                        if (comment.isEmpty()) continue;
+                                        
+                                        // 判断是否是复合键名（包含下划线和可能的Excel文件名）
+                                        int underscorePos = key.lastIndexOf('_');
+                                        if (underscorePos > 0 && underscorePos < key.length() - 1) {
+                                            // 可能是复合键名，检查是否以 .xlsx 或 .xls 结尾
+                                            QString possibleFileName = key.mid(underscorePos + 1);
+                                            if (possibleFileName.endsWith(".xlsx") || possibleFileName.endsWith(".xls") || 
+                                                possibleFileName.endsWith(".csv")) {
+                                                // 是复合键名注释
+                                                QString fieldName = key.left(underscorePos);
+                                                QString excelFileName = possibleFileName;
+                                                
+                                                // 保存到 commentsFull
+                                                student.commentsFull[key] = comment;
+                                                
+                                                // 保存到 commentsByExcel
+                                                student.commentsByExcel[excelFileName][fieldName] = comment;
+                                                
+                                                // 向后兼容：如果还没有该字段的注释，使用第一个
+                                                if (!student.comments.contains(fieldName)) {
+                                                    student.comments[fieldName] = comment;
+                                                }
+                                            } else {
+                                                // 普通字段注释
+                                                student.comments[key] = comment;
+                                            }
+                                        } else {
+                                            // 普通字段注释
+                                            student.comments[key] = comment;
                                         }
                                     }
                                 }
@@ -510,9 +729,10 @@ public:
                                         student.attributes["总分"] = total;
                                     }
                                 } else {
-                                    // 如果没有total_score，尝试从attributes中获取"总分"
-                                    if (student.attributes.contains("总分")) {
-                                        student.score = student.attributes["总分"];
+                                    // 如果没有total_score，使用新的辅助函数获取"总分"（优先级：attributesByExcel → attributesFull → attributes）
+                                    double total = student.getAttributeValue("总分");
+                                    if (total > 0.0) {
+                                        student.score = total;
                                     } else {
                                         student.score = 0;
                                     }
@@ -547,9 +767,83 @@ public:
                                 // 系统字段列表（需要排除的字段）
                                 QSet<QString> systemFields;
                                 systemFields << "id" << "student_id" << "student_name" << "total_score" << "comments"
-                                             << "group_name" << "group_total_score" << "scores";
+                                             << "group_name" << "group_total_score" << "scores"
+                                             << "scores_json_full" << "field_sources"; // 新增系统字段
+
+                                // 解析 scores_json_full（包含所有复合键名的完整数据）
+                                if (scoreObj.contains("scores_json_full") && scoreObj["scores_json_full"].isObject()) {
+                                    QJsonObject scoresFullObj = scoreObj["scores_json_full"].toObject();
+                                    for (auto it = scoresFullObj.begin(); it != scoresFullObj.end(); ++it) {
+                                        QString compositeKey = it.key(); // 如 "语文_期中成绩单.xlsx"
+                                        QJsonValue value = it.value();
+                                        if (!value.isNull()) {
+                                            double numValue = 0.0;
+                                            if (value.isDouble()) {
+                                                numValue = value.toDouble();
+                                            } else if (value.isString()) {
+                                                bool ok;
+                                                numValue = value.toString().toDouble(&ok);
+                                                if (!ok) continue;
+                                            } else {
+                                                continue;
+                                            }
+                                            
+                                            // 保存到 attributesFull
+                                            student.attributesFull[compositeKey] = numValue;
+                                            
+                                            // 解析复合键名，提取字段名和Excel文件名
+                                            int underscorePos = compositeKey.lastIndexOf('_');
+                                            if (underscorePos > 0 && underscorePos < compositeKey.length() - 1) {
+                                                QString fieldName = compositeKey.left(underscorePos);
+                                                QString excelFileName = compositeKey.mid(underscorePos + 1);
+                                                
+                                                // 保存到 attributesByExcel
+                                                student.attributesByExcel[excelFileName][fieldName] = numValue;
+                                                
+                                                // 向后兼容：如果 attributes 中还没有该字段，使用第一个值
+                                                if (!student.attributes.contains(fieldName)) {
+                                                    student.attributes[fieldName] = numValue;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // 解析 field_sources（字段来源详细信息）
+                                if (scoreObj.contains("field_sources") && scoreObj["field_sources"].isObject()) {
+                                    QJsonObject fieldSourcesObj = scoreObj["field_sources"].toObject();
+                                    for (auto it = fieldSourcesObj.begin(); it != fieldSourcesObj.end(); ++it) {
+                                        QString fieldName = it.key();
+                                        QJsonObject fieldSourceObj = it.value().toObject();
+                                        
+                                        // 获取默认值
+                                        if (fieldSourceObj.contains("value")) {
+                                            double defaultValue = fieldSourceObj["value"].toDouble();
+                                            if (!student.attributes.contains(fieldName)) {
+                                                student.attributes[fieldName] = defaultValue;
+                                            }
+                                        }
+                                        
+                                        // 获取所有来源
+                                        if (fieldSourceObj.contains("sources") && fieldSourceObj["sources"].isArray()) {
+                                            QJsonArray sourcesArray = fieldSourceObj["sources"].toArray();
+                                            for (const auto& source : sourcesArray) {
+                                                QJsonObject sourceObj = source.toObject();
+                                                QString excelFileName = sourceObj["excel_filename"].toString();
+                                                double value = sourceObj["value"].toDouble();
+                                                
+                                                // 保存到 attributesByExcel
+                                                student.attributesByExcel[excelFileName][fieldName] = value;
+                                                
+                                                // 保存到 attributesFull
+                                                QString compositeKey = QString("%1_%2").arg(fieldName).arg(excelFileName);
+                                                student.attributesFull[compositeKey] = value;
+                                            }
+                                        }
+                                    }
+                                }
                                 
-                                // 动态读取所有属性字段（排除系统字段）
+                                // 动态读取所有属性字段（排除系统字段）- 向后兼容
                                 for (auto it = scoreObj.begin(); it != scoreObj.end(); ++it) {
                                     QString key = it.key();
                                     // 跳过系统字段
@@ -572,12 +866,15 @@ public:
                                     QJsonValue value = it.value();
                                     if (!value.isNull()) {
                                         if (value.isDouble()) {
-                                            student.attributes[key] = value.toDouble();
+                                            // 向后兼容：如果还没有该字段，才添加
+                                            if (!student.attributes.contains(key)) {
+                                                student.attributes[key] = value.toDouble();
+                                            }
                                         } else if (value.isString()) {
                                             // 尝试转换为数字
                                             bool ok;
                                             double numValue = value.toString().toDouble(&ok);
-                                            if (ok) {
+                                            if (ok && !student.attributes.contains(key)) {
                                                 student.attributes[key] = numValue;
                                             }
                                         }
@@ -591,11 +888,13 @@ public:
                                         QString key = it.key();
                                         QJsonValue value = it.value();
                                         if (value.isDouble()) {
-                                            student.attributes[key] = value.toDouble();
+                                            if (!student.attributes.contains(key)) {
+                                                student.attributes[key] = value.toDouble();
+                                            }
                                         } else if (value.isString()) {
                                             bool ok = false;
                                             double numValue = value.toString().toDouble(&ok);
-                                            if (ok) {
+                                            if (ok && !student.attributes.contains(key)) {
                                                 student.attributes[key] = numValue;
                                             }
                                         }
@@ -606,10 +905,38 @@ public:
                                 if (scoreObj.contains("comments") && scoreObj["comments"].isObject()) {
                                     QJsonObject commentsObj = scoreObj["comments"].toObject();
                                     for (auto it = commentsObj.begin(); it != commentsObj.end(); ++it) {
-                                        QString fieldName = it.key();
+                                        QString key = it.key();
                                         QString comment = it.value().toString();
-                                        if (!comment.isEmpty()) {
-                                            student.comments[fieldName] = comment;
+                                        if (comment.isEmpty()) continue;
+                                        
+                                        // 判断是否是复合键名（包含下划线和可能的Excel文件名）
+                                        int underscorePos = key.lastIndexOf('_');
+                                        if (underscorePos > 0 && underscorePos < key.length() - 1) {
+                                            // 可能是复合键名，检查是否以 .xlsx 或 .xls 结尾
+                                            QString possibleFileName = key.mid(underscorePos + 1);
+                                            if (possibleFileName.endsWith(".xlsx") || possibleFileName.endsWith(".xls") || 
+                                                possibleFileName.endsWith(".csv")) {
+                                                // 是复合键名注释
+                                                QString fieldName = key.left(underscorePos);
+                                                QString excelFileName = possibleFileName;
+                                                
+                                                // 保存到 commentsFull
+                                                student.commentsFull[key] = comment;
+                                                
+                                                // 保存到 commentsByExcel
+                                                student.commentsByExcel[excelFileName][fieldName] = comment;
+                                                
+                                                // 向后兼容：如果还没有该字段的注释，使用第一个
+                                                if (!student.comments.contains(fieldName)) {
+                                                    student.comments[fieldName] = comment;
+                                                }
+                                            } else {
+                                                // 普通字段注释
+                                                student.comments[key] = comment;
+                                            }
+                                        } else {
+                                            // 普通字段注释
+                                            student.comments[key] = comment;
                                         }
                                     }
                                 }
@@ -623,9 +950,10 @@ public:
                                         student.attributes["总分"] = total;
                                     }
                                 } else {
-                                    // 如果没有total_score，尝试从attributes中获取"总分"
-                                    if (student.attributes.contains("总分")) {
-                                        student.score = student.attributes["总分"];
+                                    // 如果没有total_score，使用新的辅助函数获取"总分"（优先级：attributesByExcel → attributesFull → attributes）
+                                    double total = student.getAttributeValue("总分");
+                                    if (total > 0.0) {
+                                        student.score = total;
                                     } else {
                                         student.score = 0;
                                     }
@@ -664,9 +992,83 @@ public:
                                         // 系统字段列表（需要排除的字段）
                                         QSet<QString> systemFields;
                                         systemFields << "id" << "student_id" << "student_name" << "total_score" << "comments"
-                                                     << "group_name" << "group_total_score" << "scores";
+                                                     << "group_name" << "group_total_score" << "scores"
+                                                     << "scores_json_full" << "field_sources"; // 新增系统字段
+
+                                        // 解析 scores_json_full（包含所有复合键名的完整数据）
+                                        if (scoreObj.contains("scores_json_full") && scoreObj["scores_json_full"].isObject()) {
+                                            QJsonObject scoresFullObj = scoreObj["scores_json_full"].toObject();
+                                            for (auto it = scoresFullObj.begin(); it != scoresFullObj.end(); ++it) {
+                                                QString compositeKey = it.key(); // 如 "语文_期中成绩单.xlsx"
+                                                QJsonValue value = it.value();
+                                                if (!value.isNull()) {
+                                                    double numValue = 0.0;
+                                                    if (value.isDouble()) {
+                                                        numValue = value.toDouble();
+                                                    } else if (value.isString()) {
+                                                        bool ok;
+                                                        numValue = value.toString().toDouble(&ok);
+                                                        if (!ok) continue;
+                                                    } else {
+                                                        continue;
+                                                    }
+                                                    
+                                                    // 保存到 attributesFull
+                                                    student.attributesFull[compositeKey] = numValue;
+                                                    
+                                                    // 解析复合键名，提取字段名和Excel文件名
+                                                    int underscorePos = compositeKey.lastIndexOf('_');
+                                                    if (underscorePos > 0 && underscorePos < compositeKey.length() - 1) {
+                                                        QString fieldName = compositeKey.left(underscorePos);
+                                                        QString excelFileName = compositeKey.mid(underscorePos + 1);
+                                                        
+                                                        // 保存到 attributesByExcel
+                                                        student.attributesByExcel[excelFileName][fieldName] = numValue;
+                                                        
+                                                        // 向后兼容：如果 attributes 中还没有该字段，使用第一个值
+                                                        if (!student.attributes.contains(fieldName)) {
+                                                            student.attributes[fieldName] = numValue;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // 解析 field_sources（字段来源详细信息）
+                                        if (scoreObj.contains("field_sources") && scoreObj["field_sources"].isObject()) {
+                                            QJsonObject fieldSourcesObj = scoreObj["field_sources"].toObject();
+                                            for (auto it = fieldSourcesObj.begin(); it != fieldSourcesObj.end(); ++it) {
+                                                QString fieldName = it.key();
+                                                QJsonObject fieldSourceObj = it.value().toObject();
+                                                
+                                                // 获取默认值
+                                                if (fieldSourceObj.contains("value")) {
+                                                    double defaultValue = fieldSourceObj["value"].toDouble();
+                                                    if (!student.attributes.contains(fieldName)) {
+                                                        student.attributes[fieldName] = defaultValue;
+                                                    }
+                                                }
+                                                
+                                                // 获取所有来源
+                                                if (fieldSourceObj.contains("sources") && fieldSourceObj["sources"].isArray()) {
+                                                    QJsonArray sourcesArray = fieldSourceObj["sources"].toArray();
+                                                    for (const auto& source : sourcesArray) {
+                                                        QJsonObject sourceObj = source.toObject();
+                                                        QString excelFileName = sourceObj["excel_filename"].toString();
+                                                        double value = sourceObj["value"].toDouble();
+                                                        
+                                                        // 保存到 attributesByExcel
+                                                        student.attributesByExcel[excelFileName][fieldName] = value;
+                                                        
+                                                        // 保存到 attributesFull
+                                                        QString compositeKey = QString("%1_%2").arg(fieldName).arg(excelFileName);
+                                                        student.attributesFull[compositeKey] = value;
+                                                    }
+                                                }
+                                            }
+                                        }
                                         
-                                        // 动态读取所有属性字段（排除系统字段）
+                                        // 动态读取所有属性字段（排除系统字段）- 向后兼容
                                         for (auto it = scoreObj.begin(); it != scoreObj.end(); ++it) {
                                             QString key = it.key();
                                             // 跳过系统字段
@@ -689,12 +1091,15 @@ public:
                                             QJsonValue value = it.value();
                                             if (!value.isNull()) {
                                                 if (value.isDouble()) {
-                                                    student.attributes[key] = value.toDouble();
+                                                    // 向后兼容：如果还没有该字段，才添加
+                                                    if (!student.attributes.contains(key)) {
+                                                        student.attributes[key] = value.toDouble();
+                                                    }
                                                 } else if (value.isString()) {
                                                     // 尝试转换为数字
                                                     bool ok;
                                                     double numValue = value.toString().toDouble(&ok);
-                                                    if (ok) {
+                                                    if (ok && !student.attributes.contains(key)) {
                                                         student.attributes[key] = numValue;
                                                     }
                                                 }
@@ -708,11 +1113,13 @@ public:
                                                 QString key = it.key();
                                                 QJsonValue value = it.value();
                                                 if (value.isDouble()) {
-                                                    student.attributes[key] = value.toDouble();
+                                                    if (!student.attributes.contains(key)) {
+                                                        student.attributes[key] = value.toDouble();
+                                                    }
                                                 } else if (value.isString()) {
                                                     bool ok = false;
                                                     double numValue = value.toString().toDouble(&ok);
-                                                    if (ok) {
+                                                    if (ok && !student.attributes.contains(key)) {
                                                         student.attributes[key] = numValue;
                                                     }
                                                 }
@@ -723,10 +1130,38 @@ public:
                                         if (scoreObj.contains("comments") && scoreObj["comments"].isObject()) {
                                             QJsonObject commentsObj = scoreObj["comments"].toObject();
                                             for (auto it = commentsObj.begin(); it != commentsObj.end(); ++it) {
-                                                QString fieldName = it.key();
+                                                QString key = it.key();
                                                 QString comment = it.value().toString();
-                                                if (!comment.isEmpty()) {
-                                                    student.comments[fieldName] = comment;
+                                                if (comment.isEmpty()) continue;
+                                                
+                                                // 判断是否是复合键名（包含下划线和可能的Excel文件名）
+                                                int underscorePos = key.lastIndexOf('_');
+                                                if (underscorePos > 0 && underscorePos < key.length() - 1) {
+                                                    // 可能是复合键名，检查是否以 .xlsx 或 .xls 结尾
+                                                    QString possibleFileName = key.mid(underscorePos + 1);
+                                                    if (possibleFileName.endsWith(".xlsx") || possibleFileName.endsWith(".xls") || 
+                                                        possibleFileName.endsWith(".csv")) {
+                                                        // 是复合键名注释
+                                                        QString fieldName = key.left(underscorePos);
+                                                        QString excelFileName = possibleFileName;
+                                                        
+                                                        // 保存到 commentsFull
+                                                        student.commentsFull[key] = comment;
+                                                        
+                                                        // 保存到 commentsByExcel
+                                                        student.commentsByExcel[excelFileName][fieldName] = comment;
+                                                        
+                                                        // 向后兼容：如果还没有该字段的注释，使用第一个
+                                                        if (!student.comments.contains(fieldName)) {
+                                                            student.comments[fieldName] = comment;
+                                                        }
+                                                    } else {
+                                                        // 普通字段注释
+                                                        student.comments[key] = comment;
+                                                    }
+                                                } else {
+                                                    // 普通字段注释
+                                                    student.comments[key] = comment;
                                                 }
                                             }
                                         }
@@ -740,9 +1175,10 @@ public:
                                                 student.attributes["总分"] = total;
                                             }
                                         } else {
-                                            // 如果没有total_score，尝试从attributes中获取"总分"
-                                            if (student.attributes.contains("总分")) {
-                                                student.score = student.attributes["总分"];
+                                            // 如果没有total_score，使用新的辅助函数获取"总分"（优先级：attributesByExcel → attributesFull → attributes）
+                                            double total = student.getAttributeValue("总分");
+                                            if (total > 0.0) {
+                                                student.score = total;
                                             } else {
                                                 student.score = 0;
                                             }
@@ -757,6 +1193,200 @@ public:
                                     break; // 已处理，退出 headers 循环
                                 }
                             }
+                        }
+
+                        // 判断是来自哪个接口的响应（用于区分保存目录）
+                        bool isGroupScores = dataObj.contains("group_scores");
+                        bool isStudentScores = dataObj.contains("student_scores");
+                        
+                        // 处理Excel文件URL（无论是否有成绩数据，都需要同步Excel文件）
+                        // 兼容数组或对象格式
+                        QList<QPair<QString, QString>> excelFiles; // filename, url
+                        if (dataObj.contains("excel_file_url")) {
+                            if (dataObj["excel_file_url"].isArray()) {
+                                QJsonArray excelFileUrlArray = dataObj["excel_file_url"].toArray();
+                                for (const auto& f : excelFileUrlArray) {
+                                    QJsonObject fileObj = f.toObject();
+                                    QString filename = fileObj["filename"].toString();
+                                    QString url = fileObj["url"].toString();
+                                    if (!filename.isEmpty() && !url.isEmpty()) {
+                                        excelFiles.append(qMakePair(filename, url));
+                                    }
+                                }
+                            } else if (dataObj["excel_file_url"].isObject()) {
+                                QJsonObject excelFilesObj = dataObj["excel_file_url"].toObject();
+                                for (auto it = excelFilesObj.begin(); it != excelFilesObj.end(); ++it) {
+                                    QString filename = it.key();
+                                    QJsonObject detailObj = it.value().toObject();
+                                    QString url = detailObj.value("url").toString();
+                                    if (!filename.isEmpty() && !url.isEmpty()) {
+                                        excelFiles.append(qMakePair(filename, url));
+                                    }
+                                }
+                            }
+                        }
+                        // student-scores headers 场景：excel_file_url 在 headers 数组里（追加，不依赖是否已有）
+                        if (dataObj.contains("headers") && dataObj["headers"].isArray()) {
+                            QJsonArray headersArray = dataObj["headers"].toArray();
+                            for (const auto& h : headersArray) {
+                                QJsonObject headerObj = h.toObject();
+                                if (headerObj.contains("excel_file_url")) {
+                                    if (headerObj["excel_file_url"].isArray()) {
+                                        QJsonArray arr = headerObj["excel_file_url"].toArray();
+                                        for (const auto& f : arr) {
+                                            QJsonObject fileObj = f.toObject();
+                                            QString filename = fileObj["filename"].toString();
+                                            QString url = fileObj["url"].toString();
+                                            if (!filename.isEmpty() && !url.isEmpty()) {
+                                                excelFiles.append(qMakePair(filename, url));
+                                            }
+                                        }
+                                    } else if (headerObj["excel_file_url"].isObject()) {
+                                        QJsonObject excelFilesObj = headerObj["excel_file_url"].toObject();
+                                        for (auto it = excelFilesObj.begin(); it != excelFilesObj.end(); ++it) {
+                                            QString filename = it.key();
+                                            QJsonObject detailObj = it.value().toObject();
+                                            QString url = detailObj.value("url").toString();
+                                            if (!filename.isEmpty() && !url.isEmpty()) {
+                                                excelFiles.append(qMakePair(filename, url));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // 如果无法通过字段判断类型，尝试通过Excel文件URL来判断
+                        if (!isGroupScores && !isStudentScores && !excelFiles.isEmpty()) {
+                            // 检查第一个Excel文件的URL，如果包含 group-scores 就是小组表格，包含 student-scores 就是普通表格
+                            QString firstUrl = excelFiles.first().second;
+                            if (firstUrl.contains("/group-scores/")) {
+                                isGroupScores = true;
+                            } else if (firstUrl.contains("/student-scores/")) {
+                                isStudentScores = true;
+                            }
+                            // 如果还是无法判断，默认当作普通表格（student-scores）
+                            if (!isGroupScores && !isStudentScores) {
+                                isStudentScores = true;
+                            }
+                        }
+
+                        qDebug() << "获取到Excel文件数量:" << excelFiles.size() << (isGroupScores ? "(小组表格)" : (isStudentScores ? "(普通表格)" : "(未知类型)"));
+                        
+                        // 获取学校ID和班级ID
+                        UserInfo userInfo = CommonInfo::GetData();
+                        QString schoolId = userInfo.schoolId;
+                        QString classId = m_classid;
+                        
+                        if (!schoolId.isEmpty() && !classId.isEmpty()) {
+                            // 根据接口类型确定子目录：group-scores -> group/，student-scores -> student/
+                            QString subDir;
+                            if (isGroupScores) {
+                                subDir = "group";
+                            } else if (isStudentScores) {
+                                subDir = "student";
+                            } else {
+                                // 如果无法确定类型，使用默认目录（向后兼容）
+                                subDir = "";
+                            }
+                            
+                            // 创建文件夹结构：学校ID/班级ID/[group|student]/
+                            QString baseDir = QCoreApplication::applicationDirPath() + "/excel_files";
+                            QString schoolDir = baseDir + "/" + schoolId;
+                            QString classDir = schoolDir + "/" + classId;
+                            QString targetDir = subDir.isEmpty() ? classDir : (classDir + "/" + subDir);
+                            
+                            // 确保targetDir是绝对路径
+                            QDir dir;
+                            QString absoluteTargetDir = QDir(targetDir).absolutePath();
+                            
+                            // 验证并创建目录
+                            if (!dir.exists(absoluteTargetDir)) {
+                                if (dir.mkpath(absoluteTargetDir)) {
+                                    QString msg = QString("[Excel下载] 创建文件夹: %1").arg(absoluteTargetDir);
+                                    qInfo() << msg;
+                                    writeLogToFile(msg);
+                                } else {
+                                    QString msg = QString("[Excel下载] 创建文件夹失败: %1").arg(absoluteTargetDir);
+                                    qWarning() << msg;
+                                    writeLogToFile(msg);
+                                }
+                            } else {
+                                // 先删除本地对应目录的所有Excel文件，确保与服务器完全同步
+                                QString typeName = isGroupScores ? "小组表格" : (isStudentScores ? "普通表格" : "未知类型");
+                                QString msg = QString("[Excel下载] 先删除本地%1目录的所有Excel文件，目录: %2").arg(typeName).arg(absoluteTargetDir);
+                                qInfo() << msg;
+                                writeLogToFile(msg);
+                                
+                                QDir targetDirObj(absoluteTargetDir);
+                                if (targetDirObj.exists()) {
+                                    QStringList filters;
+                                    filters << "*.xlsx" << "*.xls" << "*.csv";
+                                    QFileInfoList fileList = targetDirObj.entryInfoList(filters, QDir::Files);
+                                    int deletedCount = 0;
+                                    for (const QFileInfo& fi : fileList) {
+                                        QString filePath = fi.absoluteFilePath();
+                                        if (QFile::remove(filePath)) {
+                                            deletedCount++;
+                                        } else {
+                                            QString msg = QString("[Excel下载] 删除文件失败: %1").arg(filePath);
+                                            qWarning() << msg;
+                                            writeLogToFile(msg);
+                                        }
+                                    }
+                                    if (deletedCount > 0) {
+                                        QString msg = QString("[Excel下载] 已删除%1个本地文件").arg(deletedCount);
+                                        qInfo() << msg;
+                                        writeLogToFile(msg);
+                                    }
+                                }
+                            }
+                            
+                            // 构建服务器Excel文件名集合（用于后续比对，如果需要）
+                            QSet<QString> serverFileNames;
+                            for (const auto& pair : excelFiles) {
+                                serverFileNames.insert(pair.first);
+                            }
+                            
+                            // 下载服务器上的Excel文件（如果列表不为空）
+                            if (!excelFiles.isEmpty()) {
+                                // 确保targetDir包含子目录路径（使用绝对路径）
+                                QString typeName = isGroupScores ? "小组表格" : (isStudentScores ? "普通表格" : "未知类型");
+                                QString msg = QString("[Excel下载] 准备下载%1个Excel文件到目录: %2 (%3)").arg(excelFiles.size()).arg(absoluteTargetDir).arg(typeName);
+                                qInfo() << msg;
+                                writeLogToFile(msg);
+                                
+                                // 下载每个Excel文件（使用计数器跟踪下载完成状态）
+                                int totalFiles = excelFiles.size();
+                                int* completedCount = new int(0); // 使用指针以便在lambda中修改
+                                for (const auto& pair : excelFiles) {
+                                    // 使用绝对路径
+                                    downloadExcelFile(pair.second, absoluteTargetDir, pair.first, [this, totalFiles, completedCount]() {
+                                        (*completedCount)++;
+                                        QString msg = QString("[Excel下载] 下载进度: %1/%2").arg(*completedCount).arg(totalFiles);
+                                        qInfo() << msg;
+                                        writeLogToFile(msg);
+                                        // 当所有文件下载完成后，刷新热力图选项（如果对话框已打开）
+                                        if (*completedCount >= totalFiles) {
+                                            QString msg = "[Excel下载] 所有Excel文件下载完成，刷新热力图选项";
+                                            qInfo() << msg;
+                                            writeLogToFile(msg);
+                                            // 使用 QTimer::singleShot 延迟刷新，调用成员函数避免在 lambda 中直接访问未定义类型
+                                            QTimer::singleShot(100, this, &ScheduleDialog::refreshHeatmapOptionsIfNeeded);
+                                            delete completedCount; // 清理内存
+                                        }
+                                    });
+                                }
+                            } else {
+                                QString typeName = isGroupScores ? "小组表格" : (isStudentScores ? "普通表格" : "未知类型");
+                                QString msg = QString("[Excel下载] 服务器没有Excel文件（headers为空），已删除所有本地%1文件").arg(typeName);
+                                qInfo() << msg;
+                                writeLogToFile(msg);
+                                // 即使服务器没有文件，也刷新热力图选项（清除选项）
+                                QTimer::singleShot(100, this, &ScheduleDialog::refreshHeatmapOptionsIfNeeded);
+                            }
+                        } else if (schoolId.isEmpty() || classId.isEmpty()) {
+                            qWarning() << "学校ID或班级ID为空，无法创建文件夹";
                         }
 
                         if (hasScores) {
@@ -813,89 +1443,6 @@ public:
                                 }
                             }
                             
-                            // 处理Excel文件URL（兼容数组或对象格式）
-                            QList<QPair<QString, QString>> excelFiles; // filename, url
-                            if (dataObj.contains("excel_file_url")) {
-                                if (dataObj["excel_file_url"].isArray()) {
-                                    QJsonArray excelFileUrlArray = dataObj["excel_file_url"].toArray();
-                                    for (const auto& f : excelFileUrlArray) {
-                                        QJsonObject fileObj = f.toObject();
-                                        QString filename = fileObj["filename"].toString();
-                                        QString url = fileObj["url"].toString();
-                                        if (!filename.isEmpty() && !url.isEmpty()) {
-                                            excelFiles.append(qMakePair(filename, url));
-                                        }
-                                    }
-                                } else if (dataObj["excel_file_url"].isObject()) {
-                                    QJsonObject excelFilesObj = dataObj["excel_file_url"].toObject();
-                                    for (auto it = excelFilesObj.begin(); it != excelFilesObj.end(); ++it) {
-                                        QString filename = it.key();
-                                        QJsonObject detailObj = it.value().toObject();
-                                        QString url = detailObj.value("url").toString();
-                                        if (!filename.isEmpty() && !url.isEmpty()) {
-                                            excelFiles.append(qMakePair(filename, url));
-                                        }
-                                    }
-                                }
-                            }
-                            // student-scores headers 场景：excel_file_url 在 headers 数组里（追加，不依赖是否已有）
-                            if (dataObj.contains("headers") && dataObj["headers"].isArray()) {
-                                QJsonArray headersArray = dataObj["headers"].toArray();
-                                for (const auto& h : headersArray) {
-                                    QJsonObject headerObj = h.toObject();
-                                    if (headerObj.contains("excel_file_url")) {
-                                        if (headerObj["excel_file_url"].isArray()) {
-                                            QJsonArray arr = headerObj["excel_file_url"].toArray();
-                                            for (const auto& f : arr) {
-                                                QJsonObject fileObj = f.toObject();
-                                                QString filename = fileObj["filename"].toString();
-                                                QString url = fileObj["url"].toString();
-                                                if (!filename.isEmpty() && !url.isEmpty()) {
-                                                    excelFiles.append(qMakePair(filename, url));
-                                                }
-                                            }
-                                        } else if (headerObj["excel_file_url"].isObject()) {
-                                            QJsonObject excelFilesObj = headerObj["excel_file_url"].toObject();
-                                            for (auto it = excelFilesObj.begin(); it != excelFilesObj.end(); ++it) {
-                                                QString filename = it.key();
-                                                QJsonObject detailObj = it.value().toObject();
-                                                QString url = detailObj.value("url").toString();
-                                                if (!filename.isEmpty() && !url.isEmpty()) {
-                                                    excelFiles.append(qMakePair(filename, url));
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            qDebug() << "获取到Excel文件数量:" << excelFiles.size();
-                            
-                            // 获取学校ID和班级ID
-                            UserInfo userInfo = CommonInfo::GetData();
-                            QString schoolId = userInfo.schoolId;
-                            QString classId = m_classid;
-                            
-                            if (!schoolId.isEmpty() && !classId.isEmpty() && !excelFiles.isEmpty()) {
-                                // 创建文件夹结构：学校ID/班级ID/
-                                QString baseDir = QCoreApplication::applicationDirPath() + "/excel_files";
-                                QString schoolDir = baseDir + "/" + schoolId;
-                                QString classDir = schoolDir + "/" + classId;
-                                
-                                QDir dir;
-                                if (!dir.exists(classDir)) {
-                                    dir.mkpath(classDir);
-                                    qDebug() << "创建文件夹:" << classDir;
-                                }
-                                
-                                // 下载每个Excel文件
-                                for (const auto& pair : excelFiles) {
-                                    downloadExcelFile(pair.second, classDir, pair.first);
-                                }
-                            } else if (schoolId.isEmpty() || classId.isEmpty()) {
-                                qWarning() << "学校ID或班级ID为空，无法创建文件夹";
-                            }
-                            
                             // 将成绩数据设置到座位表对应单元格学生的属性中
                             if (!m_students.isEmpty() && seatTable) {
                                 // 遍历座位表，找到对应的学生并设置成绩属性
@@ -921,12 +1468,44 @@ public:
                                                 
                                                 if (matched) {
                                                     // 动态将所有属性数据设置到座位按钮的属性中
+                                                    // 优先从 attributesByExcel 中获取（支持不同Excel文件的相同字段名）
+                                                    QSet<QString> processedAttrs; // 避免重复设置
+                                                    
+                                                    // 遍历所有Excel文件的属性
+                                                    for (auto excelIt = student.attributesByExcel.begin(); excelIt != student.attributesByExcel.end(); ++excelIt) {
+                                                        const QMap<QString, double>& excelAttrs = excelIt.value();
+                                                        for (auto it = excelAttrs.begin(); it != excelAttrs.end(); ++it) {
+                                                            QString attrName = it.key();
+                                                            if (!processedAttrs.contains(attrName)) {
+                                                                double attrValue = it.value();
+                                                                btn->setProperty(attrName.toUtf8().constData(), attrValue);
+                                                                processedAttrs.insert(attrName);
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    // 从 attributesFull 中获取（复合键名）
+                                                    for (auto it = student.attributesFull.begin(); it != student.attributesFull.end(); ++it) {
+                                                        QString compositeKey = it.key();
+                                                        int underscorePos = compositeKey.lastIndexOf('_');
+                                                        if (underscorePos > 0) {
+                                                            QString attrName = compositeKey.left(underscorePos);
+                                                            if (!processedAttrs.contains(attrName)) {
+                                                                double attrValue = it.value();
+                                                                btn->setProperty(attrName.toUtf8().constData(), attrValue);
+                                                                processedAttrs.insert(attrName);
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    // 向后兼容：从 attributes 中获取（如果还没有设置）
                                                     for (auto it = student.attributes.begin(); it != student.attributes.end(); ++it) {
                                                         QString attrName = it.key();
-                                                        double attrValue = it.value();
-                                                        
-                                                        // 直接使用属性名作为属性键
-                                                        btn->setProperty(attrName.toUtf8().constData(), attrValue);
+                                                        if (!processedAttrs.contains(attrName)) {
+                                                            double attrValue = it.value();
+                                                            btn->setProperty(attrName.toUtf8().constData(), attrValue);
+                                                            processedAttrs.insert(attrName);
+                                                        }
                                                     }
 
                                                     // 保存小组信息到按钮属性，便于后续使用
@@ -1501,6 +2080,16 @@ public:
 			importSeatTable();
 		});
 		
+		// 连接分断按钮点击事件
+		connect(btnAnalyse, &QPushButton::clicked, this, [=]() {
+			// 检查是否有学生数据（必须上传期中成绩）
+			if (m_students.isEmpty()) {
+				QMessageBox::information(this, "提示", "请先上传期中成绩表！");
+				return;
+			}
+			this->showSegmentDialog();
+		});
+		
 		// 连接热力图按钮点击事件
 		connect(btnHeatmap, &QPushButton::clicked, this, [=]() {
 			// 检查是否有学生数据（必须上传期中成绩）
@@ -1508,39 +2097,7 @@ public:
 				QMessageBox::information(this, "提示", "请先上传期中成绩表！");
 				return;
 			}
-			
-			// 显示热力图选择对话框
-			QDialog* typeDialog = new QDialog(this);
-			typeDialog->setWindowTitle("选择热力图类型");
-			typeDialog->setModal(true);
-			typeDialog->resize(300, 150);
-			
-			QVBoxLayout* typeLayout = new QVBoxLayout(typeDialog);
-			QLabel* lblTitle = new QLabel("请选择热力图类型：", typeDialog);
-			typeLayout->addWidget(lblTitle);
-			
-			QPushButton* btnSegment = new QPushButton("分段图1（每一段一种颜色）", typeDialog);
-			QPushButton* btnGradient = new QPushButton("热力图2（颜色渐变）", typeDialog);
-			QPushButton* btnCancel = new QPushButton("取消", typeDialog);
-			
-			typeLayout->addWidget(btnSegment);
-			typeLayout->addWidget(btnGradient);
-			typeLayout->addWidget(btnCancel);
-			
-			connect(btnSegment, &QPushButton::clicked, typeDialog, [=]() {
-				typeDialog->accept();
-				this->showSegmentDialog();
-			});
-			
-			connect(btnGradient, &QPushButton::clicked, typeDialog, [=]() {
-				typeDialog->accept();
-				this->showGradientHeatmap();
-			});
-			
-			connect(btnCancel, &QPushButton::clicked, typeDialog, &QDialog::reject);
-			
-			typeDialog->exec();
-			typeDialog->deleteLater();
+			this->showGradientHeatmap();
 		});
 
 		// ===== 讲台区域 =====
@@ -2065,7 +2622,8 @@ public:
 	void fetchSeatArrangementFromServer(); // 从服务器获取座位表
 	void fetchStudentScoresFromServer(); // 从服务器获取成绩表数据
 	void fetchCourseScheduleForDailyView();
-	void downloadExcelFile(const QString& url, const QString& saveDir, const QString& filename); // 下载Excel文件
+	void downloadExcelFile(const QString& url, const QString& saveDir, const QString& filename, std::function<void()> onCompleted = nullptr); // 下载Excel文件
+	void writeLogToFile(const QString& message); // 写入日志到文件
 	void showStudentAttributeDialog(int row, int col); // 显示学生属性对话框
 	
 	// 获取座位信息列表（用于比对和更新姓名）
@@ -2073,8 +2631,12 @@ public:
 	
 	// 热力图相关方法
 	void showSegmentDialog(); // 显示分段区间设置对话框
+	void refreshHeatmapOptionsIfNeeded(); // 如果需要，刷新热力图选项（在实现文件中定义，避免前向声明问题）
 	void showGradientHeatmap(); // 显示渐变热力图
 	void setSegments(const QList<struct SegmentRange>& segments); // 设置分段区间
+	void buildHeatmapOptions(QStringList& tables, QStringList& attributes); // 构建热力图下拉选项
+	QStringList getAttributesForTable(const QString& tableName); // 根据表格名称获取属性列表
+	QStringList getHeadersFromFile(const QFileInfo& fi); // 从文件中读取表头（辅助函数）
 	
 	void InitData(QString groupName, QString unique_group_id, QString classid, bool iGroupOwner, bool isClassGroup = true)
 	{
@@ -2470,6 +3032,8 @@ private:
 	class HeatmapViewDialog* heatmapViewDlg = nullptr; // 热力图显示窗口
 	QList<struct SegmentRange> m_segments; // 分段区间列表
 	int m_heatmapType = 1; // 1=分段，2=渐变
+	QString m_selectedAttribute; // 选定的属性名称（用于分段图）
+	QString m_selectedTable; // 选定的表格名称（Excel文件名，用于分段图）
 	
 	// 随机点名相关
 	class RandomCallDialog* randomCallDlg = nullptr; // 随机点名对话框
@@ -3593,14 +4157,41 @@ inline void ScheduleDialog::showStudentAttributeDialog(int row, int col)
 	// 创建并显示学生属性对话框
 	StudentAttributeDialog* dialog = new StudentAttributeDialog(this);
 	
-	// 动态收集所有属性名称（从学生属性中获取）
-	QList<QString> availableAttributes;
+	// 动态收集所有属性名称（从所有Excel文件的属性中获取）
+	QSet<QString> attributeSet; // 使用Set避免重复
+	
+	// 从 attributesByExcel 中收集
+	for (auto excelIt = student.attributesByExcel.begin(); excelIt != student.attributesByExcel.end(); ++excelIt) {
+		const QMap<QString, double>& excelAttrs = excelIt.value();
+		for (auto it = excelAttrs.begin(); it != excelAttrs.end(); ++it) {
+			QString attrName = it.key();
+			if (!attrName.isEmpty()) {
+				attributeSet.insert(attrName);
+			}
+		}
+	}
+	
+	// 从 attributesFull 中收集（复合键名）
+	for (auto it = student.attributesFull.begin(); it != student.attributesFull.end(); ++it) {
+		QString compositeKey = it.key();
+		int underscorePos = compositeKey.lastIndexOf('_');
+		if (underscorePos > 0) {
+			QString attrName = compositeKey.left(underscorePos);
+			if (!attrName.isEmpty()) {
+				attributeSet.insert(attrName);
+			}
+		}
+	}
+	
+	// 向后兼容：从 attributes 中收集
 	for (auto it = student.attributes.begin(); it != student.attributes.end(); ++it) {
 		QString attrName = it.key();
 		if (!attrName.isEmpty()) {
-			availableAttributes.append(attrName);
+			attributeSet.insert(attrName);
 		}
 	}
+	
+	QList<QString> availableAttributes = attributeSet.values();
 	
 	// 如果没有属性，至少显示学生姓名（但这种情况应该很少见）
 	if (availableAttributes.isEmpty()) {
@@ -3614,17 +4205,20 @@ inline void ScheduleDialog::showStudentAttributeDialog(int row, int col)
 }
 
 // 从学生信息中提取字段值（若不存在则返回0）
+// 使用新的优先级：attributesByExcel → attributesFull → attributes
 inline double ScheduleDialog::extractStudentValue(const StudentInfo& stu, const QString& field) const
 {
 	if (field == "总分" || field == "total_score") {
-		if (stu.attributes.contains("总分")) return stu.attributes.value("总分");
-		if (stu.attributes.contains("total_score")) return stu.attributes.value("total_score");
+		// 使用辅助函数获取"总分"的值
+		double total = stu.getAttributeValue("总分");
+		if (total > 0.0) return total;
+		// 尝试 total_score
+		total = stu.getAttributeValue("total_score");
+		if (total > 0.0) return total;
 		return stu.score;
 	}
-	if (stu.attributes.contains(field)) {
-		return stu.attributes.value(field);
-	}
-	return 0.0;
+	// 使用辅助函数获取字段值（优先级：attributesByExcel → attributesFull → attributes）
+	return stu.getAttributeValue(field);
 }
 
 // 按“等分→轮抽”方式组队（groupSize=2/4/6）
@@ -5164,7 +5758,7 @@ inline void ScheduleDialog::sendPostClassEvaluationContent(const QString& subjec
 }
 
 // 下载Excel文件
-inline void ScheduleDialog::downloadExcelFile(const QString& url, const QString& saveDir, const QString& filename)
+inline void ScheduleDialog::downloadExcelFile(const QString& url, const QString& saveDir, const QString& filename, std::function<void()> onCompleted)
 {
 	if (!m_networkManager) {
 		qWarning() << "网络管理器未初始化";
@@ -5175,34 +5769,70 @@ inline void ScheduleDialog::downloadExcelFile(const QString& url, const QString&
 	QNetworkRequest request(fileUrl);
 	QNetworkReply* reply = m_networkManager->get(request);
 	
-	// 构建保存路径
-	QString filePath = saveDir + "/" + filename;
-	
 	// 连接下载完成信号
 	connect(reply, &QNetworkReply::finished, this, [=]() {
+		bool success = false;
 		if (reply->error() == QNetworkReply::NoError) {
-			// 确保目录存在
+			// 确保目录存在（使用绝对路径）
 			QDir dir;
-			if (!dir.exists(saveDir)) {
-				dir.mkpath(saveDir);
+			QString absoluteSaveDir = QDir(saveDir).absolutePath();
+			if (!dir.exists(absoluteSaveDir)) {
+				dir.mkpath(absoluteSaveDir);
+				qDebug() << "创建保存目录:" << absoluteSaveDir;
 			}
 			
-			// 保存文件
-			QFile file(filePath);
+			// 保存文件（使用绝对路径）
+			QString absoluteFilePath = QDir(saveDir).absoluteFilePath(filename);
+			QFile file(absoluteFilePath);
 			if (file.open(QIODevice::WriteOnly)) {
 				file.write(reply->readAll());
 				file.close();
-				qDebug() << "Excel文件下载成功:" << filePath;
+				QString msg = QString("[Excel下载] Excel文件下载成功: %1").arg(absoluteFilePath);
+				qDebug() << msg;
+				writeLogToFile(msg);
+				success = true;
 			} else {
-				qWarning() << "无法保存文件:" << filePath;
+				QString msg = QString("[Excel下载] 无法保存文件: %1").arg(absoluteFilePath);
+				qWarning() << msg;
+				writeLogToFile(msg);
 			}
 		} else {
-			qWarning() << "下载Excel文件失败:" << reply->errorString() << "URL:" << url;
+			QString msg = QString("[Excel下载] 下载Excel文件失败: %1 URL: %2").arg(reply->errorString()).arg(url);
+			qWarning() << msg;
+			writeLogToFile(msg);
+		}
+		
+		// 调用完成回调（无论成功或失败都调用，以便跟踪下载进度）
+		if (onCompleted) {
+			onCompleted();
 		}
 		
 		reply->deleteLater();
 	});
 	
-	qDebug() << "开始下载Excel文件:" << url << "保存到:" << filePath;
+	QString filePath = QDir(saveDir).absoluteFilePath(filename);
+	QString msg = QString("[Excel下载] 开始下载Excel文件: %1 保存到: %2").arg(url).arg(filePath);
+	qDebug() << msg;
+	writeLogToFile(msg);
+}
+
+// 写入日志到文件
+inline void ScheduleDialog::writeLogToFile(const QString& message)
+{
+	QString logDir = QCoreApplication::applicationDirPath() + "/logs";
+	QDir dir;
+	if (!dir.exists(logDir)) {
+		dir.mkpath(logDir);
+	}
+	
+	QString logFile = logDir + "/excel_download_" + QDate::currentDate().toString("yyyyMMdd") + ".log";
+	QFile file(logFile);
+	if (file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+		QTextStream out(&file);
+		out.setCodec("UTF-8");
+		QString timestamp = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
+		out << "[" << timestamp << "] " << message << "\n";
+		file.close();
+	}
 }
 
