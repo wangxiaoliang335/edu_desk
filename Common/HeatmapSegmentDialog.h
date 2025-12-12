@@ -26,7 +26,13 @@ class HeatmapTableWidget : public QTableWidget
 {
     Q_OBJECT
 public:
-    explicit HeatmapTableWidget(QWidget* parent = nullptr) : QTableWidget(parent) {}
+    explicit HeatmapTableWidget(QWidget* parent = nullptr) : QTableWidget(parent) {
+        //// 尝试找到角按钮并安装事件过滤器，用于自定义绘制
+        //QAbstractButton* cornerBtn = findChild<QAbstractButton*>();
+        //if (cornerBtn) {
+        //    cornerBtn->installEventFilter(this);
+        //}
+    }
     
     void setSegments(const QList<SegmentRange>& segments) {
         m_segments = segments;
@@ -34,44 +40,36 @@ public:
     }
     
 protected:
-    void paintEvent(QPaintEvent* event) override {
-        // 先调用父类绘制表格内容
-        QTableWidget::paintEvent(event);
-        
-        // 在表格背景上绘制热力图
-        if (!m_segments.isEmpty()) {
-            QPainter painter(viewport());
-            painter.setRenderHint(QPainter::Antialiasing);
-            
-            // 绘制每行的热力图背景
-            for (int row = 0; row < rowCount(); ++row) {
-                QTableWidgetItem* firstItem = item(row, 0);
-                if (!firstItem) continue;
-                
-                QRect rowRect = visualItemRect(firstItem);
-                // 扩展行矩形以覆盖整行
-                for (int col = 0; col < columnCount(); ++col) {
-                    QTableWidgetItem* colItem = item(row, col);
-                    if (colItem) {
-                        QRect colRect = visualItemRect(colItem);
-                        rowRect = rowRect.united(colRect);
-                    }
-                }
-                
-                if (rowRect.isValid()) {
-                    // 获取该行对应的分段颜色
-                    QColor rowColor = getRowColor(row);
-                    if (rowColor.isValid()) {
-                        // 绘制整行的背景色（渐变效果）
-                        QLinearGradient gradient(rowRect.left(), rowRect.top(), rowRect.right(), rowRect.top());
-                        gradient.setColorAt(0, rowColor);
-                        gradient.setColorAt(1, rowColor.darker(110)); // 稍微变深
-                        painter.fillRect(rowRect, gradient);
-                    }
-                }
-            }
-        }
-    }
+    //void paintEvent(QPaintEvent* event) override {
+    //    // 先绘制整体背景，避免角落区域被白色覆盖
+    //    QPainter bgPainter(this);
+    //    bgPainter.fillRect(rect(), QColor(30, 30, 30)); // #1e1e1e
+    //    
+    //    // 再绘制数据区 viewport 背景
+    //    QPainter vpPainter(viewport());
+    //    vpPainter.fillRect(viewport()->rect(), QColor(30, 30, 30)); // #1e1e1e
+    //    
+    //    // 调用父类绘制单元格、表头等
+    //    QTableWidget::paintEvent(event);
+    //    
+    //    // 注意：颜色列（第3列）保持按钮的原始颜色，其他列通过 ensureCellColors() 设置为灰色
+    //}
+
+    //// 事件过滤器，用于自定义绘制角按钮
+    //bool eventFilter(QObject* watched, QEvent* event) override
+    //{
+    //    if (event->type() == QEvent::Paint) {
+    //        QAbstractButton* btn = qobject_cast<QAbstractButton*>(watched);
+    //        if (btn) { // 角按钮区域自绘
+    //            QPainter p(btn);
+    //            p.fillRect(btn->rect(), QColor(30, 30, 30)); // #1e1e1e
+    //            p.setPen(QColor(62, 62, 66)); // #3e3e42
+    //            p.drawRect(btn->rect().adjusted(0, 0, -1, -1));
+    //            return true; // 阻止默认绘制
+    //        }
+    //    }
+    //    return QTableWidget::eventFilter(watched, event);
+    //}
     
 private:
     QList<SegmentRange> m_segments;

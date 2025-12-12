@@ -56,10 +56,29 @@ HeatmapSegmentDialog::HeatmapSegmentDialog(QWidget* parent)
     QStringList headers = { "最小值", "-", "最大值", "颜色", "人数", "百分数" };
     table->setHorizontalHeaderLabels(headers);
     table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    // 添加样式表
     table->setStyleSheet(
-        "QTableWidget { background-color: #1f1f1f; gridline-color: #444; color: white; }"
-        "QTableWidget::item { padding: 5px; }"
-        "QHeaderView::section { background-color: #3a3a3a; color: white; font-weight: bold; padding: 8px; }"
+        "QTableWidget {"
+        "   background-color: #1e1e1e;"      /* 整体背景灰 */
+        "   color: #d4d4d4;"
+        "   border: 1px solid #3e3e42;"
+        "   gridline-color: #3e3e42;"
+        "   selection-background-color: #094771;" /* 选中色，会被Delegate覆盖，但在Delegate里要处理Selected状态 */
+        "}"
+
+        /* 关键点 1：设置左上角按钮的颜色 */
+        "QTableWidget QTableCornerButton::section {"
+        "   background-color: #252526;"      /* 这里设置成你想要的灰色 */
+        "   border: 1px solid #3e3e42;"
+        "}"
+
+        "QHeaderView::section {"
+        "   background-color: #252526;"
+        "   color: #cccccc;"
+        "   font-weight: bold;"
+        "   border: 1px solid #3e3e42;"
+        "   padding: 4px;"
+        "}"
     );
 
     // 初始化默认分段：0-60, 60-80, 80-100
@@ -90,8 +109,10 @@ HeatmapSegmentDialog::HeatmapSegmentDialog(QWidget* parent)
         if (row == 0) defaultColor = QColor(255, 255, 200); // 浅黄色
         else if (row == 1) defaultColor = QColor(255, 165, 0); // 橙色
         else defaultColor = QColor(255, 0, 0); // 红色
-        colorBtn->setStyleSheet(QString("background-color: %1; border: 1px solid #555; min-width: 50px; min-height: 30px;").arg(defaultColor.name()));
+        colorBtn->setStyleSheet(QString("QPushButton { background-color: %1; border: 1px solid #3e3e42; }").arg(defaultColor.name()));
+        colorBtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
         table->setCellWidget(row, 3, colorBtn);
+        colorBtn->update(); // 强制更新按钮样式
         connect(colorBtn, &QPushButton::clicked, this, [this, row, colorBtn]() {
             // 从样式表中提取当前颜色
             QString style = colorBtn->styleSheet();
@@ -103,7 +124,8 @@ HeatmapSegmentDialog::HeatmapSegmentDialog(QWidget* parent)
             QColor color = QColorDialog::getColor(currentColor, this, "选择颜色");
             if (color.isValid()) {
                 updateTableHeatmap(); // 更新热力图显示
-                colorBtn->setStyleSheet(QString("background-color: %1; border: 1px solid #ccc; min-width: 50px; min-height: 30px;").arg(color.name()));
+                colorBtn->setStyleSheet(QString("QPushButton { background-color: %1; border: 1px solid #3e3e42; }").arg(color.name()));
+                colorBtn->update(); // 强制更新按钮样式
             }
         });
 
@@ -264,12 +286,15 @@ void HeatmapSegmentDialog::onAddRow()
     // 颜色按钮
     QPushButton* colorBtn = new QPushButton();
     QColor defaultColor = QColor(200, 200, 200); // 灰色
-    colorBtn->setStyleSheet(QString("background-color: %1; border: 1px solid #555; min-width: 50px; min-height: 30px;").arg(defaultColor.name()));
+    colorBtn->setStyleSheet(QString("QPushButton { background-color: %1; border: 1px solid #3e3e42; }").arg(defaultColor.name()));
+    colorBtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     table->setCellWidget(row, 3, colorBtn);
+    colorBtn->update(); // 强制更新按钮样式
     connect(colorBtn, &QPushButton::clicked, this, [this, row, colorBtn]() {
         QColor color = QColorDialog::getColor(colorBtn->palette().button().color(), this, "选择颜色");
         if (color.isValid()) {
-            colorBtn->setStyleSheet(QString("background-color: %1; border: 1px solid #ccc; min-width: 50px; min-height: 30px;").arg(color.name()));
+            colorBtn->setStyleSheet(QString("QPushButton { background-color: %1; border: 1px solid #3e3e42; }").arg(color.name()));
+            colorBtn->update(); // 强制更新按钮样式
         }
     });
 
@@ -552,7 +577,8 @@ void HeatmapSegmentDialog::setColorForRow(int row, const QColor& color)
 {
     QPushButton* colorBtn = qobject_cast<QPushButton*>(table->cellWidget(row, 3));
     if (colorBtn) {
-        colorBtn->setStyleSheet(QString("background-color: %1; border: 1px solid #ccc; min-width: 50px; min-height: 30px;").arg(color.name()));
+        colorBtn->setStyleSheet(QString("QPushButton { background-color: %1; border: 1px solid #3e3e42; }").arg(color.name()));
+        colorBtn->update(); // 强制更新按钮样式
     }
 }
 
