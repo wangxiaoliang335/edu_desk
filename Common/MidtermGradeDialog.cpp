@@ -22,6 +22,7 @@
 #include "CommonInfo.h"
 #include "ArrangeSeatDialog.h"
 #include "CommentStorage.h"
+#include "ScoreHeaderIdStorage.h"
 #include "QXlsx/header/xlsxdocument.h"
 #include <QStandardPaths>
 #include <QDir>
@@ -29,10 +30,54 @@
 #include <QApplication>
 #include <QDebug>
 #include <QDate>
+#include <QUrlQuery>
 #include <QHttpMultiPart>
 #include <QHttpPart>
 #include <QMimeDatabase>
 #include <QMimeType>
+#include <QFileInfo>
+
+static QString calcCurrentTerm()
+{
+    QDate currentDate = QDate::currentDate();
+    int year = currentDate.year();
+    int month = currentDate.month();
+
+    QString term;
+    // 9月-1月是上学期（第一学期），2月-8月是下学期（第二学期）
+    if (month >= 9 || month <= 1) {
+        if (month >= 9) {
+            term = QString("%1-%2-1").arg(year).arg(year + 1);
+        } else {
+            term = QString("%1-%2-1").arg(year - 1).arg(year);
+        }
+    } else {
+        term = QString("%1-%2-2").arg(year - 1).arg(year);
+    }
+    return term;
+}
+
+static QString resolveExamName(const QString& titleOrName)
+{
+    // 允许传入“期中成绩单.xlsx / 期中成绩表 / ...”，统一推导 exam_name
+    QString s = titleOrName.trimmed();
+    if (s.isEmpty()) return s;
+
+    // 去扩展名
+    QFileInfo fi(s);
+    if (fi.suffix().toLower() == "xlsx" || fi.suffix().toLower() == "xls" || fi.suffix().toLower() == "csv") {
+        s = fi.baseName();
+    }
+
+    // 规则：将“成绩单/成绩表”转换为“考试”（避免写死“期中考试”）
+    if (s.contains(QString::fromUtf8(u8"成绩单"))) {
+        s.replace(QString::fromUtf8(u8"成绩单"), QString::fromUtf8(u8"考试"));
+    }
+    if (s.contains(QString::fromUtf8(u8"成绩表"))) {
+        s.replace(QString::fromUtf8(u8"成绩表"), QString::fromUtf8(u8"考试"));
+    }
+    return s.trimmed();
+}
 
 MidtermGradeDialog::MidtermGradeDialog(QString classid, QWidget* parent) : QDialog(parent)
 {
@@ -318,23 +363,12 @@ void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStr
                 
                 // 如果学号不为空，尝试从全局存储中获取注释
                 if (!studentId.isEmpty() && m_classid.isEmpty() == false) {
-                    // 计算学期
-                    QDate currentDate = QDate::currentDate();
-                    int year = currentDate.year();
-                    int month = currentDate.month();
-                    QString term;
-                    if (month >= 9 || month <= 1) {
-                        if (month >= 9) {
-                            term = QString("%1-%2-1").arg(year).arg(year + 1);
-                        } else {
-                            term = QString("%1-%2-1").arg(year - 1).arg(year);
-                        }
-                    } else {
-                        term = QString("%1-%2-2").arg(year - 1).arg(year);
-                    }
+                    const QString term = calcCurrentTerm();
+                    // exam_name 由当前表格标题/文件名推导
+                    const QString examName = resolveExamName(windowTitle().isEmpty() ? m_excelFileName : windowTitle());
                     
                     // 从全局存储中获取注释
-                    QString comment = CommentStorage::getComment(m_classid, "期中考试", term, studentId, headerText);
+                    QString comment = CommentStorage::getComment(m_classid, examName, term, studentId, headerText);
                     if (!comment.isEmpty()) {
                         item->setData(Qt::UserRole, comment);
                     }
@@ -702,31 +736,20 @@ void MidtermGradeDialog::onUpload()
         return;
     }
 
-    // 考试名称默认为"期中考试"
-    QString examName = "期中考试";
+    // 考试名称：从窗口标题/文件名推导（避免写死）
+    QString examName = resolveExamName(windowTitle().isEmpty() ? m_excelFileName : windowTitle());
+    if (examName.isEmpty()) {
+        QMessageBox::warning(this, QString::fromUtf8(u8"错误"), QString::fromUtf8(u8"考试名称为空，无法上传！"));
+        return;
+    }
 
     // 根据当前日期计算学期
-    QDate currentDate = QDate::currentDate();
-    int year = currentDate.year();
-    int month = currentDate.month();
-    
-    QString term;
-    // 9月-1月是上学期（第一学期），2月-8月是下学期（第二学期）
-    if (month >= 9 || month <= 1) {
-        // 上学期：如果月份是9-12月，学年是 year-year+1-1；如果是1月，学年是 year-1-year-1
-        if (month >= 9) {
-            term = QString("%1-%2-1").arg(year).arg(year + 1);
-        } else {
-            term = QString("%1-%2-1").arg(year - 1).arg(year);
-        }
-    } else {
-        // 下学期：2-8月，学年是 year-1-year-2
-        term = QString("%1-%2-2").arg(year - 1).arg(year);
-    }
-    
-    qDebug() << "当前日期:" << currentDate.toString("yyyy-MM-dd") << "，计算出的学期:" << term;
+    QString term = calcCurrentTerm();
+    qDebug() << "计算出的学期:" << term;
 
     // 备注（可选）
+    QDate currentDate = QDate::currentDate();
+    int month = currentDate.month();
     QString remark = QString("%1年%2学期期中考试")
                      .arg(currentDate.year())
                      .arg(month >= 9 || month <= 1 ? "第一" : "第二");
@@ -1107,6 +1130,38 @@ void MidtermGradeDialog::onCellEntered(int row, int column)
     QTableWidgetItem* item = table->item(row, column);
     if (item && commentWidget) {
         QString comment = item->data(Qt::UserRole).toString();
+        // 懒加载：如果单元格还没填充注释（UserRole为空），从全局缓存读取一次
+        if (comment.isEmpty() && !m_classid.isEmpty()) {
+            // 固定列不支持注释
+            QTableWidgetItem* headerItem = table->horizontalHeaderItem(column);
+            QString fieldName = headerItem ? headerItem->text() : "";
+            if (!fieldName.isEmpty() && fieldName != "学号" && fieldName != "姓名" && fieldName != "总分") {
+                // 找到学号列
+                int colId = -1;
+                for (int c = 0; c < table->columnCount(); ++c) {
+                    QTableWidgetItem* h = table->horizontalHeaderItem(c);
+                    if (h && h->text() == "学号") { colId = c; break; }
+                }
+                QString studentId;
+                if (colId >= 0) {
+                    QTableWidgetItem* idItem = table->item(row, colId);
+                    if (idItem) studentId = idItem->text().trimmed();
+                }
+                if (!studentId.isEmpty()) {
+                    const QString term = calcCurrentTerm();
+                    comment = CommentStorage::getComment(m_classid, term, studentId, fieldName);
+                    // 兼容：如果缓存里是复合键名，也尝试读一次
+                    if (comment.isEmpty() && !m_excelFileName.isEmpty()) {
+                        QString compositeKey = QString("%1_%2").arg(fieldName).arg(m_excelFileName);
+                        comment = CommentStorage::getComment(m_classid, term, studentId, compositeKey);
+                    }
+                    if (!comment.isEmpty()) {
+                        item->setData(Qt::UserRole, comment);
+                        item->setBackground(QBrush(QColor(255, 255, 200))); // 浅黄色提示有注释
+                    }
+                }
+            }
+        }
         QRect cellRect = table->visualItemRect(item);
         commentWidget->showComment(comment, cellRect, table);
         commentWidget->cancelHide();
@@ -1442,6 +1497,19 @@ void MidtermGradeDialog::showCellComment(int row, int column)
     }
 
     QString currentComment = item->data(Qt::UserRole).toString();
+    // 懒加载：右键编辑前，若当前为空则从全局缓存补一次（避免 importData 先于缓存写入导致的空白）
+    if (currentComment.isEmpty() && !m_classid.isEmpty() && !studentId.isEmpty() && !fieldName.isEmpty()) {
+        const QString term = calcCurrentTerm();
+        currentComment = CommentStorage::getComment(m_classid, term, studentId, fieldName);
+        if (currentComment.isEmpty() && !m_excelFileName.isEmpty()) {
+            QString compositeKey = QString("%1_%2").arg(fieldName).arg(m_excelFileName);
+            currentComment = CommentStorage::getComment(m_classid, term, studentId, compositeKey);
+        }
+        if (!currentComment.isEmpty()) {
+            item->setData(Qt::UserRole, currentComment);
+            item->setBackground(QBrush(QColor(255, 255, 200)));
+        }
+    }
     bool ok;
     QString comment = CommentInputDialog::getMultiLineText(this, "单元格注释", 
                                                            QString("单元格 (%1, %2) 的注释:").arg(row + 1).arg(column + 1),
@@ -1532,6 +1600,35 @@ bool MidtermGradeDialog::eventFilter(QObject *obj, QEvent *event)
                 int row = item->row();
                 int col = item->column();
                 QString comment = item->data(Qt::UserRole).toString();
+                // 懒加载：鼠标移动到单元格时再从全局缓存补注释
+                if (comment.isEmpty() && !m_classid.isEmpty()) {
+                    QTableWidgetItem* headerItem = table->horizontalHeaderItem(col);
+                    QString fieldName = headerItem ? headerItem->text() : "";
+                    if (!fieldName.isEmpty() && fieldName != "学号" && fieldName != "姓名" && fieldName != "总分") {
+                        int colId = -1;
+                        for (int c = 0; c < table->columnCount(); ++c) {
+                            QTableWidgetItem* h = table->horizontalHeaderItem(c);
+                            if (h && h->text() == "学号") { colId = c; break; }
+                        }
+                        QString studentId;
+                        if (colId >= 0) {
+                            QTableWidgetItem* idItem = table->item(row, colId);
+                            if (idItem) studentId = idItem->text().trimmed();
+                        }
+                        if (!studentId.isEmpty()) {
+                            const QString term = calcCurrentTerm();
+                            comment = CommentStorage::getComment(m_classid, term, studentId, fieldName);
+                            if (comment.isEmpty() && !m_excelFileName.isEmpty()) {
+                                QString compositeKey = QString("%1_%2").arg(fieldName).arg(m_excelFileName);
+                                comment = CommentStorage::getComment(m_classid, term, studentId, compositeKey);
+                            }
+                            if (!comment.isEmpty()) {
+                                item->setData(Qt::UserRole, comment);
+                                item->setBackground(QBrush(QColor(255, 255, 200)));
+                            }
+                        }
+                    }
+                }
                 QRect cellRect = table->visualItemRect(item);
                 commentWidget->showComment(comment, cellRect, table);
                 commentWidget->cancelHide();
@@ -1584,6 +1681,75 @@ void MidtermGradeDialog::showEvent(QShowEvent *event)
 void MidtermGradeDialog::setCommentToServer(const QString& studentName, const QString& studentId, 
                                             const QString& fieldName, const QString& comment)
 {
+    // 若 score_header_id 还没赋值（未上传过），尝试从全局缓存/服务器补齐
+    if (m_scoreHeaderId <= 0) {
+        const QString term = calcCurrentTerm();
+        const QString examName = resolveExamName(windowTitle().isEmpty() ? m_excelFileName : windowTitle());
+        if (examName.isEmpty()) {
+            qDebug() << "MidtermGradeDialog: examName 为空，无法获取/设置注释";
+            return;
+        }
+
+        // 1) 先从全局缓存取
+        int cached = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, examName, term);
+        if (cached > 0) {
+            m_scoreHeaderId = cached;
+            qDebug() << "MidtermGradeDialog: 从 ScoreHeaderIdStorage 取到 score_header_id=" << m_scoreHeaderId;
+        }
+
+        // 2) 还没有就拉一次 /student-scores 获取 headers[0].id
+        if (m_scoreHeaderId <= 0) {
+            if (m_fetchingScoreHeaderId) {
+                qDebug() << "MidtermGradeDialog: 正在拉取 score_header_id，稍后再试";
+                return;
+            }
+            m_fetchingScoreHeaderId = true;
+
+            QUrl url("http://47.100.126.194:5000/student-scores");
+            QUrlQuery q;
+            q.addQueryItem("class_id", m_classid);
+            q.addQueryItem("exam_name", examName);
+            q.addQueryItem("term", term);
+            url.setQuery(q);
+
+            QNetworkRequest req(url);
+            QNetworkReply* r = networkManager->get(req);
+            connect(r, &QNetworkReply::finished, this, [=]() {
+                m_fetchingScoreHeaderId = false;
+                if (r->error() == QNetworkReply::NoError) {
+                    QByteArray bytes = r->readAll();
+                    QJsonDocument doc = QJsonDocument::fromJson(bytes);
+                    if (doc.isObject()) {
+                        QJsonObject root = doc.object();
+                        QJsonObject dataObj = root.value("data").toObject();
+                        int sid = -1;
+                        if (dataObj.contains("headers") && dataObj.value("headers").isArray()) {
+                            QJsonArray headers = dataObj.value("headers").toArray();
+                            if (!headers.isEmpty() && headers.first().isObject()) {
+                                QJsonObject headerObj = headers.first().toObject();
+                                sid = headerObj.value("score_header_id").toInt(-1);
+                                if (sid <= 0) sid = headerObj.value("id").toInt(-1);
+                            }
+                        }
+                        if (sid > 0) {
+                            m_scoreHeaderId = sid;
+                            ScoreHeaderIdStorage::saveScoreHeaderId(m_classid, examName, term, m_scoreHeaderId);
+                            qDebug() << "MidtermGradeDialog: 拉取到 score_header_id=" << m_scoreHeaderId;
+                            // 继续执行本次注释提交
+                            setCommentToServer(studentName, studentId, fieldName, comment);
+                        } else {
+                            qDebug() << "MidtermGradeDialog: 响应中未找到 score_header_id";
+                        }
+                    }
+                } else {
+                    qDebug() << "MidtermGradeDialog: 拉取 score_header_id 失败:" << r->errorString();
+                }
+                r->deleteLater();
+            });
+            return;
+        }
+    }
+
     // 检查 score_header_id 是否有效
     if (m_scoreHeaderId <= 0) {
         qDebug() << "score_header_id 无效，无法设置注释到服务器";

@@ -397,7 +397,7 @@ public:
                             }
                             
                             // 从全局存储中获取注释
-                            QString comment = CommentStorage::getComment(m_classid, "期中考试", term, studentId, headerText);
+                            QString comment = CommentStorage::getComment(m_classid, term, studentId, headerText);
                             if (!comment.isEmpty()) {
                                 table->item(row, targetCol)->setData(Qt::UserRole, comment);
                             }

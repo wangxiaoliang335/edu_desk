@@ -1,14 +1,44 @@
 #include "StudentAttributeDialog.h"
+#include "ScheduleDialog.h"
+#include "ScoreHeaderIdStorage.h"
+#include "CommentStorage.h"
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QDebug>
 #include <QMap>
 #include <QApplication>
+#include <QLayoutItem>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QUrl>
+#include <QUrlQuery>
+
+static void clearLayoutRecursive(QLayout* layout)
+{
+    if (!layout) return;
+    while (QLayoutItem* item = layout->takeAt(0)) {
+        if (QWidget* w = item->widget()) {
+            // 这里必须立即销毁，否则在重建UI时控件可能短暂“脱离布局”漂到顶部
+            delete w;
+        }
+        if (QLayout* childLayout = item->layout()) {
+            // 注意：不要在这里 delete childLayout。
+            // childLayout 的生命周期由其父对象/父layout item管理，手动 delete 容易导致 double free。
+            clearLayoutRecursive(childLayout);
+        }
+        delete item;
+    }
+}
 
 StudentAttributeDialog::StudentAttributeDialog(QWidget* parent)
     : QDialog(parent)
     , m_selectedAttribute("")
     , m_currentEditingAttribute("")
+    , m_selectedExcelTable("")
 {
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     setStyleSheet("background-color: #808080;"); // 灰色背景
@@ -46,6 +76,21 @@ StudentAttributeDialog::StudentAttributeDialog(QWidget* parent)
     m_titleLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     outerLayout->addWidget(m_titleLabel);
 
+    // Excel表格选择（仅显示下拉框；不显示“表格：”label）
+    QHBoxLayout* excelLayout = new QHBoxLayout;
+    excelLayout->setSpacing(10);
+    m_excelComboBox = new QComboBox(this);
+    m_excelComboBox->setStyleSheet(
+        "QComboBox { color: white; background-color: #666666; padding: 6px 10px; border-radius: 4px; border: 1px solid #555; }"
+        "QComboBox QAbstractItemView { color: white; background-color: #666666; selection-background-color: #00cc00; }"
+    );
+    m_excelComboBox->hide();
+    connect(m_excelComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &StudentAttributeDialog::onExcelTableChanged);
+
+    excelLayout->addWidget(m_excelComboBox, 1);
+    outerLayout->addLayout(excelLayout);
+
     // 主内容区域
     m_mainLayout = new QVBoxLayout;
     m_mainLayout->setSpacing(10);
@@ -54,46 +99,227 @@ StudentAttributeDialog::StudentAttributeDialog(QWidget* parent)
     outerLayout->addStretch();
 }
 
+void StudentAttributeDialog::setScoreContext(const QString& classId, const QString& examName, const QString& term)
+{
+    m_classId = classId;
+    m_examName = examName;
+    m_term = term;
+    m_scoreHeaderId = ScoreHeaderIdStorage::getScoreHeaderId(m_classId, m_examName, m_term);
+    qDebug() << "StudentAttributeDialog score context:" << m_classId << m_examName << m_term
+             << "score_header_id=" << m_scoreHeaderId;
+
+    // 如果还没有缓存到 score_header_id，后台尝试拉取一次（不打断用户）
+    if (m_scoreHeaderId <= 0 && !m_classId.isEmpty() && !m_examName.isEmpty() && !m_term.isEmpty()) {
+        fetchScoreHeaderIdFromServer(nullptr);
+    }
+}
+
+void StudentAttributeDialog::fetchScoreHeaderIdFromServer(std::function<void(bool)> onDone)
+{
+    if (m_scoreHeaderId > 0) {
+        if (onDone) onDone(true);
+        return;
+    }
+    if (m_classId.isEmpty() || m_examName.isEmpty() || m_term.isEmpty()) {
+        qDebug() << "fetchScoreHeaderIdFromServer: context missing";
+        if (onDone) onDone(false);
+        return;
+    }
+
+    QUrl url("http://47.100.126.194:5000/student-scores");
+    QUrlQuery q;
+    q.addQueryItem("class_id", m_classId);
+    q.addQueryItem("exam_name", m_examName);
+    q.addQueryItem("term", m_term);
+    url.setQuery(q);
+
+    QNetworkAccessManager* networkManager = new QNetworkAccessManager(this);
+    QNetworkRequest req(url);
+    QNetworkReply* reply = networkManager->get(req);
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply, networkManager, onDone]() {
+        bool ok = false;
+        if (reply->error() == QNetworkReply::NoError) {
+            const QByteArray bytes = reply->readAll();
+            QJsonDocument doc = QJsonDocument::fromJson(bytes);
+            if (doc.isObject()) {
+                QJsonObject root = doc.object();
+                QJsonObject dataObj = root.value("data").toObject();
+
+                // 尽可能兼容不同返回：data.headers[] / data.header / data.id / data.score_header_id
+                int scoreHeaderId = -1;
+                if (dataObj.contains("headers") && dataObj.value("headers").isArray()) {
+                    QJsonArray headers = dataObj.value("headers").toArray();
+                    if (!headers.isEmpty() && headers.first().isObject()) {
+                        QJsonObject headerObj = headers.first().toObject();
+                        if (headerObj.contains("score_header_id")) scoreHeaderId = headerObj.value("score_header_id").toInt(-1);
+                        if (scoreHeaderId <= 0 && headerObj.contains("id")) scoreHeaderId = headerObj.value("id").toInt(-1);
+                    }
+                }
+                if (scoreHeaderId <= 0 && dataObj.contains("header") && dataObj.value("header").isObject()) {
+                    QJsonObject headerObj = dataObj.value("header").toObject();
+                    if (headerObj.contains("score_header_id")) scoreHeaderId = headerObj.value("score_header_id").toInt(-1);
+                    if (scoreHeaderId <= 0 && headerObj.contains("id")) scoreHeaderId = headerObj.value("id").toInt(-1);
+                }
+                if (scoreHeaderId <= 0 && dataObj.contains("score_header_id")) {
+                    scoreHeaderId = dataObj.value("score_header_id").toInt(-1);
+                }
+                if (scoreHeaderId <= 0 && dataObj.contains("id")) {
+                    scoreHeaderId = dataObj.value("id").toInt(-1);
+                }
+
+                if (scoreHeaderId > 0) {
+                    m_scoreHeaderId = scoreHeaderId;
+                    ScoreHeaderIdStorage::saveScoreHeaderId(m_classId, m_examName, m_term, m_scoreHeaderId);
+                    ok = true;
+                    qDebug() << "fetchScoreHeaderIdFromServer ok, id=" << m_scoreHeaderId;
+                } else {
+                    qDebug() << "fetchScoreHeaderIdFromServer: no score_header_id in response";
+                }
+            } else {
+                qDebug() << "fetchScoreHeaderIdFromServer: response is not JSON object";
+            }
+        } else {
+            qDebug() << "fetchScoreHeaderIdFromServer network error:" << reply->errorString();
+        }
+
+        reply->deleteLater();
+        networkManager->deleteLater();
+        if (onDone) onDone(ok);
+    });
+}
+
 void StudentAttributeDialog::setStudentInfo(const struct StudentInfo& student)
 {
     m_student = student;
-    
-    // 清空现有内容
-    QLayoutItem* item;
-    while ((item = m_mainLayout->takeAt(0)) != nullptr) {
-        if (item->widget()) {
-            item->widget()->deleteLater();
-        }
-        delete item;
-    }
-    m_attributeValueButtons.clear();
-    m_annotationButtons.clear();
-    m_valueEdits.clear();
-    
-    // 如果没有可用属性列表，使用默认属性
-    if (m_availableAttributes.isEmpty()) {
-        m_availableAttributes = QStringList() << "背诵" << "语文" << "数学" << "英语";
-    }
-    
-    // 为每个属性创建一行
-    for (const QString& attrName : m_availableAttributes) {
-        // 使用新的辅助函数获取属性值（优先级：attributesByExcel → attributesFull → attributes）
-        double value = m_student.getAttributeValue(attrName);
-        if (value == 0.0 && !m_student.attributes.contains(attrName) && 
-            !m_student.attributesByExcel.isEmpty() && !m_student.attributesFull.isEmpty()) {
-            // 如果属性不存在，尝试从score获取（用于兼容旧数据）
-            if (attrName == "总分" || attrName == "数学") {
-                value = m_student.score;
-            }
-        }
-        
-        updateAttributeRow(attrName, value, false);
-    }
+    rebuildAttributeRows();
 }
 
 void StudentAttributeDialog::setAvailableAttributes(const QList<QString>& attributes)
 {
     m_availableAttributes = attributes;
+}
+
+void StudentAttributeDialog::setExcelTables(const QStringList& tables)
+{
+    m_excelTables = tables;
+    if (!m_excelComboBox) return;
+
+    m_excelComboBox->blockSignals(true);
+    m_excelComboBox->clear();
+    for (const QString& t : m_excelTables) {
+        if (t.trimmed().isEmpty()) continue;
+        m_excelComboBox->addItem(t, t);
+    }
+    if (m_excelComboBox->count() == 0) {
+        m_excelComboBox->addItem(QString::fromUtf8(u8"暂无表格"), QString());
+        m_excelComboBox->setEnabled(false);
+    } else {
+        m_excelComboBox->setEnabled(true);
+    }
+    m_excelComboBox->blockSignals(false);
+
+    // 始终显示下拉框（即使暂无数据也显示占位）
+    m_excelComboBox->setVisible(true);
+
+    // 选中预设表格（若存在）；否则选中第一个有效表格
+    if (!m_selectedExcelTable.isEmpty()) {
+        int idx = m_excelComboBox->findData(m_selectedExcelTable);
+        if (idx >= 0) {
+            m_excelComboBox->setCurrentIndex(idx);
+        } else {
+            m_selectedExcelTable.clear();
+            m_excelComboBox->setCurrentIndex(0);
+            m_selectedExcelTable = m_excelComboBox->itemData(0).toString();
+        }
+    } else {
+        m_excelComboBox->setCurrentIndex(0);
+        m_selectedExcelTable = m_excelComboBox->itemData(0).toString();
+    }
+
+    rebuildAttributeRows();
+}
+
+void StudentAttributeDialog::setSelectedExcelTable(const QString& tableName)
+{
+    m_selectedExcelTable = tableName;
+    if (m_excelComboBox) {
+        int idx = m_excelComboBox->findData(m_selectedExcelTable);
+        if (idx >= 0) {
+            m_excelComboBox->setCurrentIndex(idx);
+        } else {
+            // 找不到就回退到第一个
+            m_excelComboBox->setCurrentIndex(0);
+            m_selectedExcelTable = m_excelComboBox->itemData(0).toString();
+        }
+    }
+}
+
+void StudentAttributeDialog::onExcelTableChanged(int index)
+{
+    if (!m_excelComboBox || index < 0) return;
+    m_selectedExcelTable = m_excelComboBox->itemData(index).toString();
+    if (m_selectedExcelTable.isEmpty()) {
+        // “暂无表格”等占位项
+        clearLayoutRecursive(m_mainLayout);
+        m_attributeValueButtons.clear();
+        m_annotationButtons.clear();
+        m_valueEdits.clear();
+        m_selectedAttribute.clear();
+        return;
+    }
+    rebuildAttributeRows();
+}
+
+QStringList StudentAttributeDialog::getDisplayAttributes() const
+{
+    // 需求：只显示当前选中表格的属性
+    QStringList attrs;
+    if (m_selectedExcelTable.isEmpty()) return attrs;
+
+    // 优先从父窗口（ScheduleDialog）按表头读取字段，保证字段齐全
+    if (auto* scheduleDlg = qobject_cast<ScheduleDialog*>(parent())) {
+        attrs = scheduleDlg->getAttributesForTable(m_selectedExcelTable);
+    }
+
+    // 回退：从学生数据里提取（可能不完整）
+    if (attrs.isEmpty() && m_student.attributesByExcel.contains(m_selectedExcelTable)) {
+        attrs = m_student.attributesByExcel.value(m_selectedExcelTable).keys();
+    }
+    if (attrs.isEmpty()) {
+        for (auto it = m_student.attributesFull.begin(); it != m_student.attributesFull.end(); ++it) {
+            const QString key = it.key();
+            const int underscorePos = key.lastIndexOf('_');
+            if (underscorePos <= 0) continue;
+            const QString fieldName = key.left(underscorePos).trimmed();
+            const QString tableName = key.mid(underscorePos + 1).trimmed();
+            if (tableName == m_selectedExcelTable && !fieldName.isEmpty()) {
+                if (!attrs.contains(fieldName)) attrs.append(fieldName);
+            }
+        }
+    }
+
+    return attrs;
+}
+
+void StudentAttributeDialog::rebuildAttributeRows()
+{
+    if (!m_mainLayout) return;
+
+    clearLayoutRecursive(m_mainLayout);
+    m_attributeValueButtons.clear();
+    m_annotationButtons.clear();
+    m_valueEdits.clear();
+    m_selectedAttribute.clear();
+
+    const QStringList attrs = getDisplayAttributes();
+    for (const QString& attrName : attrs) {
+        const QString trimmed = attrName.trimmed();
+        if (trimmed.isEmpty()) continue;
+
+        const double value = m_student.getAttributeValue(trimmed, m_selectedExcelTable);
+        updateAttributeRow(trimmed, value, false);
+    }
 }
 
 void StudentAttributeDialog::updateAttributeRow(const QString& attributeName, double value, bool isHighlighted)
@@ -138,28 +364,35 @@ void StudentAttributeDialog::updateAttributeRow(const QString& attributeName, do
         // 点击属性标签时，选中该行
         clearAllHighlights();
         m_selectedAttribute = attributeName;
-        // 重新创建该行以显示高亮
-        // 使用新的辅助函数获取属性值（优先级：attributesByExcel → attributesFull → attributes）
-        double value = m_student.getAttributeValue(attributeName);
-        if (value == 0.0 && !m_student.attributes.contains(attributeName) && 
-            !m_student.attributesByExcel.isEmpty() && !m_student.attributesFull.isEmpty()) {
-            if (attributeName == "总分" || attributeName == "数学") {
-                value = m_student.score;
-            }
-        }
+        // 使用当前选择的Excel表格获取值
+        double value = m_student.getAttributeValue(attributeName, m_selectedExcelTable);
         // 找到该行并高亮
         if (m_attributeValueButtons.contains(attributeName)) {
             QPushButton* valueBtn = m_attributeValueButtons[attributeName];
-            valueBtn->setStyleSheet(
-                "QPushButton {"
-                "background-color: green;"
-                "color: white;"
-                "font-size: 14px;"
-                "padding: 8px 16px;"
-                "border: 3px solid yellow;"
-                "border-radius: 4px;"
-                "}"
-            );
+            if (attributeName == QString::fromUtf8(u8"总分")) {
+                // “总分”只读：保持灰色，只加高亮边框
+                valueBtn->setStyleSheet(
+                    "QPushButton {"
+                    "background-color: #4a4a4a;"
+                    "color: #dddddd;"
+                    "font-size: 14px;"
+                    "padding: 8px 16px;"
+                    "border: 3px solid yellow;"
+                    "border-radius: 4px;"
+                    "}"
+                );
+            } else {
+                valueBtn->setStyleSheet(
+                    "QPushButton {"
+                    "background-color: green;"
+                    "color: white;"
+                    "font-size: 14px;"
+                    "padding: 8px 16px;"
+                    "border: 3px solid yellow;"
+                    "border-radius: 4px;"
+                    "}"
+                );
+            }
         }
         if (attrLabel) {
             attrLabel->setStyleSheet(
@@ -179,22 +412,41 @@ void StudentAttributeDialog::updateAttributeRow(const QString& attributeName, do
     
     // 属性值（绿色方块，可点击编辑）
     QPushButton* valueBtn = new QPushButton(QString::number(value));
-    valueBtn->setStyleSheet(
-        "QPushButton {"
-        "background-color: green;"
-        "color: white;"
-        "font-size: 14px;"
-        "padding: 8px 16px;"
-        "border: none;"
-        "border-radius: 4px;"
-        "}"
-        "QPushButton:hover {"
-        "background-color: #00cc00;"
-        "}"
-    );
+
+    const bool isTotalScore = (attributeName == QString::fromUtf8(u8"总分"));
+    if (isTotalScore) {
+        // “总分”不可编辑
+        valueBtn->setEnabled(false);
+        valueBtn->setStyleSheet(
+            "QPushButton {"
+            "background-color: #4a4a4a;"
+            "color: #dddddd;"
+            "font-size: 14px;"
+            "padding: 8px 16px;"
+            "border: none;"
+            "border-radius: 4px;"
+            "}"
+        );
+    } else {
+        valueBtn->setStyleSheet(
+            "QPushButton {"
+            "background-color: green;"
+            "color: white;"
+            "font-size: 14px;"
+            "padding: 8px 16px;"
+            "border: none;"
+            "border-radius: 4px;"
+            "}"
+            "QPushButton:hover {"
+            "background-color: #00cc00;"
+            "}"
+        );
+    }
     valueBtn->setFixedHeight(35);
     valueBtn->setProperty("attributeName", attributeName);
-    connect(valueBtn, &QPushButton::clicked, this, &StudentAttributeDialog::onAttributeValueClicked);
+    if (!isTotalScore) {
+        connect(valueBtn, &QPushButton::clicked, this, &StudentAttributeDialog::onAttributeValueClicked);
+    }
     m_attributeValueButtons[attributeName] = valueBtn;
     rowLayout->addWidget(valueBtn);
     
@@ -229,15 +481,14 @@ void StudentAttributeDialog::onAttributeValueClicked()
     
     QString attributeName = btn->property("attributeName").toString();
     if (attributeName.isEmpty()) return;
-    
-    // 使用新的辅助函数获取当前值（优先级：attributesByExcel → attributesFull → attributes）
-    double currentValue = m_student.getAttributeValue(attributeName);
-    if (currentValue == 0.0 && !m_student.attributes.contains(attributeName) && 
-        !m_student.attributesByExcel.isEmpty() && !m_student.attributesFull.isEmpty()) {
-        if (attributeName == "总分" || attributeName == "数学") {
-            currentValue = m_student.score;
-        }
+    if (attributeName == QString::fromUtf8(u8"总分")) {
+        // 防御：总分不允许修改（正常情况下该按钮已禁用，不会进来）
+        QMessageBox::information(this, QString::fromUtf8(u8"提示"), QString::fromUtf8(u8"“总分”不可修改"));
+        return;
     }
+    
+    // 使用当前选择的Excel表格获取当前值
+    double currentValue = m_student.getAttributeValue(attributeName, m_selectedExcelTable);
     
     // 弹出输入对话框
     bool ok;
@@ -246,8 +497,13 @@ void StudentAttributeDialog::onAttributeValueClicked()
         currentValue, 0, 1000, 2, &ok);
     
     if (ok) {
-        // 更新学生属性
-        m_student.attributes[attributeName] = newValue;
+        // 更新学生属性（按选择的表格写回；“全部”则写入向后兼容的 attributes）
+        if (!m_selectedExcelTable.isEmpty()) {
+            m_student.attributesByExcel[m_selectedExcelTable][attributeName] = newValue;
+            m_student.attributesFull[QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable)] = newValue;
+        } else {
+            m_student.attributes[attributeName] = newValue;
+        }
         
         // 如果是"总分"，也更新score
         if (attributeName == "总分") {
@@ -259,7 +515,110 @@ void StudentAttributeDialog::onAttributeValueClicked()
         
         // 发送更新信号
         emit attributeUpdated(m_student.id, attributeName, newValue);
+
+        // 同步到服务器：/student-scores/set-score
+        sendScoreToServer(attributeName, newValue);
     }
+}
+
+void StudentAttributeDialog::sendScoreToServer(const QString& attributeName, double scoreValue)
+{
+    if (attributeName.isEmpty()) return;
+    if (attributeName == QString::fromUtf8(u8"总分")) {
+        // 总分不允许客户端修改，不上传
+        return;
+    }
+    if (m_student.name.isEmpty()) return;
+
+    // 需要 score_header_id 才能保存到服务器；若无则先自动拉取一次
+    if (m_scoreHeaderId <= 0) {
+        fetchScoreHeaderIdFromServer([this, attributeName, scoreValue](bool ok) {
+            if (!ok || m_scoreHeaderId <= 0) {
+                qDebug() << "set-score: score_header_id 无效，跳过上传";
+                return;
+            }
+            sendScoreToServer(attributeName, scoreValue);
+        });
+        return;
+    }
+
+    QJsonObject requestObj;
+    requestObj["score_header_id"] = m_scoreHeaderId;
+    requestObj["student_name"] = m_student.name;
+    if (!m_student.id.isEmpty()) {
+        requestObj["student_id"] = m_student.id;
+    }
+    requestObj["field_name"] = attributeName;
+    if (!m_selectedExcelTable.isEmpty()) {
+        requestObj["excel_filename"] = m_selectedExcelTable;
+    }
+    requestObj["score"] = scoreValue;
+
+    QJsonDocument doc(requestObj);
+    QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+
+    QNetworkAccessManager* networkManager = new QNetworkAccessManager(this);
+    QNetworkRequest request;
+    request.setUrl(QUrl("http://47.100.126.194:5000/student-scores/set-score"));
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+    QNetworkReply* reply = networkManager->post(request, jsonData);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, networkManager, attributeName, scoreValue]() {
+        if (reply->error() == QNetworkReply::NoError) {
+            const QByteArray responseData = reply->readAll();
+            QJsonDocument respDoc = QJsonDocument::fromJson(responseData);
+            if (respDoc.isObject()) {
+                QJsonObject obj = respDoc.object();
+                int code = obj.value("code").toInt(-1);
+                QString msg = obj.value("message").toString();
+                qDebug() << "set-score resp code=" << code << "msg=" << msg << "attr=" << attributeName << "score=" << scoreValue;
+
+                // 若服务端返回 total_score，可顺便刷新本地“总分”显示（只读）
+                if (code == 200) {
+                    QJsonObject dataObj = obj.value("data").toObject();
+                    const QString totalName = QString::fromUtf8(u8"总分");
+
+                    // 1) 当前 excel 的总分（总分_<excel>），优先刷新当前选择表格的“总分”行
+                    QString excelFileName = dataObj.value("excel_filename").toString();
+                    if (excelFileName.isEmpty()) {
+                        // 如果服务端没返回 excel_filename，则用当前选择值（如果有）
+                        excelFileName = m_selectedExcelTable;
+                    }
+                    if (dataObj.contains("excel_total_score") && !dataObj.value("excel_total_score").isNull()
+                        && !excelFileName.isEmpty()) {
+                        double excelTotal = dataObj.value("excel_total_score").toDouble();
+                        // 写回本地（按表格维度）
+                        m_student.attributesByExcel[excelFileName][totalName] = excelTotal;
+                        m_student.attributesFull[QString("%1_%2").arg(totalName).arg(excelFileName)] = excelTotal;
+
+                        // 如果当前弹窗正展示该表格，则刷新“总分”按钮显示
+                        if (m_selectedExcelTable == excelFileName && m_attributeValueButtons.contains(totalName)) {
+                            m_attributeValueButtons[totalName]->setText(QString::number(excelTotal));
+                        }
+                    }
+
+                    // 2) 整体汇总总分（用于排序），写入 student.score；若当前是“全部”视图，也刷新“总分”行
+                    if (dataObj.contains("total_score") && !dataObj.value("total_score").isNull()) {
+                        double total = dataObj.value("total_score").toDouble();
+                        m_student.score = total;
+                        // 兼容：全部视图用 attributes["总分"] 展示
+                        if (m_selectedExcelTable.isEmpty()) {
+                            m_student.attributes[totalName] = total;
+                            if (m_attributeValueButtons.contains(totalName)) {
+                                m_attributeValueButtons[totalName]->setText(QString::number(total));
+                            }
+                        }
+                    }
+                }
+            } else {
+                qDebug() << "set-score resp:" << responseData;
+            }
+        } else {
+            qDebug() << "set-score network error:" << reply->errorString();
+        }
+        reply->deleteLater();
+        networkManager->deleteLater();
+    });
 }
 
 void StudentAttributeDialog::onAnnotationClicked()
@@ -269,11 +628,169 @@ void StudentAttributeDialog::onAnnotationClicked()
     
     QString attributeName = btn->property("attributeName").toString();
     if (attributeName.isEmpty()) return;
-    
-    // 可以在这里实现注释功能
-    // 暂时显示一个消息框
-    QMessageBox::information(this, "注释", 
-        QString("为属性 \"%1\" 添加注释功能待实现").arg(attributeName));
+
+    // 需要 score_header_id 才能保存到服务器；若无则先自动拉取一次
+    if (m_scoreHeaderId <= 0) {
+        fetchScoreHeaderIdFromServer([this, attributeName](bool ok) {
+            if (!ok || m_scoreHeaderId <= 0) {
+                QMessageBox::warning(this, QString::fromUtf8(u8"提示"),
+                                     QString::fromUtf8(u8"未获取到成绩表ID（score_header_id）。\n请确认已成功获取成绩表数据后再设置注释。"));
+                return;
+            }
+            // 重新走一遍注释流程（此时 score_header_id 已就绪）
+            if (m_annotationButtons.contains(attributeName)) {
+                QMetaObject::invokeMethod(this, [this, attributeName]() {
+                    // 构造一个临时 sender 流程太重，直接复用后续逻辑：用 attributeName 继续执行
+                    // 这里调用内部实现：复制后续逻辑到一个 lambda 中
+                    QString currentComment = m_student.getComment(attributeName, m_selectedExcelTable);
+                    if (currentComment.isEmpty() && !m_classId.isEmpty() && !m_examName.isEmpty() && !m_term.isEmpty() && !m_student.id.isEmpty()) {
+                        const QString fieldKey = m_selectedExcelTable.isEmpty()
+                            ? attributeName
+                            : QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable);
+                        currentComment = CommentStorage::getComment(m_classId, m_examName, m_term, m_student.id, fieldKey);
+                    }
+
+                    bool okText = false;
+                    QString newComment = QInputDialog::getText(this, QString::fromUtf8(u8"设置注释"),
+                                                               QString::fromUtf8(u8"请输入 %1 的注释：").arg(attributeName),
+                                                               QLineEdit::Normal, currentComment, &okText);
+                    if (!okText) return;
+                    newComment = newComment.trimmed();
+
+                    if (!m_selectedExcelTable.isEmpty()) {
+                        m_student.commentsByExcel[m_selectedExcelTable][attributeName] = newComment;
+                        m_student.commentsFull[QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable)] = newComment;
+                    } else {
+                        m_student.comments[attributeName] = newComment;
+                    }
+
+                    if (!m_classId.isEmpty() && !m_examName.isEmpty() && !m_term.isEmpty() && !m_student.id.isEmpty()) {
+                        const QString fieldKey = m_selectedExcelTable.isEmpty()
+                            ? attributeName
+                            : QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable);
+                        CommentStorage::saveComment(m_classId, m_examName, m_term, m_student.id, fieldKey, newComment);
+                    }
+
+                    QJsonObject requestObj;
+                    requestObj["score_header_id"] = m_scoreHeaderId;
+                    requestObj["student_name"] = m_student.name;
+                    if (!m_student.id.isEmpty()) {
+                        requestObj["student_id"] = m_student.id;
+                    }
+                    const QString serverFieldName = m_selectedExcelTable.isEmpty()
+                        ? attributeName
+                        : QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable);
+                    requestObj["field_name"] = serverFieldName;
+                    requestObj["comment"] = newComment;
+
+                    QJsonDocument doc(requestObj);
+                    QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+
+                    QNetworkAccessManager* networkManager = new QNetworkAccessManager(this);
+                    QNetworkRequest request;
+                    request.setUrl(QUrl("http://47.100.126.194:5000/student-scores/set-comment"));
+                    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+                    QNetworkReply* reply = networkManager->post(request, jsonData);
+                    connect(reply, &QNetworkReply::finished, this, [reply, networkManager]() {
+                        if (reply->error() == QNetworkReply::NoError) {
+                            const QByteArray responseData = reply->readAll();
+                            QJsonDocument respDoc = QJsonDocument::fromJson(responseData);
+                            if (respDoc.isObject()) {
+                                QJsonObject obj = respDoc.object();
+                                int code = obj.value("code").toInt(-1);
+                                QString msg = obj.value("message").toString();
+                                qDebug() << "set-comment resp code=" << code << "msg=" << msg;
+                            } else {
+                                qDebug() << "set-comment resp:" << responseData;
+                            }
+                        } else {
+                            qDebug() << "set-comment network error:" << reply->errorString();
+                        }
+                        reply->deleteLater();
+                        networkManager->deleteLater();
+                    });
+                }, Qt::QueuedConnection);
+            }
+        });
+        return;
+    }
+
+    // 当前注释（优先按选中表格取注释）
+    QString currentComment = m_student.getComment(attributeName, m_selectedExcelTable);
+    // 若没有，尝试从全局注释缓存取（key 统一用“字段_Excel文件名”）
+    if (currentComment.isEmpty() && !m_classId.isEmpty() && !m_examName.isEmpty() && !m_term.isEmpty() && !m_student.id.isEmpty()) {
+        const QString fieldKey = m_selectedExcelTable.isEmpty()
+            ? attributeName
+            : QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable);
+        currentComment = CommentStorage::getComment(m_classId, m_examName, m_term, m_student.id, fieldKey);
+    }
+
+    bool ok = false;
+    QString newComment = QInputDialog::getText(this, QString::fromUtf8(u8"设置注释"),
+                                               QString::fromUtf8(u8"请输入 %1 的注释：").arg(attributeName),
+                                               QLineEdit::Normal, currentComment, &ok);
+    if (!ok) return;
+    newComment = newComment.trimmed();
+
+    // 更新本地学生注释（按表格维度存储）
+    if (!m_selectedExcelTable.isEmpty()) {
+        m_student.commentsByExcel[m_selectedExcelTable][attributeName] = newComment;
+        m_student.commentsFull[QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable)] = newComment;
+    } else {
+        m_student.comments[attributeName] = newComment;
+    }
+
+    // 更新全局注释缓存（便于其它页面复用）
+    if (!m_classId.isEmpty() && !m_examName.isEmpty() && !m_term.isEmpty() && !m_student.id.isEmpty()) {
+        const QString fieldKey = m_selectedExcelTable.isEmpty()
+            ? attributeName
+            : QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable);
+        CommentStorage::saveComment(m_classId, m_examName, m_term, m_student.id, fieldKey, newComment);
+    }
+
+    // 发送到服务器：/student-scores/set-comment
+    QJsonObject requestObj;
+    requestObj["score_header_id"] = m_scoreHeaderId;
+    requestObj["student_name"] = m_student.name;
+    if (!m_student.id.isEmpty()) {
+        requestObj["student_id"] = m_student.id;
+    }
+    // 服务器的字段名：如果按表格维度注释，使用复合键名（与后端返回 comments/scores_json_full 一致）
+    const QString serverFieldName = m_selectedExcelTable.isEmpty()
+        ? attributeName
+        : QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable);
+    requestObj["field_name"] = serverFieldName;
+    requestObj["comment"] = newComment;
+
+    QJsonDocument doc(requestObj);
+    QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+
+    QNetworkAccessManager* networkManager = new QNetworkAccessManager(this);
+    QNetworkRequest request;
+    request.setUrl(QUrl("http://47.100.126.194:5000/student-scores/set-comment"));
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+    QNetworkReply* reply = networkManager->post(request, jsonData);
+    connect(reply, &QNetworkReply::finished, this, [reply, networkManager]() {
+        if (reply->error() == QNetworkReply::NoError) {
+            // 成功/失败都不强打断用户，只打日志
+            const QByteArray responseData = reply->readAll();
+            QJsonDocument respDoc = QJsonDocument::fromJson(responseData);
+            if (respDoc.isObject()) {
+                QJsonObject obj = respDoc.object();
+                int code = obj.value("code").toInt(-1);
+                QString msg = obj.value("message").toString();
+                qDebug() << "set-comment resp code=" << code << "msg=" << msg;
+            } else {
+                qDebug() << "set-comment resp:" << responseData;
+            }
+        } else {
+            qDebug() << "set-comment network error:" << reply->errorString();
+        }
+        reply->deleteLater();
+        networkManager->deleteLater();
+    });
 }
 
 void StudentAttributeDialog::onValueEditingFinished()
@@ -285,19 +802,33 @@ void StudentAttributeDialog::clearAllHighlights()
 {
     // 清除所有高亮
     for (auto it = m_attributeValueButtons.begin(); it != m_attributeValueButtons.end(); ++it) {
-        it.value()->setStyleSheet(
-            "QPushButton {"
-            "background-color: green;"
-            "color: white;"
-            "font-size: 14px;"
-            "padding: 8px 16px;"
-            "border: none;"
-            "border-radius: 4px;"
-            "}"
-            "QPushButton:hover {"
-            "background-color: #00cc00;"
-            "}"
-        );
+        const QString attrName = it.key();
+        if (attrName == QString::fromUtf8(u8"总分")) {
+            it.value()->setStyleSheet(
+                "QPushButton {"
+                "background-color: #4a4a4a;"
+                "color: #dddddd;"
+                "font-size: 14px;"
+                "padding: 8px 16px;"
+                "border: none;"
+                "border-radius: 4px;"
+                "}"
+            );
+        } else {
+            it.value()->setStyleSheet(
+                "QPushButton {"
+                "background-color: green;"
+                "color: white;"
+                "font-size: 14px;"
+                "padding: 8px 16px;"
+                "border: none;"
+                "border-radius: 4px;"
+                "}"
+                "QPushButton:hover {"
+                "background-color: #00cc00;"
+                "}"
+            );
+        }
     }
     m_selectedAttribute = "";
 }

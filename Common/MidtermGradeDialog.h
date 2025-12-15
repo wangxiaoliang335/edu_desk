@@ -129,4 +129,5 @@ private:
     QString m_excelFileName; // Excel文件名
     CellCommentWidget* commentWidget = nullptr; // 注释窗口
     int m_scoreHeaderId = -1; // 成绩表头ID，用于设置注释
+    bool m_fetchingScoreHeaderId = false; // 避免重复拉取 score_header_id
 };

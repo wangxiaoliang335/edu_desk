@@ -304,6 +304,20 @@ public:
 					else if (obj["data"].isObject())
 					{
 						QJsonObject dataObj = obj["data"].toObject();
+
+                        // 统一的学期（用于本地 CommentStorage/ScoreHeaderIdStorage 缓存 key）
+                        // 优先使用服务端返回的 term（例如 data.headers[0].term），避免用本地时间推算不一致
+                        QString termForCache = dataObj.value(QStringLiteral("term")).toString();
+                        if (termForCache.isEmpty() && dataObj.contains(QStringLiteral("headers")) && dataObj[QStringLiteral("headers")].isArray()) {
+                            QJsonArray headersArr = dataObj[QStringLiteral("headers")].toArray();
+                            if (!headersArr.isEmpty() && headersArr.first().isObject()) {
+                                QJsonObject header0 = headersArr.first().toObject();
+                                termForCache = header0.value(QStringLiteral("term")).toString();
+                            }
+                        }
+                        if (termForCache.isEmpty()) {
+                            termForCache = currentTermString();
+                        }
 						
                         // 处理成绩表数据（/group-scores 接口返回）
                         bool hasScores = false;
@@ -332,9 +346,11 @@ public:
                                                  << "comments" << "group_name" << "group_total_score" << "scores"
                                                  << "scores_json_full" << "field_sources"; // 新增系统字段
 
+                                    bool hasScoresJsonFull = false;
                                     // 解析 scores_json_full（包含所有复合键名的完整数据）
                                     if (scoreObj.contains("scores_json_full") && scoreObj["scores_json_full"].isObject()) {
                                         QJsonObject scoresFullObj = scoreObj["scores_json_full"].toObject();
+                                        hasScoresJsonFull = !scoresFullObj.isEmpty();
                                         for (auto it = scoresFullObj.begin(); it != scoresFullObj.end(); ++it) {
                                             QString compositeKey = it.key(); // 如 "语文_期中成绩单.xlsx"
                                             QJsonValue value = it.value();
@@ -372,7 +388,8 @@ public:
                                     }
 
                                     // 解析 field_sources（字段来源详细信息）
-                                    if (scoreObj.contains("field_sources") && scoreObj["field_sources"].isObject()) {
+                                    // 按需求：优先使用 scores_json_full；仅当没有 scores_json_full 时才回退解析 field_sources
+                                    if (!hasScoresJsonFull && scoreObj.contains("field_sources") && scoreObj["field_sources"].isObject()) {
                                         QJsonObject fieldSourcesObj = scoreObj["field_sources"].toObject();
                                         for (auto it = fieldSourcesObj.begin(); it != fieldSourcesObj.end(); ++it) {
                                             QString fieldName = it.key();
@@ -457,9 +474,24 @@ public:
                                         }
                                     }
 
-                                    // 解析 comments 对象（如果存在）
-                                    if (scoreObj.contains("comments") && scoreObj["comments"].isObject()) {
-                                        QJsonObject commentsObj = scoreObj["comments"].toObject();
+                                    // 解析 comments（兼容对象或 JSON 字符串）
+                                    QJsonObject commentsObj;
+                                    bool hasCommentsObj = false;
+                                    if (scoreObj.contains("comments")) {
+                                        if (scoreObj["comments"].isObject()) {
+                                            commentsObj = scoreObj["comments"].toObject();
+                                            hasCommentsObj = true;
+                                        } else if (scoreObj["comments"].isString()) {
+                                            QByteArray commentsBytes = scoreObj["comments"].toString().toUtf8();
+                                            QJsonParseError pe;
+                                            QJsonDocument cd = QJsonDocument::fromJson(commentsBytes, &pe);
+                                            if (pe.error == QJsonParseError::NoError && cd.isObject()) {
+                                                commentsObj = cd.object();
+                                                hasCommentsObj = true;
+                                            }
+                                        }
+                                    }
+                                    if (hasCommentsObj) {
                                         for (auto it = commentsObj.begin(); it != commentsObj.end(); ++it) {
                                             QString key = it.key();
                                             QString comment = it.value().toString();
@@ -486,13 +518,21 @@ public:
                                                     if (!student.comments.contains(fieldName)) {
                                                         student.comments[fieldName] = comment;
                                                     }
+
+                                                    // 同步到全局注释缓存：同时保存复合键与纯字段名（便于不同界面读取）
+                                                    CommentStorage::saveComment(m_classid, termForCache, student.id, key, comment);
+                                                    if (CommentStorage::getComment(m_classid, termForCache, student.id, fieldName).isEmpty()) {
+                                                        CommentStorage::saveComment(m_classid, termForCache, student.id, fieldName, comment);
+                                                    }
                                                 } else {
                                                     // 普通字段注释
                                                     student.comments[key] = comment;
+                                                    CommentStorage::saveComment(m_classid, termForCache, student.id, key, comment);
                                                 }
                                             } else {
                                                 // 普通字段注释
                                                 student.comments[key] = comment;
+                                                CommentStorage::saveComment(m_classid, termForCache, student.id, key, comment);
                                             }
                                         }
                                     }
@@ -549,9 +589,11 @@ public:
                                              << "group_name" << "group_total_score" << "scores"
                                              << "scores_json_full" << "field_sources"; // 新增系统字段
 
+                                bool hasScoresJsonFull = false;
                                 // 解析 scores_json_full（包含所有复合键名的完整数据）
                                 if (scoreObj.contains("scores_json_full") && scoreObj["scores_json_full"].isObject()) {
                                     QJsonObject scoresFullObj = scoreObj["scores_json_full"].toObject();
+                                    hasScoresJsonFull = !scoresFullObj.isEmpty();
                                     for (auto it = scoresFullObj.begin(); it != scoresFullObj.end(); ++it) {
                                         QString compositeKey = it.key(); // 如 "语文_期中成绩单.xlsx"
                                         QJsonValue value = it.value();
@@ -589,7 +631,8 @@ public:
                                 }
 
                                 // 解析 field_sources（字段来源详细信息）
-                                if (scoreObj.contains("field_sources") && scoreObj["field_sources"].isObject()) {
+                                // 按需求：优先使用 scores_json_full；仅当没有 scores_json_full 时才回退解析 field_sources
+                                if (!hasScoresJsonFull && scoreObj.contains("field_sources") && scoreObj["field_sources"].isObject()) {
                                     QJsonObject fieldSourcesObj = scoreObj["field_sources"].toObject();
                                     for (auto it = fieldSourcesObj.begin(); it != fieldSourcesObj.end(); ++it) {
                                         QString fieldName = it.key();
@@ -680,9 +723,24 @@ public:
                                     }
                                 }
                                 
-                                // 解析 comments 对象（如果存在）
-                                if (scoreObj.contains("comments") && scoreObj["comments"].isObject()) {
-                                    QJsonObject commentsObj = scoreObj["comments"].toObject();
+                                // 解析 comments（兼容对象或 JSON 字符串）
+                                QJsonObject commentsObj;
+                                bool hasCommentsObj = false;
+                                if (scoreObj.contains("comments")) {
+                                    if (scoreObj["comments"].isObject()) {
+                                        commentsObj = scoreObj["comments"].toObject();
+                                        hasCommentsObj = true;
+                                    } else if (scoreObj["comments"].isString()) {
+                                        QByteArray commentsBytes = scoreObj["comments"].toString().toUtf8();
+                                        QJsonParseError pe;
+                                        QJsonDocument cd = QJsonDocument::fromJson(commentsBytes, &pe);
+                                        if (pe.error == QJsonParseError::NoError && cd.isObject()) {
+                                            commentsObj = cd.object();
+                                            hasCommentsObj = true;
+                                        }
+                                    }
+                                }
+                                if (hasCommentsObj) {
                                     for (auto it = commentsObj.begin(); it != commentsObj.end(); ++it) {
                                         QString key = it.key();
                                         QString comment = it.value().toString();
@@ -709,13 +767,21 @@ public:
                                                 if (!student.comments.contains(fieldName)) {
                                                     student.comments[fieldName] = comment;
                                                 }
+
+                                                // 同步到全局注释缓存：同时保存复合键与纯字段名（便于不同界面读取）
+                                                CommentStorage::saveComment(m_classid, termForCache, student.id, key, comment);
+                                                if (CommentStorage::getComment(m_classid, termForCache, student.id, fieldName).isEmpty()) {
+                                                    CommentStorage::saveComment(m_classid, termForCache, student.id, fieldName, comment);
+                                                }
                                             } else {
                                                 // 普通字段注释
                                                 student.comments[key] = comment;
+                                                CommentStorage::saveComment(m_classid, termForCache, student.id, key, comment);
                                             }
                                         } else {
                                             // 普通字段注释
                                             student.comments[key] = comment;
+                                            CommentStorage::saveComment(m_classid, termForCache, student.id, key, comment);
                                         }
                                     }
                                 }
@@ -770,9 +836,11 @@ public:
                                              << "group_name" << "group_total_score" << "scores"
                                              << "scores_json_full" << "field_sources"; // 新增系统字段
 
+                                bool hasScoresJsonFull = false;
                                 // 解析 scores_json_full（包含所有复合键名的完整数据）
                                 if (scoreObj.contains("scores_json_full") && scoreObj["scores_json_full"].isObject()) {
                                     QJsonObject scoresFullObj = scoreObj["scores_json_full"].toObject();
+                                    hasScoresJsonFull = !scoresFullObj.isEmpty();
                                     for (auto it = scoresFullObj.begin(); it != scoresFullObj.end(); ++it) {
                                         QString compositeKey = it.key(); // 如 "语文_期中成绩单.xlsx"
                                         QJsonValue value = it.value();
@@ -810,7 +878,8 @@ public:
                                 }
 
                                 // 解析 field_sources（字段来源详细信息）
-                                if (scoreObj.contains("field_sources") && scoreObj["field_sources"].isObject()) {
+                                // 按需求：优先使用 scores_json_full；仅当没有 scores_json_full 时才回退解析 field_sources
+                                if (!hasScoresJsonFull && scoreObj.contains("field_sources") && scoreObj["field_sources"].isObject()) {
                                     QJsonObject fieldSourcesObj = scoreObj["field_sources"].toObject();
                                     for (auto it = fieldSourcesObj.begin(); it != fieldSourcesObj.end(); ++it) {
                                         QString fieldName = it.key();
@@ -901,9 +970,24 @@ public:
                                     }
                                 }
                                 
-                                // 解析 comments 对象（如果存在）
-                                if (scoreObj.contains("comments") && scoreObj["comments"].isObject()) {
-                                    QJsonObject commentsObj = scoreObj["comments"].toObject();
+                                // 解析 comments（兼容对象或 JSON 字符串）
+                                QJsonObject commentsObj;
+                                bool hasCommentsObj = false;
+                                if (scoreObj.contains("comments")) {
+                                    if (scoreObj["comments"].isObject()) {
+                                        commentsObj = scoreObj["comments"].toObject();
+                                        hasCommentsObj = true;
+                                    } else if (scoreObj["comments"].isString()) {
+                                        QByteArray commentsBytes = scoreObj["comments"].toString().toUtf8();
+                                        QJsonParseError pe;
+                                        QJsonDocument cd = QJsonDocument::fromJson(commentsBytes, &pe);
+                                        if (pe.error == QJsonParseError::NoError && cd.isObject()) {
+                                            commentsObj = cd.object();
+                                            hasCommentsObj = true;
+                                        }
+                                    }
+                                }
+                                if (hasCommentsObj) {
                                     for (auto it = commentsObj.begin(); it != commentsObj.end(); ++it) {
                                         QString key = it.key();
                                         QString comment = it.value().toString();
@@ -930,13 +1014,21 @@ public:
                                                 if (!student.comments.contains(fieldName)) {
                                                     student.comments[fieldName] = comment;
                                                 }
+
+                                                // 同步到全局注释缓存：同时保存复合键与纯字段名（便于不同界面读取）
+                                                CommentStorage::saveComment(m_classid, termForCache, student.id, key, comment);
+                                                if (CommentStorage::getComment(m_classid, termForCache, student.id, fieldName).isEmpty()) {
+                                                    CommentStorage::saveComment(m_classid, termForCache, student.id, fieldName, comment);
+                                                }
                                             } else {
                                                 // 普通字段注释
                                                 student.comments[key] = comment;
+                                                CommentStorage::saveComment(m_classid, termForCache, student.id, key, comment);
                                             }
                                         } else {
                                             // 普通字段注释
                                             student.comments[key] = comment;
+                                            CommentStorage::saveComment(m_classid, termForCache, student.id, key, comment);
                                         }
                                     }
                                 }
@@ -995,9 +1087,11 @@ public:
                                                      << "group_name" << "group_total_score" << "scores"
                                                      << "scores_json_full" << "field_sources"; // 新增系统字段
 
+                                        bool hasScoresJsonFull = false;
                                         // 解析 scores_json_full（包含所有复合键名的完整数据）
                                         if (scoreObj.contains("scores_json_full") && scoreObj["scores_json_full"].isObject()) {
                                             QJsonObject scoresFullObj = scoreObj["scores_json_full"].toObject();
+                                            hasScoresJsonFull = !scoresFullObj.isEmpty();
                                             for (auto it = scoresFullObj.begin(); it != scoresFullObj.end(); ++it) {
                                                 QString compositeKey = it.key(); // 如 "语文_期中成绩单.xlsx"
                                                 QJsonValue value = it.value();
@@ -1035,7 +1129,8 @@ public:
                                         }
 
                                         // 解析 field_sources（字段来源详细信息）
-                                        if (scoreObj.contains("field_sources") && scoreObj["field_sources"].isObject()) {
+                                        // 按需求：优先使用 scores_json_full；仅当没有 scores_json_full 时才回退解析 field_sources
+                                        if (!hasScoresJsonFull && scoreObj.contains("field_sources") && scoreObj["field_sources"].isObject()) {
                                             QJsonObject fieldSourcesObj = scoreObj["field_sources"].toObject();
                                             for (auto it = fieldSourcesObj.begin(); it != fieldSourcesObj.end(); ++it) {
                                                 QString fieldName = it.key();
@@ -1394,6 +1489,18 @@ public:
                             
                             // 获取 score_header_id（兼容新旧字段）
                             int scoreHeaderId = -1;
+                            // 新接口优先：data.headers[0].score_header_id / data.headers[0].id
+                            if (dataObj.contains("headers") && dataObj["headers"].isArray()) {
+                                QJsonArray headersArr = dataObj["headers"].toArray();
+                                if (!headersArr.isEmpty() && headersArr.first().isObject()) {
+                                    QJsonObject headerObj = headersArr.first().toObject();
+                                    if (headerObj.contains("score_header_id")) {
+                                        scoreHeaderId = headerObj["score_header_id"].toInt();
+                                    } else if (headerObj.contains("id")) {
+                                        scoreHeaderId = headerObj["id"].toInt();
+                                    }
+                                }
+                            }
                             if (dataObj.contains("header") && dataObj["header"].isObject()) {
                                 QJsonObject headerObj = dataObj["header"].toObject();
                                 if (headerObj.contains("score_header_id")) {
@@ -1427,18 +1534,18 @@ public:
                                     term = QString("%1-%2-2").arg(year - 1).arg(year);
                                 }
                                 
-                                // 保存到全局存储
-                                ScoreHeaderIdStorage::saveScoreHeaderId(m_classid, "期中考试", term, scoreHeaderId);
+                                // 保存到全局存储（按 classId + term，不区分 exam_name）
+                                ScoreHeaderIdStorage::saveScoreHeaderId(m_classid, term, scoreHeaderId);
                                 
-                                // 清除该班级、考试、学期的旧注释
-                                CommentStorage::clearComments(m_classid, "期中考试", term);
+                                // 清除该班级、学期的旧注释
+                                CommentStorage::clearComments(m_classid, term);
                                 
                                 // 保存所有学生的注释信息到全局存储
                                 for (const StudentInfo& student : m_students) {
                                     for (auto it = student.comments.begin(); it != student.comments.end(); ++it) {
                                         QString fieldName = it.key();
                                         QString comment = it.value();
-                                        CommentStorage::saveComment(m_classid, "期中考试", term, student.id, fieldName, comment);
+                                        CommentStorage::saveComment(m_classid, term, student.id, fieldName, comment);
                                     }
                                 }
                             }
@@ -4109,13 +4216,53 @@ inline void ScheduleDialog::showStudentAttributeDialog(int row, int col)
 	if (studentId.isEmpty() && studentName.isEmpty()) {
 		return;
 	}
+
+	// 若按钮文本包含“姓名/学号”，补齐缺失信息
+	QString btnText = btn->text().trimmed();
+	if ((!btnText.isEmpty()) && (studentId.isEmpty() || studentName.isEmpty())) {
+		int slashIndex = btnText.lastIndexOf('/');
+		if (slashIndex >= 0) {
+			QString maybeName = btnText.left(slashIndex).trimmed();
+			QString maybeId = btnText.mid(slashIndex + 1).trimmed();
+			if (studentName.isEmpty() && !maybeName.isEmpty()) studentName = maybeName;
+			if (studentId.isEmpty() && !maybeId.isEmpty()) studentId = maybeId;
+		} else {
+			if (studentName.isEmpty()) studentName = btnText;
+		}
+	}
 	
-	// 创建StudentInfo对象
+	// 先从 m_students 中找“真实”学生数据（包含 attributesByExcel 等）
 	StudentInfo student;
-	student.id = studentId;
-	student.name = studentName.isEmpty() ? btn->text() : studentName;
-	student.originalIndex = -1;
-	student.score = 0;
+	bool found = false;
+	if (!studentId.isEmpty()) {
+		for (const auto& s : m_students) {
+			if (s.id == studentId) {
+				student = s;
+				found = true;
+				break;
+			}
+		}
+	}
+	if (!found && !studentName.isEmpty()) {
+		for (const auto& s : m_students) {
+			if (s.name == studentName) {
+				student = s;
+				found = true;
+				break;
+			}
+		}
+	}
+	if (!found) {
+		student.id = studentId;
+		student.name = studentName.isEmpty() ? btnText : studentName;
+		student.originalIndex = -1;
+		student.score = 0;
+	}
+
+	// 读取已下载Excel列表（用于弹窗下拉框）
+	QStringList excelTables;
+	QStringList dummyAttributes;
+	buildHeatmapOptions(excelTables, dummyAttributes);
 	
 	// 系统属性列表（需要排除的属性）
 	QSet<QString> systemProperties;
@@ -4142,12 +4289,25 @@ inline void ScheduleDialog::showStudentAttributeDialog(int row, int col)
 		if (propValue.canConvert<double>()) {
 			double value = propValue.toDouble();
 			
-			// 直接使用属性名作为属性名称
+			// 尝试解析“字段_表格名”复合键
+			const int underscorePos = propNameStr.lastIndexOf('_');
+			if (underscorePos > 0) {
+				QString fieldName = propNameStr.left(underscorePos).trimmed();
+				QString tableName = propNameStr.mid(underscorePos + 1).trimmed();
+				// 只要像表格名，就写入 attributesByExcel / attributesFull
+				if (!fieldName.isEmpty() && !tableName.isEmpty()) {
+					student.attributesFull[propNameStr] = value;
+					student.attributesByExcel[tableName][fieldName] = value;
+					if (fieldName == "总分") {
+						student.score = value;
+					}
+					continue;
+				}
+			}
+
+			// 否则：直接使用属性名作为属性名称（向后兼容）
 			QString attributeName = propNameStr;
-			
 			student.attributes[attributeName] = value;
-			
-			// 如果是"总分"，也设置到score
 			if (attributeName == "总分") {
 				student.score = value;
 			}
@@ -4198,6 +4358,31 @@ inline void ScheduleDialog::showStudentAttributeDialog(int row, int col)
 		qWarning() << "学生" << student.name << "没有任何属性数据";
 	}
 	
+	dialog->setTitle(QString::fromUtf8(u8"学生统计信息 - %1").arg(student.name));
+
+	// 传入成绩表上下文（用于弹窗里保存注释到服务器）
+	{
+		QDate currentDate = QDate::currentDate();
+		int year = currentDate.year();
+		int month = currentDate.month();
+		QString term;
+		if (month >= 9 || month <= 1) {
+			if (month >= 9) {
+				term = QString("%1-%2-1").arg(year).arg(year + 1);
+			} else {
+				term = QString("%1-%2-1").arg(year - 1).arg(year);
+			}
+		} else {
+			term = QString("%1-%2-2").arg(year - 1).arg(year);
+		}
+		// 注释保存只依赖 classId + term（exam_name 仍用于服务器请求，但本地缓存不再区分）
+		dialog->setScoreContext(m_classid, QString::fromUtf8(u8"期中考试"), term);
+	}
+	dialog->setExcelTables(excelTables);
+	// 默认选中：当前热力图已选表格（若有）；否则“全部”
+	if (!m_selectedTable.isEmpty()) {
+		dialog->setSelectedExcelTable(m_selectedTable);
+	}
 	dialog->setAvailableAttributes(availableAttributes);
 	dialog->setStudentInfo(student);
 	dialog->exec();

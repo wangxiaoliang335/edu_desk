@@ -428,7 +428,7 @@ private slots:
             midtermDlg->setWindowTitle(fileInfo.baseName());
             
             // 从全局存储中获取 score_header_id 并设置
-            int scoreHeaderId = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, "期中考试", term);
+            int scoreHeaderId = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, term);
             if (scoreHeaderId > 0) {
                 midtermDlg->setScoreHeaderId(scoreHeaderId);
                 qDebug() << "已为 MidtermGradeDialog 设置 score_header_id:" << scoreHeaderId;
@@ -465,7 +465,7 @@ private slots:
             physiqueDlg->setWindowTitle(fileInfo2.baseName());
             
             // 从全局存储中获取 score_header_id 并设置
-            int scoreHeaderId2 = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, "期中考试", term);
+            int scoreHeaderId2 = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, term);
             if (scoreHeaderId2 > 0) {
                 physiqueDlg->setScoreHeaderId(scoreHeaderId2);
                 qDebug() << "已为 StudentPhysiqueDialog 设置 score_header_id:" << scoreHeaderId2;
@@ -503,7 +503,7 @@ private slots:
             groupScoreDlg->setWindowTitle(fileInfo3.baseName());
             
             // 从全局存储中获取 score_header_id 并设置（小组管理表可能使用不同的 exam_name，这里先尝试期中考试）
-            int scoreHeaderId3 = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, "期中考试", term);
+            int scoreHeaderId3 = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, term);
             if (scoreHeaderId3 > 0) {
                 groupScoreDlg->setScoreHeaderId(scoreHeaderId3);
                 qDebug() << "已为 GroupScoreDialog 设置 score_header_id:" << scoreHeaderId3;
@@ -1023,7 +1023,7 @@ inline void CustomListDialog::loadExcelFileAndCreateButton(const QString& filePa
         midtermDlg->setWindowTitle(fileInfo.baseName());
         
         // 从全局存储中获取 score_header_id 并设置
-        int scoreHeaderId = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, "期中考试", term);
+        int scoreHeaderId = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, term);
         if (scoreHeaderId > 0) {
             midtermDlg->setScoreHeaderId(scoreHeaderId);
             qDebug() << "已为 MidtermGradeDialog 设置 score_header_id:" << scoreHeaderId;
@@ -1037,7 +1037,7 @@ inline void CustomListDialog::loadExcelFileAndCreateButton(const QString& filePa
         physiqueDlg->setWindowTitle(fileInfo.baseName());
         
         // 从全局存储中获取 score_header_id 并设置（学生体质表可能使用不同的 exam_name，这里先尝试期中考试）
-        int scoreHeaderId = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, "期中考试", term);
+        int scoreHeaderId = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, term);
         if (scoreHeaderId > 0) {
             physiqueDlg->setScoreHeaderId(scoreHeaderId);
             qDebug() << "已为 StudentPhysiqueDialog 设置 score_header_id:" << scoreHeaderId;
@@ -1051,7 +1051,7 @@ inline void CustomListDialog::loadExcelFileAndCreateButton(const QString& filePa
         groupScoreDlg->setWindowTitle(fileInfo.baseName());
         
         // 从全局存储中获取 score_header_id 并设置（小组管理表可能使用不同的 exam_name，这里先尝试期中考试）
-        int scoreHeaderId = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, "期中考试", term);
+        int scoreHeaderId = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, term);
         if (scoreHeaderId > 0) {
             groupScoreDlg->setScoreHeaderId(scoreHeaderId);
             qDebug() << "已为 GroupScoreDialog 设置 score_header_id:" << scoreHeaderId;
