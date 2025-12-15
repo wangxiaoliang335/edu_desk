@@ -2128,6 +2128,8 @@ public:
 		// 作业展示按钮（班级端快捷按钮）
 		QPushButton* btnHomeworkView = new QPushButton("作业", this);
 		btnHomeworkView->setStyleSheet(greenStyle);
+		// 需求：隐藏“作业”快捷按钮（功能保留，暂不对外展示）
+		btnHomeworkView->hide();
 		connect(btnHomeworkView, &QPushButton::clicked, this, [this]() {
 			showHomeworkViewDialog();
 		});
