@@ -3877,21 +3877,53 @@ inline void ScheduleDialog::fillSeatTableFromData(const QList<QStringList>& data
 		// 解析学生信息：格式为"姓名编号"（如"任崇庆13-3"）
 		// 提取姓名和编号
 		auto parseStudentInfo = [](const QString& text) -> QPair<QString, QString> {
-			QString name, id;
-			// 匹配格式：中文姓名 + 数字-数字（如"任崇庆13-3"）
-			QRegExp regex("([\\u4e00-\\u9fa5]+)(\\d+-\\d+)");
-			if (regex.indexIn(text) >= 0) {
-				name = regex.cap(1);
-				id = regex.cap(2);
+			// 支持格式示例：
+			// - 任崇庆13-3          => name=任崇庆, id=13-3
+			// - 王文1-5/7           => name=王文,   id=7   （/ 后为学号）
+			// - 王文1-5             => name=王文,   id=1-5 （兜底：无 / 时取数字-数字）
+			QString s = text.trimmed();
+			QString idFromSlash;
+
+			// 先解析最后一个 '/' 之后的学号
+			const int slashIndex = s.lastIndexOf('/');
+			if (slashIndex >= 0) {
+				idFromSlash = s.mid(slashIndex + 1).trimmed();
+				s = s.left(slashIndex).trimmed();
+			}
+
+			QString name;
+			QString id;
+
+			// 提取开头中文作为姓名（避免 "王文1" 这种误判）
+			QRegExp nameRe("^([\\u4e00-\\u9fa5]+)");
+			if (nameRe.indexIn(s) >= 0) {
+				name = nameRe.cap(1);
+			}
+
+			// 学号优先取 / 后
+			if (!idFromSlash.isEmpty()) {
+				id = idFromSlash;
 			} else {
-				// 如果正则匹配失败，尝试按"-"分割
-				QStringList parts = text.split(QRegExp("[\\s-]+"));
-				if (parts.size() >= 2) {
-					name = parts[0];
-					id = parts[1];
-				} else {
-					name = text;
+				// 否则尝试提取数字-数字（旧模板兼容）
+				QRegExp dashRe("(\\d+-\\d+)");
+				if (dashRe.indexIn(s) >= 0) {
+					id = dashRe.cap(1);
 				}
+			}
+
+			// 兜底：按空格/短横分割
+			if (name.isEmpty() || (id.isEmpty() && slashIndex < 0)) {
+				QStringList parts = s.split(QRegExp("[\\s-]+"), Qt::SkipEmptyParts);
+				if (name.isEmpty() && !parts.isEmpty()) {
+					name = parts.first();
+				}
+				if (id.isEmpty() && parts.size() >= 2) {
+					id = parts.last();
+				}
+			}
+
+			if (name.isEmpty()) {
+				name = text.trimmed();
 			}
 			return qMakePair(name, id);
 		};
@@ -4316,6 +4348,61 @@ inline void ScheduleDialog::showStudentAttributeDialog(int row, int col)
 	
 	// 创建并显示学生属性对话框
 	StudentAttributeDialog* dialog = new StudentAttributeDialog(this);
+
+	// 当弹窗内修改属性并成功写回时，同步更新本地缓存（m_students）与座位按钮的动态属性，保证再次双击显示最新值
+	{
+		QPointer<QPushButton> seatBtn(btn);
+		const QString seatStudentId = student.id;
+		const QString seatStudentName = student.name;
+		connect(dialog, &StudentAttributeDialog::attributeUpdated, this,
+		        [this, seatBtn, seatStudentId, seatStudentName](const QString& studentId,
+		                                                        const QString& attributeName,
+		                                                        double newValue,
+		                                                        const QString& excelFileName) {
+			        // 1) 更新 seatTable 按钮动态属性（showStudentAttributeDialog 会读取这些属性）
+			        if (seatBtn) {
+				        const QString key = excelFileName.isEmpty()
+					        ? attributeName
+					        : QString("%1_%2").arg(attributeName, excelFileName);
+				        const QByteArray keyBytes = key.toUtf8();
+				        seatBtn->setProperty(keyBytes.constData(), newValue);
+			        }
+
+			        // 2) 更新 m_students（下次打开对话框会先从 m_students 找“真实”数据）
+			        auto applyUpdateToStudent = [&](StudentInfo& s) {
+				        if (excelFileName.isEmpty()) {
+					        s.attributes[attributeName] = newValue;
+				        } else {
+					        s.attributesByExcel[excelFileName][attributeName] = newValue;
+					        s.attributesFull[QString("%1_%2").arg(attributeName, excelFileName)] = newValue;
+				        }
+				        if (attributeName == QString::fromUtf8(u8"总分")) {
+					        s.score = newValue;
+				        }
+			        };
+
+			        bool updated = false;
+			        if (!studentId.isEmpty()) {
+				        for (auto& s : m_students) {
+					        if (s.id == studentId) {
+						        applyUpdateToStudent(s);
+						        updated = true;
+						        break;
+					        }
+				        }
+			        }
+			        if (!updated) {
+				        // 兜底：按座位上的姓名匹配（某些模板可能缺学号）
+				        for (auto& s : m_students) {
+					        if (!seatStudentName.isEmpty() && s.name == seatStudentName) {
+						        applyUpdateToStudent(s);
+						        updated = true;
+						        break;
+					        }
+				        }
+			        }
+		        });
+	}
 	
 	// 动态收集所有属性名称（从所有Excel文件的属性中获取）
 	QSet<QString> attributeSet; // 使用Set避免重复
@@ -4564,27 +4651,44 @@ inline void ScheduleDialog::uploadSeatTableToServer()
 					if (!studentLabel.isEmpty()) {
 						seatObj["student_name"] = studentLabel;
 
-						QString beforeSlash = studentLabel;
-						QString parsedId;
-						int slashIndex = studentLabel.lastIndexOf('/');
-						if (slashIndex >= 0) {
-							parsedId = studentLabel.mid(slashIndex + 1).trimmed();
-							beforeSlash = studentLabel.left(slashIndex).trimmed();
-						}
-
-						QString extractedName;
-						QStringList parts = beforeSlash.split(QRegExp("[\\s-]+"), Qt::SkipEmptyParts);
-						if (!parts.isEmpty()) {
-							extractedName = parts.first();
-							if (parsedId.isEmpty() && parts.size() >= 2) {
-								parsedId = parts.last();
+						// 解析显示文本，兼容 "王文1-5/7" 这种：姓名=王文，学号=7
+						auto parseSeatLabel = [](const QString& label) -> QPair<QString, QString> {
+							QString s = label.trimmed();
+							QString idFromSlash;
+							const int slashIndex = s.lastIndexOf('/');
+							if (slashIndex >= 0) {
+								idFromSlash = s.mid(slashIndex + 1).trimmed();
+								s = s.left(slashIndex).trimmed();
 							}
-						} else {
-							extractedName = beforeSlash;
-						}
 
-						if (resolvedName.isEmpty()) resolvedName = extractedName;
-						if (resolvedId.isEmpty()) resolvedId = parsedId;
+							QString name;
+							QString id;
+
+							QRegExp nameRe("^([\\u4e00-\\u9fa5]+)");
+							if (nameRe.indexIn(s) >= 0) {
+								name = nameRe.cap(1);
+							}
+
+							if (!idFromSlash.isEmpty()) {
+								id = idFromSlash;
+							} else {
+								QRegExp dashRe("(\\d+-\\d+)");
+								if (dashRe.indexIn(s) >= 0) {
+									id = dashRe.cap(1);
+								} else {
+									QStringList parts = s.split(QRegExp("[\\s-]+"), Qt::SkipEmptyParts);
+									if (!parts.isEmpty() && name.isEmpty()) name = parts.first();
+									if (parts.size() >= 2) id = parts.last();
+								}
+							}
+
+							if (name.isEmpty()) name = s;
+							return qMakePair(name, id);
+						};
+
+						const QPair<QString, QString> parsed = parseSeatLabel(studentLabel);
+						if (resolvedName.isEmpty()) resolvedName = parsed.first;
+						if (resolvedId.isEmpty()) resolvedId = parsed.second;
 					} else {
 						if (!propName.isEmpty()) seatObj["student_name"] = propName;
 					}

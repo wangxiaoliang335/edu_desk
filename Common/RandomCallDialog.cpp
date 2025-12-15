@@ -520,11 +520,16 @@ void RandomCallDialog::onSeatClicked()
     
     // 连接属性更新信号
     connect(attrDlg, &StudentAttributeDialog::attributeUpdated, this, 
-        [this, studentId](const QString& id, const QString& attrName, double newValue) {
+        [this, studentId](const QString& id, const QString& attrName, double newValue, const QString& excelFileName) {
             // 更新学生数据
             for (auto& s : m_students) {
                 if (s.id == id) {
-                    s.attributes[attrName] = newValue;
+                    if (excelFileName.isEmpty()) {
+                        s.attributes[attrName] = newValue;
+                    } else {
+                        s.attributesByExcel[excelFileName][attrName] = newValue;
+                        s.attributesFull[QString("%1_%2").arg(attrName, excelFileName)] = newValue;
+                    }
                     // 如果是当前选择的属性，也更新score
                     if (attrName == currentAttribute || attrName == "总分") {
                         s.score = newValue;
@@ -535,7 +540,12 @@ void RandomCallDialog::onSeatClicked()
             // 更新参与者列表
             for (auto& p : m_participants) {
                 if (p.id == id) {
-                    p.attributes[attrName] = newValue;
+                    if (excelFileName.isEmpty()) {
+                        p.attributes[attrName] = newValue;
+                    } else {
+                        p.attributesByExcel[excelFileName][attrName] = newValue;
+                        p.attributesFull[QString("%1_%2").arg(attrName, excelFileName)] = newValue;
+                    }
                     if (attrName == currentAttribute || attrName == "总分") {
                         p.score = newValue;
                     }

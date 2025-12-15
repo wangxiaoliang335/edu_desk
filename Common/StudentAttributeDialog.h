@@ -24,7 +24,8 @@ class StudentAttributeDialog : public QDialog
     Q_OBJECT
 
 signals:
-    void attributeUpdated(const QString& studentId, const QString& attributeName, double newValue);
+    // excelFileName 为空表示“全部”；不为空表示该属性属于某个具体 Excel 表格维度
+    void attributeUpdated(const QString& studentId, const QString& attributeName, double newValue, const QString& excelFileName);
 
 public:
     explicit StudentAttributeDialog(QWidget* parent = nullptr);

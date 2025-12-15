@@ -1105,6 +1105,36 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
         // 构造上传到服务器的JSON数据
         QJsonArray groupsArray;
         
+        auto normalizeGroupType = [](const QJsonValue& v) -> QString {
+            // SDK callback examples return string values: "Public"/"Private"/"ChatRoom"/"AVChatRoom"/...
+            // But we also defensively handle numeric enum values.
+            if (v.isString()) {
+                return v.toString().trimmed();
+            }
+            if (v.isDouble()) {
+                const int t = v.toInt();
+                switch (t) {
+                case kTIMGroup_Public:    return QStringLiteral("Public");
+                case kTIMGroup_Private:   return QStringLiteral("Private");
+                case kTIMGroup_ChatRoom:  return QStringLiteral("ChatRoom");
+                case kTIMGroup_BChatRoom: return QStringLiteral("BChatRoom");
+                case kTIMGroup_AVChatRoom:return QStringLiteral("AVChatRoom");
+                default:                  return QString::number(t);
+                }
+            }
+            return QString();
+        };
+
+        auto isMeetingType = [](const QString& groupType) -> bool {
+            // Project convention: Meeting/ChatRoom == class group.
+            // Some backends may store it as "Meeting".
+            if (groupType.compare(QStringLiteral("Meeting"), Qt::CaseInsensitive) == 0) return true;
+            if (groupType.compare(QStringLiteral("ChatRoom"), Qt::CaseInsensitive) == 0) return true;
+            // Tencent IM commonly uses "AVChatRoom" for AV-style groups; treat it as class group as well.
+            if (groupType.compare(QStringLiteral("AVChatRoom"), Qt::CaseInsensitive) == 0) return true;
+            return false;
+        };
+
         for (int i = 0; i < json_group_list.size(); i++) {
             QJsonObject group = json_group_list[i].toObject();
             
@@ -1129,6 +1159,9 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
                 }
             }
             
+            // 群组类型：根据腾讯群类型区分班级群 / 普通群
+            const QString groupType = normalizeGroupType(group.value(kTIMGroupBaseInfoGroupType));
+
             // 判断是否是群主（通过 self_role 判断）
             // - 400 或 "Owner" -> "Owner" (群主)
             // - 300 或 "Admin" -> "Admin" (管理员)
@@ -1150,12 +1183,20 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
             QString introduction = group[kTIMGroupDetialInfoIntroduction].toString();
             QString notification = group[kTIMGroupDetialInfoNotification].toString();
             
-            // 判断是否是班级群：根据 Name、Introduction、Notification 字段中是否包含"班级群"
+            // 判断是否是班级群：
+            // - 会议群（Meeting）是班级群
+            // - 公开群（Public）是普通群
+            // 其他类型：保持兼容（基于 classid / 文案的旧逻辑兜底）
             bool isClassGroup = false;
-            if (groupName.contains("班级群") || introduction.contains("班级群") || notification.contains("班级群")) {
+            if (isMeetingType(groupType)) {
                 isClassGroup = true;
+            } else if (groupType.compare(QStringLiteral("Public"), Qt::CaseInsensitive) == 0) {
+                isClassGroup = false;
             } else if (!classid.isEmpty()) {
-                // 如果有班级ID，也认为是班级群（兼容旧逻辑）
+                isClassGroup = true;
+            } else if (groupName.contains(QStringLiteral("班级群")) ||
+                       introduction.contains(QStringLiteral("班级群")) ||
+                       notification.contains(QStringLiteral("班级群"))) {
                 isClassGroup = true;
             }
             
@@ -1181,7 +1222,7 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
             // 群组基础信息
             groupObj["group_id"] = groupid;
             groupObj["group_name"] = groupName;
-            groupObj["group_type"] = group[kTIMGroupBaseInfoGroupType].toInt();
+            groupObj["group_type"] = groupType;
             groupObj["face_url"] = group[kTIMGroupBaseInfoFaceUrl].toString();
             groupObj["info_seq"] = group[kTIMGroupBaseInfoInfoSeq].toInt();
             groupObj["latest_seq"] = group[kTIMGroupBaseInfoLastestSeq].toInt();
@@ -1190,7 +1231,7 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
             // 群组详细信息
             groupObj["detail_group_id"] = group[kTIMGroupDetialInfoGroupId].toString();
             groupObj["detail_group_name"] = group[kTIMGroupDetialInfoGroupName].toString();
-            groupObj["detail_group_type"] = group[kTIMGroupDetialInfoGroupType].toInt();
+            groupObj["detail_group_type"] = normalizeGroupType(group.value(kTIMGroupDetialInfoGroupType));
             groupObj["detail_face_url"] = group[kTIMGroupDetialInfoFaceUrl].toString();
             groupObj["create_time"] = group[kTIMGroupDetialInfoCreateTime].toInt();
             groupObj["detail_info_seq"] = group[kTIMGroupDetialInfoInfoSeq].toInt();

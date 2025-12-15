@@ -513,8 +513,8 @@ void StudentAttributeDialog::onAttributeValueClicked()
         // 更新按钮文本
         btn->setText(QString::number(newValue));
         
-        // 发送更新信号
-        emit attributeUpdated(m_student.id, attributeName, newValue);
+        // 发送更新信号（携带当前选择的 Excel 表格维度）
+        emit attributeUpdated(m_student.id, attributeName, newValue, m_selectedExcelTable);
 
         // 同步到服务器：/student-scores/set-score
         sendScoreToServer(attributeName, newValue);
@@ -595,6 +595,11 @@ void StudentAttributeDialog::sendScoreToServer(const QString& attributeName, dou
                         if (m_selectedExcelTable == excelFileName && m_attributeValueButtons.contains(totalName)) {
                             m_attributeValueButtons[totalName]->setText(QString::number(excelTotal));
                         }
+
+                        // 同步通知外层（ScheduleDialog 等）更新缓存：总分_<excel>
+                        if (!m_student.id.isEmpty()) {
+                            emit attributeUpdated(m_student.id, totalName, excelTotal, excelFileName);
+                        }
                     }
 
                     // 2) 整体汇总总分（用于排序），写入 student.score；若当前是“全部”视图，也刷新“总分”行
@@ -607,6 +612,11 @@ void StudentAttributeDialog::sendScoreToServer(const QString& attributeName, dou
                             if (m_attributeValueButtons.contains(totalName)) {
                                 m_attributeValueButtons[totalName]->setText(QString::number(total));
                             }
+                        }
+
+                        // 同步通知外层（ScheduleDialog 等）更新缓存：整体总分
+                        if (!m_student.id.isEmpty()) {
+                            emit attributeUpdated(m_student.id, totalName, total, QString());
                         }
                     }
                 }
