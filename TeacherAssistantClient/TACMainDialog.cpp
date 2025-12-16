@@ -92,9 +92,23 @@ void TACMainDialog::Init(QString qPhone, int user_id)
                                 m_userInfo.strAddress = oUserInfo.at(0)["address"].toString();
                                 m_userInfo.strSchoolName = oUserInfo.at(0)["school_name"].toString();
                                 m_userInfo.strGradeLevel = oUserInfo.at(0)["grade_level"].toString();
-                                m_userInfo.strGrade = oUserInfo.at(0)["grade"].toString();
-                                m_userInfo.strSubject = oUserInfo.at(0)["subject"].toString();
-                                m_userInfo.strClassTaught = oUserInfo.at(0)["class_taught"].toString();
+                                // 任教信息：优先读 teachings 数组（新模型）；旧字段不再作为任教信息来源
+                                if (oUserInfo.at(0).isObject() && oUserInfo.at(0).toObject().contains("teachings") && oUserInfo.at(0).toObject().value("teachings").isArray()) {
+                                    QJsonArray teachingsArr = oUserInfo.at(0).toObject().value("teachings").toArray();
+                                    m_userInfo.teachings.clear();
+                                    for (const QJsonValue& v : teachingsArr) {
+                                        if (!v.isObject()) continue;
+                                        QJsonObject t = v.toObject();
+                                        UserTeachingInfo info;
+                                        info.grade_level = t.value("grade_level").toString();
+                                        info.grade = t.value("grade").toString();
+                                        info.subject = t.value("subject").toString();
+                                        info.class_taught = t.value("class_taught").toString();
+                                        m_userInfo.teachings.append(info);
+                                    }
+                                } else {
+                                    m_userInfo.teachings.clear();
+                                }
                                 m_userInfo.strIsAdministrator = oUserInfo.at(0)["is_administrator"].toString();
                                 m_userInfo.avatar = oUserInfo.at(0)["avatar"].toString();
                                 m_userInfo.strIdNumber = oUserInfo.at(0)["id_number"].toString();
