@@ -1672,12 +1672,23 @@ public:
 								if (memberObj.contains("is_voice_enabled")) {
 									is_voice_enabled = memberObj["is_voice_enabled"].toInt();
 								}
+
+								// 解析 teach_subjects（任教科目）
+								QStringList teachSubjects;
+								if (memberObj.contains("teach_subjects") && memberObj["teach_subjects"].isArray()) {
+									QJsonArray subjectArr = memberObj["teach_subjects"].toArray();
+									for (const auto& v : subjectArr) {
+										QString s = v.toString().trimmed();
+										if (!s.isEmpty()) teachSubjects.append(s);
+									}
+								}
 								
 								GroupMemberInfo groupMemInfo;
 								groupMemInfo.member_id = member_id;
 								groupMemInfo.member_name = member_name;
 								groupMemInfo.member_role = member_role;
 								groupMemInfo.is_voice_enabled = is_voice_enabled;
+								groupMemInfo.teach_subjects = teachSubjects;
 								m_groupMemberInfo.append(groupMemInfo);
 							}
 
@@ -2854,7 +2865,7 @@ public:
 			QUrl urlStudent("http://47.100.126.194:5000/student-scores");
 			QUrlQuery queryStudent;
 			queryStudent.addQueryItem("class_id", classid);
-			queryStudent.addQueryItem("exam_name", "期中考试");
+			//queryStudent.addQueryItem("exam_name", "期中考试");
 			queryStudent.addQueryItem("term", term);
 			urlStudent.setQuery(queryStudent);
 			m_httpHandler->get(urlStudent.toString());
@@ -4221,7 +4232,7 @@ inline void ScheduleDialog::fetchStudentScoresFromServer()
 	QUrl urlStudent("http://47.100.126.194:5000/student-scores");
 	QUrlQuery queryStudent;
 	queryStudent.addQueryItem("class_id", m_classid);
-	queryStudent.addQueryItem("exam_name", "期中考试");
+	//queryStudent.addQueryItem("exam_name", "期中考试");
 	queryStudent.addQueryItem("term", term);
 	urlStudent.setQuery(queryStudent);
 

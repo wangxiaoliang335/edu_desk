@@ -24,6 +24,9 @@ class MemberKickDialog; // 前向声明
 #include <QNetworkReply>
 #include <QJsonObject>
 #include <QJsonDocument>
+#include <QWidget>
+#include <QHBoxLayout>
+#include <QPushButton>
 #include <QResizeEvent>
 #include <QEvent>
 #include <QIcon>
@@ -188,6 +191,7 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void done(int r) override; // 拦截所有关闭路径（包括 ESC / Alt+F4 / reject()）
 
     TIMRestAPI* m_restAPI = NULL;
     QString m_groupName;
@@ -204,12 +208,26 @@ protected:
     QPushButton* m_btnExit = nullptr; // 退出群聊按钮
     QPushButton* m_closeButton = nullptr; // 关闭按钮
     IntercomControlWidget* m_intercomWidget = nullptr; // 对讲控件
+    // 任教科目：tag/chip 形式展示（可增删）
+    QWidget* m_subjectTagContainer = nullptr;
+    QHBoxLayout* m_subjectTagLayout = nullptr; // tag 容器布局（末尾固定“+ 添加”按钮）
+    QPushButton* m_addSubjectBtn = nullptr;    // “+ 添加”按钮
     bool m_dragging = false; // 是否正在拖动
     QPoint m_dragStartPos; // 拖动起始位置
     bool m_initialized = false; // 是否已经初始化
     
     // 根据当前用户的 is_voice_enabled 更新对讲开关状态
     void updateIntercomState();
+
+    bool validateSubjectFormat(bool showMessage = true) const; // 校验任教科目列表（至少1个非空）
+    QStringList collectTeachSubjects() const; // 收集当前 UI 中的任教科目（tag）
+    void postTeachSubjectsAndThenClose(int doneCode); // 调用 /groups/member/teach-subjects 后再关闭窗口
+
+    bool m_savingTeachSubjects = false; // 是否正在提交任教科目（避免重复提交）
+    bool m_subjectsDirty = false; // UI中任教科目是否被用户编辑过（避免后台刷新覆盖本地编辑）
+
+    QWidget* makeSubjectTagWidget(const QString& subjectText); // 创建一个科目tag
+    void setTeachSubjectsInUI(const QStringList& subjects); // 用指定科目刷新tag区
 };
 
 

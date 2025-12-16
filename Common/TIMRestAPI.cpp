@@ -301,9 +301,21 @@ void TIMRestAPI::createGroup(const QString& groupName, const QString& groupType,
         }
     }
 
-    // 群组简介和公告
-    requestBody["Introduction"] = QString("班级群：%1").arg(groupName);
-    requestBody["Notification"] = QString("欢迎加入%1").arg(groupName);
+    // 群组简介和公告（根据群类型给更贴合的文案）
+    if (groupType == "Public") {
+        requestBody["Introduction"] = QString("普通群：%1").arg(groupName);
+        requestBody["Notification"] = QString("欢迎加入%1").arg(groupName);
+    } else if (groupType == "Private") {
+        requestBody["Introduction"] = QString("私有群：%1").arg(groupName);
+        requestBody["Notification"] = QString("欢迎加入%1").arg(groupName);
+    } else if (groupType == "ChatRoom" || groupType == "AVChatRoom") {
+        requestBody["Introduction"] = QString("聊天室：%1").arg(groupName);
+        requestBody["Notification"] = QString("欢迎加入%1").arg(groupName);
+    } else {
+        // 其他/历史类型兜底
+        requestBody["Introduction"] = QString("群：%1").arg(groupName);
+        requestBody["Notification"] = QString("欢迎加入%1").arg(groupName);
+    }
 
     sendRestAPIRequest("group_open_http_svc/create_group", requestBody, callback);
 }

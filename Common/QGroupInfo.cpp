@@ -3,6 +3,12 @@
 #include "ClassTeacherDialog.h"
 #include "FriendSelectDialog.h"
 #include "MemberKickDialog.h"
+#include <QFrame>
+#include <QToolButton>
+#include <QRegularExpression>
+#include <QInputDialog>
+#include <QJsonArray>
+#include <QSet>
 
 // ==================== IntercomControlWidget 实现 ====================
 
@@ -146,6 +152,269 @@ QGroupInfo::QGroupInfo(QWidget* parent)
     m_circleMinus = nullptr;
     m_btnDismiss = nullptr;
     m_btnExit = nullptr;
+}
+
+bool QGroupInfo::validateSubjectFormat(bool showMessage) const
+{
+    if (!m_subjectTagLayout) {
+        return true;
+    }
+
+    // 至少有一个 tag
+    int tagCount = 0;
+    for (int i = 0; i < m_subjectTagLayout->count(); ++i) {
+        QWidget* w = m_subjectTagLayout->itemAt(i) ? m_subjectTagLayout->itemAt(i)->widget() : nullptr;
+        if (!w) continue;
+        if (w == m_addSubjectBtn) continue;
+        if (w->property("isSubjectTag").toBool()) {
+            const QString text = w->property("subjectText").toString().trimmed();
+            if (!text.isEmpty()) {
+                tagCount++;
+            }
+        }
+    }
+
+    if (tagCount <= 0) {
+        if (showMessage) {
+            QMessageBox::warning(const_cast<QGroupInfo*>(this), QString::fromUtf8(u8"提示"),
+                                 QString::fromUtf8(u8"请至少输入一个任教科目。"));
+            if (m_addSubjectBtn) m_addSubjectBtn->setFocus();
+        }
+        return false;
+    }
+
+    return true;
+}
+
+QWidget* QGroupInfo::makeSubjectTagWidget(const QString& subjectText)
+{
+    QWidget* parent = m_subjectTagContainer ? static_cast<QWidget*>(m_subjectTagContainer) : static_cast<QWidget*>(this);
+
+    QFrame* tag = new QFrame(parent);
+    tag->setProperty("isSubjectTag", true);
+    tag->setProperty("subjectText", subjectText);
+    tag->setFixedHeight(28); // 与“+ 添加”按钮高度一致
+    tag->setStyleSheet(
+        "QFrame {"
+        "  background-color: rgba(0,0,0,0.18);"
+        "  border: 1px solid rgba(255,255,255,0.16);"
+        "  border-radius: 14px;"
+        "}"
+        "QToolButton { border:none; color:#ffffff; font-weight:bold; padding:0 6px; }"
+        "QToolButton:hover { color:#ffdddd; }"
+        "QLabel { color:#ffffff; padding-right:10px; }"
+    );
+
+    QHBoxLayout* l = new QHBoxLayout(tag);
+    l->setContentsMargins(6, 0, 6, 0);
+    l->setSpacing(2);
+
+    QToolButton* btnX = new QToolButton(tag);
+    btnX->setText(QStringLiteral("×"));
+    btnX->setCursor(Qt::PointingHandCursor);
+
+    QLabel* lbl = new QLabel(subjectText, tag);
+    lbl->setStyleSheet("font-size: 13px;");
+
+    l->addWidget(btnX, 0, Qt::AlignVCenter);
+    l->addWidget(lbl, 0, Qt::AlignVCenter);
+
+    connect(btnX, &QToolButton::clicked, this, [this, tag]() {
+        m_subjectsDirty = true;
+        if (!m_subjectTagLayout) { tag->deleteLater(); return; }
+        m_subjectTagLayout->removeWidget(tag);
+        tag->deleteLater();
+    });
+
+    return tag;
+}
+
+void QGroupInfo::setTeachSubjectsInUI(const QStringList& subjects)
+{
+    if (!m_subjectTagLayout) return;
+
+    // 清空布局中的所有项，但保留 m_addSubjectBtn（复用）
+    while (m_subjectTagLayout->count() > 0) {
+        QLayoutItem* item = m_subjectTagLayout->takeAt(0);
+        if (!item) break;
+        QWidget* w = item->widget();
+        if (w) {
+            if (w == m_addSubjectBtn) {
+                // 不删除，仅从布局中移除，稍后重新插入
+            } else {
+                w->deleteLater();
+            }
+        }
+        delete item; // spacer / layout item
+    }
+
+    // 重新构建：tags + stretch + "+ 添加"
+    for (const auto& s : subjects) {
+        const QString t = s.trimmed();
+        if (t.isEmpty()) continue;
+        m_subjectTagLayout->addWidget(makeSubjectTagWidget(t), 0, Qt::AlignVCenter);
+    }
+    m_subjectTagLayout->addStretch();
+    if (m_addSubjectBtn) {
+        m_subjectTagLayout->addWidget(m_addSubjectBtn, 0, Qt::AlignVCenter);
+    }
+
+    m_subjectsDirty = false;
+}
+
+QStringList QGroupInfo::collectTeachSubjects() const
+{
+    QStringList subjects;
+    if (!m_subjectTagLayout) return subjects;
+
+    QSet<QString> seen;
+    for (int i = 0; i < m_subjectTagLayout->count(); ++i) {
+        QWidget* w = m_subjectTagLayout->itemAt(i) ? m_subjectTagLayout->itemAt(i)->widget() : nullptr;
+        if (!w) continue;
+        if (w == m_addSubjectBtn) continue;
+
+        if (w->property("isSubjectTag").toBool()) {
+            const QString text = w->property("subjectText").toString().trimmed();
+            if (text.isEmpty()) continue;
+            if (seen.contains(text)) continue;
+            seen.insert(text);
+            subjects.append(text);
+        }
+    }
+
+    return subjects;
+}
+
+void QGroupInfo::postTeachSubjectsAndThenClose(int doneCode)
+{
+    if (m_savingTeachSubjects) return;
+
+    // 未修改科目则不提交，直接关闭（避免重复请求/误触发服务端错误）
+    if (!m_subjectsDirty) {
+        QDialog::done(doneCode);
+        return;
+    }
+
+    if (!validateSubjectFormat(true)) {
+        return;
+    }
+
+    if (m_groupNumberId.isEmpty()) {
+        qWarning() << "postTeachSubjectsAndThenClose: group_id is empty, skip posting teach_subjects.";
+        QDialog::done(doneCode);
+        return;
+    }
+
+    UserInfo userInfo = CommonInfo::GetData();
+    const QString teacherUniqueId = userInfo.teacher_unique_id;
+    if (teacherUniqueId.isEmpty()) {
+        qWarning() << "postTeachSubjectsAndThenClose: teacher_unique_id is empty, skip posting teach_subjects.";
+        QDialog::done(doneCode);
+        return;
+    }
+
+    const QStringList subjects = collectTeachSubjects();
+    QJsonArray subjectArray;
+    for (const auto& s : subjects) subjectArray.append(s);
+
+    QJsonObject requestData;
+    requestData["group_id"] = m_groupNumberId;
+    // 注意：后端该字段实际使用 teacher_unique_id
+    requestData["user_id"] = teacherUniqueId;
+    requestData["teach_subjects"] = subjectArray;
+
+    QJsonDocument doc(requestData);
+    const QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+
+    const QString url = "http://47.100.126.194:5000/groups/member/teach-subjects";
+
+    m_savingTeachSubjects = true;
+
+    QNetworkAccessManager* manager = new QNetworkAccessManager(this);
+    QNetworkRequest networkRequest;
+    networkRequest.setUrl(QUrl(url));
+    networkRequest.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+    QNetworkReply* reply = manager->post(networkRequest, jsonData);
+
+    connect(reply, &QNetworkReply::finished, this, [=]() {
+        m_savingTeachSubjects = false;
+
+        const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const QByteArray response = reply->readAll();
+
+        if (reply->error() != QNetworkReply::NoError) {
+            const QString err = reply->errorString();
+            qWarning() << "teach-subjects post failed:" << err << "httpStatus:" << httpStatus
+                       << "response:" << QString::fromUtf8(response);
+            // 404 可能来自服务端业务判断（HTTPException(404)），因此把响应体也展示出来便于排查
+            const QString respText = QString::fromUtf8(response).trimmed();
+            QMessageBox::warning(this, QString::fromUtf8(u8"保存失败"),
+                                 QString::fromUtf8(u8"任教科目保存失败：%1（HTTP %2）%3")
+                                     .arg(err)
+                                     .arg(httpStatus)
+                                     .arg(respText.isEmpty() ? QString() : ("\n" + respText)));
+            reply->deleteLater();
+            manager->deleteLater();
+            return;
+        }
+
+        qDebug() << "teach-subjects server response:" << QString::fromUtf8(response);
+
+        QJsonParseError parseError;
+        QJsonDocument jsonDoc = QJsonDocument::fromJson(response, &parseError);
+        if (parseError.error != QJsonParseError::NoError || !jsonDoc.isObject()) {
+            QMessageBox::warning(this, QString::fromUtf8(u8"保存失败"),
+                                 QString::fromUtf8(u8"任教科目保存失败：解析服务端响应失败。"));
+            reply->deleteLater();
+            manager->deleteLater();
+            return;
+        }
+
+        const QJsonObject rootObj = jsonDoc.object();
+        // 兼容两种返回结构：{code,message,...} 或 {data:{code,message,...}}
+        QJsonObject container = rootObj;
+        if (rootObj.contains("data") && rootObj.value("data").isObject()) {
+            container = rootObj.value("data").toObject();
+        }
+
+        const QJsonValue codeVal = container.value("code");
+        int code = 0;
+        if (codeVal.isDouble()) {
+            code = codeVal.toInt();
+        } else if (codeVal.isString()) {
+            code = codeVal.toString().toInt();
+        }
+        const QString message = container.value("message").toString();
+
+        if (code != 200) {
+            QMessageBox::warning(this, QString::fromUtf8(u8"保存失败"),
+                                 QString::fromUtf8(u8"任教科目保存失败：%1").arg(message.isEmpty() ? QString::number(code) : message));
+            reply->deleteLater();
+            manager->deleteLater();
+            return;
+        }
+
+        // 保存成功后，视为已同步到服务端
+        m_subjectsDirty = false;
+
+        reply->deleteLater();
+        manager->deleteLater();
+
+        // 成功后再关闭窗口（直接调基类，避免递归触发本类 done()）
+        QDialog::done(doneCode);
+    });
+}
+
+void QGroupInfo::done(int r)
+{
+    // 所有关闭路径都要校验：当尝试关闭时，如果科目格式不合法则阻止关闭
+    if (r == QDialog::Rejected) {
+        // 关闭前保存任教科目（后端 user_id 使用 teacher_unique_id）
+        postTeachSubjectsAndThenClose(r);
+        return;
+    }
+    QDialog::done(r);
 }
 
 void QGroupInfo::initData(QString groupName, QString groupNumberId, QString classid)
@@ -385,10 +654,69 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, QString clas
     // 科目输入
     QGroupBox* groupSubject = new QGroupBox("科目", this);
     QVBoxLayout* subjectLayout = new QVBoxLayout(groupSubject);
-    QLineEdit* editSubject = new QLineEdit("语文", this);
-    editSubject->setAlignment(Qt::AlignCenter);
-    editSubject->setStyleSheet("color:red; font-size:18px; font-weight:bold;");
-    subjectLayout->addWidget(editSubject);
+
+    // 任教科目：tag/chip 形式（如：× 数学  × 语文  + 添加）
+    m_subjectTagContainer = new QWidget(groupSubject);
+    m_subjectTagLayout = new QHBoxLayout(m_subjectTagContainer);
+    m_subjectTagLayout->setContentsMargins(0, 0, 0, 0);
+    m_subjectTagLayout->setSpacing(8);
+
+    // “+ 添加”按钮（始终在最后）
+    m_addSubjectBtn = new QPushButton(QString::fromUtf8(u8"+ 添加"), groupSubject);
+    m_addSubjectBtn->setCursor(Qt::PointingHandCursor);
+    m_addSubjectBtn->setFixedHeight(28);
+    m_addSubjectBtn->setStyleSheet(
+        "QPushButton { background-color: rgba(0,0,0,0.18); color: #ffffff; border: 1px solid rgba(255,255,255,0.16); border-radius: 14px; padding: 0 12px; }"
+        "QPushButton:hover { background-color: rgba(25,118,210,0.35); }"
+    );
+
+    auto addTagIfNonEmpty = [=](const QString& text) {
+        const QString t = text.trimmed();
+        if (t.isEmpty()) {
+            QMessageBox::warning(this, QString::fromUtf8(u8"提示"), QString::fromUtf8(u8"请先输入科目文本，再添加。"));
+            return;
+        }
+        m_subjectsDirty = true;
+        QWidget* tag = makeSubjectTagWidget(t);
+        // 插到 “+ 添加” 之前
+        int insertPos = m_subjectTagLayout->count();
+        if (m_addSubjectBtn) {
+            insertPos = m_subjectTagLayout->indexOf(m_addSubjectBtn);
+            if (insertPos < 0) insertPos = m_subjectTagLayout->count();
+        }
+        m_subjectTagLayout->insertWidget(insertPos, tag, 0, Qt::AlignVCenter);
+    };
+
+    connect(m_addSubjectBtn, &QPushButton::clicked, this, [=]() {
+        bool ok = false;
+        QString text = QInputDialog::getText(this, QString::fromUtf8(u8"添加任教科目"),
+                                            QString::fromUtf8(u8"请输入科目名称："),
+                                            QLineEdit::Normal, QString(), &ok);
+        if (!ok) return;
+        addTagIfNonEmpty(text);
+    });
+
+    // 初始不预置科目，等待 /groups/members 返回的 teach_subjects 来刷新；用户也可手动添加
+    m_subjectTagLayout->addStretch();
+    m_subjectTagLayout->addWidget(m_addSubjectBtn, 0, Qt::AlignVCenter);
+
+    subjectLayout->addWidget(m_subjectTagContainer);
+
+    // 提示信息：放到 “+ 按钮”这一行下面
+    QLabel* subjectTip = new QLabel(QString::fromUtf8(u8"任教科目：点击 + 按钮新增；点击科目左侧“×”删除。"), groupSubject);
+    subjectTip->setStyleSheet("color: rgba(255,255,255,0.85); font-size: 12px;");
+    subjectTip->setWordWrap(true);
+    subjectLayout->addWidget(subjectTip);
+
+    // 顶部关闭按钮：关闭前校验科目格式（done() 已兜底，这里只是给更快的反馈）
+    if (m_closeButton) {
+        disconnect(m_closeButton, nullptr, nullptr, nullptr);
+        connect(m_closeButton, &QPushButton::clicked, this, [=]() {
+            if (!validateSubjectFormat(true)) return;
+            this->reject();
+        });
+    }
+
     mainLayout->addWidget(groupSubject);
 
     // 开启对讲(使用自定义自绘控件)
@@ -826,6 +1154,21 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
     // 根据当前用户的 is_voice_enabled 更新对讲开关状态
     updateIntercomState();
 
+    // 从成员列表中取出当前老师的 teach_subjects，刷新到“任教科目”区域
+    // 如果用户正在编辑科目（m_subjectsDirty==true），则不覆盖本地编辑
+    if (!m_subjectsDirty && m_subjectTagLayout) {
+        UserInfo userInfo = CommonInfo::GetData();
+        QString currentUserId = userInfo.teacher_unique_id;
+        QStringList subjectsFromServer;
+        for (const auto& member : m_groupMemberInfo) {
+            if (member.member_id == currentUserId) {
+                subjectsFromServer = member.teach_subjects;
+                break;
+            }
+        }
+        setTeachSubjectsInUI(subjectsFromServer);
+    }
+
     // 刷新整个对话框
     this->update();
     this->repaint();
@@ -1073,6 +1416,21 @@ void QGroupInfo::InitGroupMember()
     
     // 根据当前用户的 is_voice_enabled 更新对讲开关状态
     updateIntercomState();
+
+    // 从成员列表中取出当前老师的 teach_subjects，刷新到“任教科目”区域
+    // 如果用户正在编辑科目（m_subjectsDirty==true），则不覆盖本地编辑
+    if (!m_subjectsDirty && m_subjectTagLayout) {
+        UserInfo userInfo = CommonInfo::GetData();
+        QString currentUserId = userInfo.teacher_unique_id;
+        QStringList subjectsFromServer;
+        for (const auto& member : m_groupMemberInfo) {
+            if (member.member_id == currentUserId) {
+                subjectsFromServer = member.teach_subjects;
+                break;
+            }
+        }
+        setTeachSubjectsInUI(subjectsFromServer);
+    }
 }
 
 void QGroupInfo::updateIntercomState()

@@ -114,8 +114,8 @@ private:
         callbackData->groupName = groupName;
         callbackData->userInfo = userinfo;
 
-        // 调用REST API创建群组
-        m_restAPI->createGroup(groupName, "Meeting", memberArray,
+        // 调用腾讯云 IM REST API 创建“普通群”（公开群）
+        m_restAPI->createGroup(groupName, "Public", memberArray,
             [=](int errorCode, const QString& errorDesc, const QJsonObject& result) {
                 if (errorCode != 0) {
                     QString errorMsg = QString(QStringLiteral("创建群组失败: %1 (错误码: %2)")).arg(errorDesc).arg(errorCode);
