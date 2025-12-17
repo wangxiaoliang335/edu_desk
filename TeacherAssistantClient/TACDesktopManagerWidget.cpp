@@ -5,7 +5,7 @@
 #include <QLabel>
 #include "common.h"
 #include "TACalendarDialog.h"
-#include "TACClassWeekCourseScheduleDialog.h"
+#include "TACTeacherCourseScheduleWindow.h"
 TACDesktopManagerWidget::TACDesktopManagerWidget(QWidget *parent)
 	: TAFloatingWidget(parent)
 {
@@ -46,16 +46,18 @@ TACDesktopManagerWidget::TACDesktopManagerWidget(QWidget *parent)
 	QPushButton* courseScheduleButton = new QPushButton("教师课程表", this);
 	layout->addWidget(courseScheduleButton);
 	connect(courseScheduleButton, &QPushButton::clicked, this, [this]() {
-		if (!m_teacherCourseScheduleDlg) {
+		if (!m_teacherCourseScheduleWindow) {
 			// 用独立顶层窗口，方便悬浮显示
-			m_teacherCourseScheduleDlg = new TACClassWeekCourseScheduleDialog(nullptr);
+			m_teacherCourseScheduleWindow = new TACTeacherCourseScheduleWindow(nullptr);
+			m_teacherCourseScheduleWindow->setObjectName(QStringLiteral("TACTeacherCourseScheduleWindow"));
+			m_teacherCourseScheduleWindow->setWindowTitle(QString::fromUtf8(u8"我的课表"));
 		}
 		// 尽量在桌面管理面板右侧弹出
 		const QPoint anchor = this->mapToGlobal(QPoint(this->width() + 10, 0));
-		m_teacherCourseScheduleDlg->move(anchor);
-		m_teacherCourseScheduleDlg->show();
-		m_teacherCourseScheduleDlg->raise();
-		m_teacherCourseScheduleDlg->activateWindow();
+		m_teacherCourseScheduleWindow->move(anchor);
+		m_teacherCourseScheduleWindow->show();
+		m_teacherCourseScheduleWindow->raise();
+		m_teacherCourseScheduleWindow->activateWindow();
 	});
 
 	QPushButton* tabelButton = new QPushButton("表格对话框", this);
