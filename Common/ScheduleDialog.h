@@ -73,6 +73,7 @@
 #include "ArrangeSeatDialog.h"
 #include "GroupNotifyDialog.h"
 #include "StudentAttributeDialog.h"
+#include "HomeworkViewDialog.h"
 #include "ScoreHeaderIdStorage.h"
 #include "CommentStorage.h"
 #include "QXlsx/header/xlsxdocument.h"
@@ -1843,6 +1844,44 @@ public:
 							//}
 						}
 					}
+					// 作业消息（在线/离线统一格式）
+					else if (type == QStringLiteral("homework")) {
+						// 响应消息：包含 status 字段
+						if (rootObj.contains(QStringLiteral("status"))) {
+							const QString status = rootObj.value(QStringLiteral("status")).toString();
+							const QString message = rootObj.value(QStringLiteral("message")).toString();
+							qDebug() << "作业发布响应:" << status << message;
+							// 按需求：不弹出自动消息框，仅记录日志
+							return;
+						}
+
+						const QString groupId = rootObj.value(QStringLiteral("group_id")).toString();
+						if (!groupId.isEmpty() && groupId != m_unique_group_id) {
+							return; // 不是当前群的作业，忽略（避免跨群弹窗）
+						}
+
+						const QString dateStr = rootObj.value(QStringLiteral("date")).toString();
+						const QString subject = rootObj.value(QStringLiteral("subject")).toString().trimmed();
+						const QString content = rootObj.value(QStringLiteral("content")).toString().trimmed();
+						if (dateStr.isEmpty() || subject.isEmpty() || content.isEmpty()) {
+							return;
+						}
+
+						// 聚合：同一天可能会收到多条（不同科目），合并显示
+						m_homeworkByDate[dateStr][subject] = content;
+
+						QDate date = QDate::fromString(dateStr, QStringLiteral("yyyy-MM-dd"));
+						if (!date.isValid()) date = QDate::currentDate();
+
+						if (!homeworkViewDlg) {
+							homeworkViewDlg = new HomeworkViewDialog(this);
+						}
+						homeworkViewDlg->setDate(date);
+						homeworkViewDlg->setHomeworkContent(m_homeworkByDate.value(dateStr));
+						homeworkViewDlg->show();
+						homeworkViewDlg->raise();
+						homeworkViewDlg->activateWindow();
+					}
 				});
 			}
 			
@@ -3164,6 +3203,8 @@ private:
 	class HomeworkViewDialog* homeworkViewDlg = nullptr; // 展示作业对话框
 	void connectHomeworkButton(QPushButton* btnTask); // 连接作业按钮（教师端）
 	void showHomeworkViewDialog(); // 显示作业展示窗口（班级端）
+	// 作业缓存：按日期聚合（当前ScheduleDialog实例对应一个群）
+	QMap<QString, QMap<QString, QString>> m_homeworkByDate; // date(yyyy-MM-dd) -> (subject -> content)
 	
 	// 课前准备相关
 	void onSubjectButtonClicked(); // 科目按钮点击事件

@@ -7,6 +7,7 @@
 #include <QTextEdit>
 #include <QDate>
 #include <QMap>
+#include <QMouseEvent>
 
 class HomeworkViewDialog : public QDialog
 {
@@ -28,5 +29,16 @@ private:
     QLabel* dateLabel;
     QMap<QString, QLabel*> subjectLabels; // 科目 -> 作业内容标签
     QPushButton* btnClose;
+    QVBoxLayout* contentLayout = nullptr;
+
+protected:
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
+
+private:
+    bool m_dragging = false;
+    QPoint m_dragStartPos;
+    QLabel* ensureSubjectLabel(const QString& subject);
 };
 
