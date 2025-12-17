@@ -1,9 +1,10 @@
-#pragma execution_character_set("utf-8")
+ï»¿#pragma execution_character_set("utf-8")
 #include "TACDesktopManagerWidget.h"
 #include <QVBoxLayout>
 #include <QPushButton>
 #include <QLabel>
 #include "common.h"
+#include "TACalendarDialog.h"
 TACDesktopManagerWidget::TACDesktopManagerWidget(QWidget *parent)
 	: TAFloatingWidget(parent)
 {
@@ -19,39 +20,59 @@ TACDesktopManagerWidget::TACDesktopManagerWidget(QWidget *parent)
 	layout->setContentsMargins(10, 10, 10, 10);
 	layout->setSpacing(5);
 
-	QLabel* label = new QLabel("×ÀÃæ¹ÜÀí", this);
+	QLabel* label = new QLabel("æ¡Œé¢ç®¡ç†", this);
 	label->setAlignment(Qt::AlignCenter);
 	layout->addWidget(label);
 
-	QPushButton* fileManagerButton = new QPushButton("ÎÄ¼þ¹ÜÀí", this);
+	QPushButton* fileManagerButton = new QPushButton("æ–‡ä»¶ç®¡ç†", this);
 	layout->addWidget(fileManagerButton);
 
-	QPushButton* createFolderButton = new QPushButton("´´½¨ÎÄ¼þ¼Ð", this);
+	QPushButton* createFolderButton = new QPushButton("åˆ›å»ºæ–‡ä»¶å¤¹", this);
 	layout->addWidget(createFolderButton);
 
-	QPushButton* countdowButton = new QPushButton("µ¹¼ÆÊ±¶Ô»°¿ò", this);
+	QPushButton* countdowButton = new QPushButton("å€’è®¡æ—¶å¯¹è¯æ¡†", this);
 	layout->addWidget(countdowButton);
 
-	QPushButton* timeButton = new QPushButton("Ê±¼ä¶Ô»°¿ò", this);
+	QPushButton* timeButton = new QPushButton("æ—¶é—´å¯¹è¯æ¡†", this);
 	layout->addWidget(timeButton);
 
-	QPushButton* classButton = new QPushButton("Ñ§Ð£/°à¼¶", this);
+	QPushButton* classButton = new QPushButton("å­¦æ ¡/ç­çº§", this);
 	layout->addWidget(classButton);
 
-	QPushButton* wallpaperButton = new QPushButton("±ÚÖ½", this);
+	QPushButton* wallpaperButton = new QPushButton("å£çº¸", this);
 	layout->addWidget(wallpaperButton);
 
-	QPushButton* courseScheduleButton = new QPushButton("½ÌÊ¦¿Î³Ì±í", this);
+	QPushButton* courseScheduleButton = new QPushButton("æ•™å¸ˆè¯¾ç¨‹è¡¨", this);
 	layout->addWidget(courseScheduleButton);
 
-	QPushButton* tabelButton = new QPushButton("±í¸ñ¶Ô»°¿ò", this);
+	QPushButton* tabelButton = new QPushButton("è¡¨æ ¼å¯¹è¯æ¡†", this);
 	layout->addWidget(tabelButton);
 
-	QPushButton* textButton = new QPushButton("ÎÄ±¾¶Ô»°¿ò", this);
+	QPushButton* textButton = new QPushButton("æ–‡æœ¬å¯¹è¯æ¡†", this);
 	layout->addWidget(textButton);
 
-	QPushButton* imageButton = new QPushButton("Í¼Æ¬¶Ô»°¿ò", this);
+	QPushButton* imageButton = new QPushButton("å›¾ç‰‡å¯¹è¯æ¡†", this);
 	layout->addWidget(imageButton);
+
+	QPushButton* schoolCalendarButton = new QPushButton(QString::fromUtf8(u8"æ ¡åŽ†"), this);
+	layout->addWidget(schoolCalendarButton);
+	connect(schoolCalendarButton, &QPushButton::clicked, this, [this]() {
+		if (!m_schoolCalendarWidget) {
+			m_schoolCalendarWidget = new TASchoolCalendarWidget(nullptr);
+			m_schoolCalendarWidget->setBackgroundColor(WIDGET_BACKGROUND_COLOR);
+			m_schoolCalendarWidget->setBorderColor(WIDGET_BORDER_COLOR);
+			m_schoolCalendarWidget->setBorderWidth(WIDGET_BORDER_WIDTH);
+			m_schoolCalendarWidget->setRadius(15);
+			m_schoolCalendarWidget->resize(1100, 820);
+		}
+
+		// å°½é‡åœ¨æ¡Œé¢ç®¡ç†é¢æ¿å³ä¾§å¼¹å‡º
+		const QPoint anchor = this->mapToGlobal(QPoint(this->width() + 10, 0));
+		m_schoolCalendarWidget->move(anchor);
+		m_schoolCalendarWidget->show();
+		m_schoolCalendarWidget->raise();
+		m_schoolCalendarWidget->activateWindow();
+		});
 
 	setLayout(layout);
 	resize(230, 780);

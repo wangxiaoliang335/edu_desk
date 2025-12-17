@@ -14,4 +14,7 @@ protected:
 	void resizeEvent(QResizeEvent* event) override;
 private:
 	void initShow();
+
+private:
+	class TASchoolCalendarWidget* m_schoolCalendarWidget = nullptr;
 };
