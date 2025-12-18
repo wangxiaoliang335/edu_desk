@@ -9,6 +9,175 @@
 #include <QInputDialog>
 #include <QJsonArray>
 #include <QSet>
+#include <QPointer>
+#include <QMetaObject>
+
+namespace {
+struct GroupMemberFetchSDKData {
+    QPointer<QGroupInfo> dlg;
+    QString groupId;
+    QVector<GroupMemberInfo> members;
+};
+
+struct MemberRenderSig {
+    QString name;
+    QString role;
+    bool voiceEnabled = false;
+};
+
+static bool sameMemberListUnorderedForRender(const QVector<GroupMemberInfo>& a, const QVector<GroupMemberInfo>& b) {
+    if (a.size() != b.size()) return false;
+
+    // 按 member_id 对齐比较（忽略顺序）。发现重复 member_id 时直接认为不同，避免误判。
+    QHash<QString, MemberRenderSig> mapB;
+    mapB.reserve(b.size() * 2);
+    for (const auto& m : b) {
+        if (m.member_id.isEmpty()) return false;
+        if (mapB.contains(m.member_id)) return false; // duplicate in b
+        mapB.insert(m.member_id, MemberRenderSig{ m.member_name, m.member_role, m.is_voice_enabled });
+    }
+
+    QSet<QString> seenA;
+    seenA.reserve(a.size());
+    for (const auto& m : a) {
+        if (m.member_id.isEmpty()) return false;
+        if (seenA.contains(m.member_id)) return false; // duplicate in a
+        seenA.insert(m.member_id);
+
+        const auto it = mapB.constFind(m.member_id);
+        if (it == mapB.constEnd()) return false;
+        const MemberRenderSig& sig = it.value();
+        if (sig.name != m.member_name || sig.role != m.member_role || sig.voiceEnabled != m.is_voice_enabled) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static QString mapSdkRoleToText(int role) {
+    if (role == kTIMMemberRole_Owner) return QStringLiteral("群主");
+    if (role == kTIMMemberRole_Admin) return QStringLiteral("管理员");
+    return QStringLiteral("成员");
+}
+
+static void startFetchMembersFromSDK(GroupMemberFetchSDKData* data, quint64 nextSeq) {
+    if (!data || !data->dlg) {
+        delete data;
+        return;
+    }
+    if (data->groupId.trimmed().isEmpty()) {
+        delete data;
+        return;
+    }
+
+    QJsonObject option;
+    const quint64 infoFlag = static_cast<quint64>(kTIMGroupMemberInfoFlag_NameCard) |
+                             static_cast<quint64>(kTIMGroupMemberInfoFlag_MemberRole);
+    option[QString::fromUtf8(kTIMGroupMemberGetInfoOptionInfoFlag)] = static_cast<double>(infoFlag);
+    option[QString::fromUtf8(kTIMGroupMemberGetInfoOptionRoleFlag)] = static_cast<double>(kTIMGroupMemberRoleFlag_All);
+
+    QJsonObject req;
+    req[QString::fromUtf8(kTIMGroupGetMemberInfoListParamGroupId)] = data->groupId;
+    req[QString::fromUtf8(kTIMGroupGetMemberInfoListParamOption)] = option;
+    req[QString::fromUtf8(kTIMGroupGetMemberInfoListParamNextSeq)] = static_cast<double>(nextSeq);
+
+    const QByteArray json = QJsonDocument(req).toJson(QJsonDocument::Compact);
+
+    int ret = TIMGroupGetMemberInfoList(json.constData(),
+        [](int32_t code, const char* desc, const char* json_param, const void* user_data) {
+            GroupMemberFetchSDKData* cb = (GroupMemberFetchSDKData*)user_data;
+            if (!cb) return;
+            if (!cb->dlg) { delete cb; return; }
+
+            if (code != 0) {
+                qWarning() << "TIMGroupGetMemberInfoList failed, code:" << code << "desc:" << (desc ? desc : "");
+                // SDK 回调线程不确定，UI/网络都切回主线程再处理
+                const QPointer<QGroupInfo> dlg = cb->dlg;
+                const QString groupId = cb->groupId;
+                if (dlg) {
+                    QMetaObject::invokeMethod(dlg, [dlg, groupId]() {
+                        if (!dlg) return;
+                        // SDK 失败时，尝试用 REST 兜底（若 admin 已配置）
+                        dlg->fetchGroupMemberListFromREST(groupId);
+                    }, Qt::QueuedConnection);
+                }
+                delete cb;
+                return;
+            }
+
+            const QByteArray payload = QByteArray(json_param ? json_param : "");
+            QJsonParseError pe;
+            QJsonDocument doc = QJsonDocument::fromJson(payload, &pe);
+            if (pe.error != QJsonParseError::NoError || !doc.isObject()) {
+                qWarning() << "TIMGroupGetMemberInfoList parse json failed:" << pe.errorString();
+                // 解析失败也走一次兜底，避免成员区长期空白
+                const QPointer<QGroupInfo> dlg = cb->dlg;
+                const QString groupId = cb->groupId;
+                if (dlg) {
+                    QMetaObject::invokeMethod(dlg, [dlg, groupId]() {
+                        if (!dlg) return;
+                        dlg->fetchGroupMemberListFromREST(groupId);
+                    }, Qt::QueuedConnection);
+                }
+                delete cb;
+                return;
+            }
+
+            const QJsonObject obj = doc.object();
+            const QJsonArray infoArr = obj.value(QString::fromUtf8(kTIMGroupGetMemberInfoListResultInfoArray)).toArray();
+
+            QSet<QString> existingIds;
+            for (const auto& m : cb->members) existingIds.insert(m.member_id);
+
+            for (const auto& v : infoArr) {
+                if (!v.isObject()) continue;
+                const QJsonObject mo = v.toObject();
+
+                const QString memberId = mo.value(QString::fromUtf8(kTIMGroupMemberInfoIdentifier)).toString();
+                if (memberId.isEmpty()) continue;
+                if (existingIds.contains(memberId)) continue;
+
+                const QString nameCard = mo.value(QString::fromUtf8(kTIMGroupMemberInfoNameCard)).toString();
+                const int role = mo.value(QString::fromUtf8(kTIMGroupMemberInfoMemberRole)).toInt();
+
+                GroupMemberInfo mi;
+                mi.member_id = memberId;
+                mi.member_name = nameCard.trimmed().isEmpty() ? memberId : nameCard;
+                mi.member_role = mapSdkRoleToText(role);
+                mi.is_voice_enabled = true; // 普通群默认不控制对讲
+                cb->members.append(mi);
+                existingIds.insert(memberId);
+            }
+
+            const quint64 nextSeq = static_cast<quint64>(obj.value(QString::fromUtf8(kTIMGroupGetMemberInfoListResultNexSeq)).toVariant().toULongLong());
+            if (nextSeq != 0) {
+                startFetchMembersFromSDK(cb, nextSeq);
+                return;
+            }
+
+            // UI 刷新必须在主线程
+            const QPointer<QGroupInfo> dlg = cb->dlg;
+            const QString groupId = cb->groupId;
+            const QVector<GroupMemberInfo> members = cb->members;
+            if (dlg) {
+                QMetaObject::invokeMethod(dlg, [dlg, groupId, members]() {
+                    if (!dlg) return;
+                    dlg->InitGroupMember(groupId, members);
+                }, Qt::QueuedConnection);
+            }
+            delete cb;
+        },
+        data);
+
+    if (ret != 0) {
+        qWarning() << "TIMGroupGetMemberInfoList call returned:" << ret;
+        if (data->dlg) data->dlg->fetchGroupMemberListFromREST(data->groupId);
+        delete data;
+        return;
+    }
+}
+} // namespace
 
 // ==================== IntercomControlWidget 实现 ====================
 
@@ -408,7 +577,13 @@ void QGroupInfo::postTeachSubjectsAndThenClose(int doneCode)
 
 void QGroupInfo::done(int r)
 {
-    // 所有关闭路径都要校验：当尝试关闭时，如果科目格式不合法则阻止关闭
+    // 普通群模式不涉及任教科目校验，直接关闭
+    if (m_isNormalGroup) {
+        QDialog::done(r);
+        return;
+    }
+
+    // 班级群模式：所有关闭路径都要校验：当尝试关闭时，如果科目格式不合法则阻止关闭
     if (r == QDialog::Rejected) {
         // 关闭前保存任教科目（后端 user_id 使用 teacher_unique_id）
         postTeachSubjectsAndThenClose(r);
@@ -417,33 +592,53 @@ void QGroupInfo::done(int r)
     QDialog::done(r);
 }
 
-void QGroupInfo::initData(QString groupName, QString groupNumberId, QString classid)
+void QGroupInfo::initData(QString groupName, QString groupNumberId, bool iGroupOwner, QString classid)
 {
     // 如果已经初始化过了，直接返回
     if (m_initialized) {
         return;
     }
-    
-    setWindowTitle("班级管理");
+
+    m_groupName = groupName;
+    m_groupNumberId = groupNumberId;
+    m_classId = classid;
+    m_iGroupOwner = iGroupOwner;
+    m_isNormalGroup = classid.trimmed().isEmpty();
+
+    setWindowTitle(m_isNormalGroup ? QStringLiteral("群管理") : QStringLiteral("班级管理"));
     // 设置无边框窗口
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
-    resize(300, 600);
-    setStyleSheet("QDialog { background-color: #5C5C5C; color: white; border: 1px solid #5C5C5C; font-weight: bold; } "
-        "QPushButton { font-size:14px; color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
-        "QLabel { font-size:14px; color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
-        "QLineEdit { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
-        "QTextEdit { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
-        "QGroupBox { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
-        "QTableWidget { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; gridline-color: #5C5C5C; font-weight: bold; } "
-        "QTableWidget::item { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
-        "QComboBox { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
-        "QCheckBox { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
-        "QRadioButton { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
-        "QScrollArea { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
-        "QListWidget { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
-        "QSpinBox { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
-        "QProgressBar { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
-        "QSlider { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; }");
+    resize(m_isNormalGroup ? 360 : 300, m_isNormalGroup ? 520 : 600);
+
+    if (m_isNormalGroup) {
+        setStyleSheet(
+            "QDialog { background-color: #1E1F22; color: white; border: 1px solid rgba(255,255,255,0.14); font-weight: 600; } "
+            "QPushButton { font-size:14px; color: white; background-color: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10); border-radius: 8px; font-weight: 700; } "
+            "QPushButton:hover { background-color: rgba(255,255,255,0.10); } "
+            "QLabel { font-size:13px; color: white; background: transparent; } "
+            "QLineEdit { color: white; background-color: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10); border-radius: 8px; padding: 6px 10px; } "
+            "QGroupBox { color: rgba(255,255,255,0.85); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; margin-top: 10px; } "
+            "QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 6px; } "
+            "QCheckBox { color: rgba(255,255,255,0.90); }"
+        );
+    } else {
+        setStyleSheet("QDialog { background-color: #5C5C5C; color: white; border: 1px solid #5C5C5C; font-weight: bold; } "
+            "QPushButton { font-size:14px; color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+            "QLabel { font-size:14px; color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+            "QLineEdit { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+            "QTextEdit { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+            "QGroupBox { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+            "QTableWidget { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; gridline-color: #5C5C5C; font-weight: bold; } "
+            "QTableWidget::item { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+            "QComboBox { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+            "QCheckBox { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+            "QRadioButton { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+            "QScrollArea { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+            "QListWidget { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+            "QSpinBox { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+            "QProgressBar { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; } "
+            "QSlider { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; font-weight: bold; }");
+    }
     
     // 关闭按钮（右上角）
     m_closeButton = new QPushButton(this);
@@ -455,9 +650,6 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, QString clas
     m_closeButton->hide();
     connect(m_closeButton, &QPushButton::clicked, this, &QDialog::reject);
 
-    m_groupName = groupName;
-    m_groupNumberId = groupNumberId;
-
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     
     // 初始化REST API
@@ -465,6 +657,10 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, QString clas
     // 注意：管理员账号信息在使用REST API时再设置，因为此时用户可能还未登录
     
     m_friendSelectDlg = new FriendSelectDialog(this);
+    if (m_friendSelectDlg) {
+        // 普通群：邀请成员操作走腾讯 SDK（不走自建服务器）
+        m_friendSelectDlg->setUseTencentSDK(m_isNormalGroup);
+    }
     // 连接成员邀请成功信号，刷新成员列表
     if (m_friendSelectDlg) {
         connect(m_friendSelectDlg, &FriendSelectDialog::membersInvitedSuccess, this, [this](const QString& groupId) {
@@ -473,6 +669,10 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, QString clas
         });
     }
     m_memberKickDlg = new MemberKickDialog(this);
+    if (m_memberKickDlg) {
+        // 普通群：踢人操作走腾讯 SDK（不走自建服务器）
+        m_memberKickDlg->setUseTencentSDK(m_isNormalGroup);
+    }
     // 连接成员踢出成功信号，刷新成员列表
     if (m_memberKickDlg) {
         connect(m_memberKickDlg, &MemberKickDialog::membersKickedSuccess, this, [this](const QString& groupId) {
@@ -481,12 +681,16 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, QString clas
         });
     }
     //m_classTeacherDelDlg = new ClassTeacherDelDialog(this);
-    m_courseDlg = new CourseDialog();
-    m_courseDlg->setWindowTitle("课程表");
-    m_courseDlg->resize(800, 600);
-    // 设置群组ID和班级ID
-    m_courseDlg->setGroupId(groupNumberId);
-    m_courseDlg->setClassId(classid);
+    if (!m_isNormalGroup) {
+        m_courseDlg = new CourseDialog();
+        m_courseDlg->setWindowTitle("课程表");
+        m_courseDlg->resize(800, 600);
+        // 设置群组ID和班级ID
+        m_courseDlg->setGroupId(groupNumberId);
+        m_courseDlg->setClassId(classid);
+    } else {
+        m_courseDlg = nullptr;
+    }
 
     // 设置一些课程
     //m_courseDlg->setCourse(1, 0, "数学");
@@ -494,65 +698,147 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, QString clas
     //m_courseDlg->setCourse(2, 1, "语文", true); // 高亮
     //m_courseDlg->setCourse(3, 4, "体育", true);
 
-    // 顶部用户信息
-    QHBoxLayout* topLayout = new QHBoxLayout;
-    //QLabel* lblNumber = new QLabel("①");
-    //lblNumber->setAlignment(Qt::AlignCenter);
-    //lblNumber->setFixedSize(30, 30);
-    //lblNumber->setStyleSheet("background-color: yellow; border-radius: 15px; font-weight: bold;");
-    QLabel* lblAvatar = new QLabel(this);
-    lblAvatar->setFixedSize(50, 50);
-    lblAvatar->setStyleSheet("background-color: lightgray;");
-    QLabel* lblInfo = new QLabel(groupName + "\n" + groupNumberId, this);
-    QPushButton* btnMore = new QPushButton("...", this);
-    btnMore->setFixedSize(30, 30);
-    //topLayout->addWidget(lblNumber);
-    topLayout->addWidget(lblAvatar);
-    topLayout->addWidget(lblInfo, 1);
-    topLayout->addStretch();
-    topLayout->addWidget(btnMore);
-    mainLayout->addLayout(topLayout);
+    // 顶部栏
+    {
+        QHBoxLayout* topLayout = new QHBoxLayout;
+        topLayout->setContentsMargins(6, 0, 6, 0);
 
-    // 班级编号
-    QLineEdit* editClassNum = new QLineEdit("2349235", this);
-    editClassNum->setAlignment(Qt::AlignCenter);
-    editClassNum->setStyleSheet("color:red; font-size:18px; font-weight:bold;");
-    mainLayout->addWidget(editClassNum);
-
-    QHBoxLayout* pHBoxLayut = new QHBoxLayout;
-    // 班级课程表按钮
-    QPushButton* btnSchedule = new QPushButton("班级课程表", this);
-    btnSchedule->setStyleSheet("background-color:green; color:white; font-weight:bold;");
-
-    pHBoxLayut->addWidget(btnSchedule);
-    pHBoxLayut->addStretch(2);
-    mainLayout->addLayout(pHBoxLayut);
-
-    connect(btnSchedule, &QPushButton::clicked, this, [=]() {
-        qDebug() << "红框区域被点击！";
-        if (m_courseDlg)
-        {
-            m_courseDlg->show();
+        if (m_isNormalGroup) {
+            QLabel* lblTitle = new QLabel(QStringLiteral("群管理"), this);
+            lblTitle->setStyleSheet("font-size: 15px; font-weight: 700;");
+            topLayout->addWidget(lblTitle);
+            topLayout->addStretch();
+            if (m_closeButton) {
+                m_closeButton->move(width() - 22, 0);
+                m_closeButton->show();
+                topLayout->addWidget(m_closeButton);
+            }
+        } else {
+            QLabel* lblAvatar = new QLabel(this);
+            lblAvatar->setFixedSize(50, 50);
+            lblAvatar->setStyleSheet("background-color: lightgray;");
+            QLabel* lblInfo = new QLabel(groupName + "\n" + groupNumberId, this);
+            QPushButton* btnMore = new QPushButton("...", this);
+            btnMore->setFixedSize(30, 30);
+            topLayout->addWidget(lblAvatar);
+            topLayout->addWidget(lblInfo, 1);
+            topLayout->addStretch();
+            topLayout->addWidget(btnMore);
         }
 
-        // 这里可以弹出输入框、打开聊天功能等
-        /*if (m_chatDlg)
-        {
-            m_chatDlg->show();
-        }*/
-    });
+        mainLayout->addLayout(topLayout);
+    }
+
+    // 班级相关：普通群隐藏
+    if (!m_isNormalGroup) {
+        // 班级编号
+        QLineEdit* editClassNum = new QLineEdit("2349235", this);
+        editClassNum->setAlignment(Qt::AlignCenter);
+        editClassNum->setStyleSheet("color:red; font-size:18px; font-weight:bold;");
+        mainLayout->addWidget(editClassNum);
+
+        QHBoxLayout* pHBoxLayut = new QHBoxLayout;
+        // 班级课程表按钮
+        QPushButton* btnSchedule = new QPushButton("班级课程表", this);
+        btnSchedule->setStyleSheet("background-color:green; color:white; font-weight:bold;");
+
+        pHBoxLayut->addWidget(btnSchedule);
+        pHBoxLayut->addStretch(2);
+        mainLayout->addLayout(pHBoxLayut);
+
+        connect(btnSchedule, &QPushButton::clicked, this, [=]() {
+            qDebug() << "红框区域被点击！";
+            if (m_courseDlg)
+            {
+                m_courseDlg->show();
+            }
+        });
+    }
     
 
-    // 好友列表
-    QGroupBox* groupFriends = new QGroupBox("好友列表", this);
-    groupFriends->setMinimumHeight(80); // 设置最小高度，确保有足够空间显示按钮
+    // 群成员列表
+    QGroupBox* groupFriends = new QGroupBox(m_isNormalGroup ? QStringLiteral("群成员") : QStringLiteral("好友列表"), this);
+    groupFriends->setMinimumHeight(m_isNormalGroup ? 140 : 80);
     QVBoxLayout* friendsLayout = new QVBoxLayout(groupFriends);
-    friendsLayout->setContentsMargins(10, 10, 10, 10); // 设置 friendsLayout 的边距
-    friendsLayout->setSpacing(5); // 设置 friendsLayout 的间距
-    circlesLayout = new QHBoxLayout();
-    // 设置布局的间距和边距
-    circlesLayout->setSpacing(8);
-    circlesLayout->setContentsMargins(5, 5, 5, 5);
+    friendsLayout->setContentsMargins(10, 10, 10, 10);
+    friendsLayout->setSpacing(8);
+
+    // 班级群：沿用旧的圆圈布局；普通群：改为网格布局（头像上、名字下）
+    circlesLayout = nullptr;
+    if (m_isNormalGroup) {
+        // 普通群：提供“添加好友/删除好友”按钮（与 + / - tile 同功能）
+        QHBoxLayout* memberActionRow = new QHBoxLayout;
+        memberActionRow->setContentsMargins(0, 0, 0, 0);
+        memberActionRow->setSpacing(8);
+        memberActionRow->addStretch();
+
+        QPushButton* btnAddFriend = new QPushButton(QStringLiteral("添加好友"), groupFriends);
+        QPushButton* btnDelFriend = new QPushButton(QStringLiteral("删除好友"), groupFriends);
+        btnAddFriend->setCursor(Qt::PointingHandCursor);
+        btnDelFriend->setCursor(Qt::PointingHandCursor);
+        btnAddFriend->setFixedHeight(28);
+        btnDelFriend->setFixedHeight(28);
+        btnAddFriend->setStyleSheet("QPushButton{padding:0 12px;}");
+        btnDelFriend->setStyleSheet("QPushButton{padding:0 12px;}");
+
+        auto openInviteDlg = [this]() {
+            if (!m_friendSelectDlg) return;
+            if (m_friendSelectDlg->isHidden()) {
+                QVector<QString> memberIds;
+                for (const auto& member : m_groupMemberInfo) {
+                    memberIds.append(member.member_id);
+                }
+                m_friendSelectDlg->setExcludedMemberIds(memberIds);
+                m_friendSelectDlg->setGroupId(m_groupNumberId);
+                m_friendSelectDlg->setGroupName(m_groupName);
+                m_friendSelectDlg->InitData();
+                m_friendSelectDlg->show();
+            } else {
+                m_friendSelectDlg->hide();
+            }
+        };
+
+        auto openKickDlg = [this]() {
+            if (!m_memberKickDlg) return;
+            if (m_memberKickDlg->isHidden()) {
+                m_memberKickDlg->setGroupId(m_groupNumberId);
+                m_memberKickDlg->setGroupName(m_groupName);
+                m_memberKickDlg->InitData(m_groupMemberInfo);
+                m_memberKickDlg->show();
+            } else {
+                m_memberKickDlg->hide();
+            }
+        };
+
+        connect(btnAddFriend, &QPushButton::clicked, this, openInviteDlg);
+        connect(btnDelFriend, &QPushButton::clicked, this, openKickDlg);
+
+        memberActionRow->addWidget(btnAddFriend);
+        memberActionRow->addWidget(btnDelFriend);
+        friendsLayout->addLayout(memberActionRow);
+
+        m_memberScrollArea = new QScrollArea(groupFriends);
+        m_memberScrollArea->setWidgetResizable(true);
+        m_memberScrollArea->setFrameShape(QFrame::NoFrame);
+        m_memberScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        m_memberScrollArea->setStyleSheet(
+            "QScrollArea { background: transparent; }"
+            "QWidget { background: transparent; }"
+        );
+
+        m_memberGridContainer = new QWidget(groupFriends);
+        m_memberGridLayout = new QGridLayout(m_memberGridContainer);
+        m_memberGridLayout->setContentsMargins(0, 0, 0, 0);
+        m_memberGridLayout->setHorizontalSpacing(12);
+        m_memberGridLayout->setVerticalSpacing(10);
+
+        m_memberScrollArea->setWidget(m_memberGridContainer);
+        friendsLayout->addWidget(m_memberScrollArea);
+    } else {
+        circlesLayout = new QHBoxLayout();
+        circlesLayout->setSpacing(8);
+        circlesLayout->setContentsMargins(5, 5, 5, 5);
+    }
 
     //QString blueStyle = "background-color:blue; border-radius:15px; color:white; font-weight:bold;";
     //QString redStyle = "background-color:red; border-radius:15px; color:white; font-weight:bold;";
@@ -590,74 +876,117 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, QString clas
     //circlesLayout->addWidget(circlePlus);
     //circlesLayout->addWidget(circleMinus);
 
-    // 在初始化时就创建 + 和 - 按钮，确保它们总是可见
-    // 注意：按钮的父控件应该是 groupFriends，这样它们才会显示在正确的容器内
-    m_circlePlus = new FriendButton("+", groupFriends);
-    m_circlePlus->setFixedSize(50, 50);
-    m_circlePlus->setMinimumSize(50, 50);
-    m_circlePlus->setContextMenuEnabled(false);
-    m_circlePlus->setVisible(true);
-    circlesLayout->addWidget(m_circlePlus);
-    
-    m_circleMinus = new FriendButton("-", groupFriends);
-    m_circleMinus->setFixedSize(50, 50);
-    m_circleMinus->setMinimumSize(50, 50);
-    m_circleMinus->setContextMenuEnabled(false);
-    m_circleMinus->setVisible(true);
-    circlesLayout->addWidget(m_circleMinus);
-    
-    // 连接按钮点击事件（这些连接会在 InitGroupMember 中重新设置，但先设置确保可用）
-    connect(m_circlePlus, &FriendButton::clicked, this, [this]() {
-        if (m_friendSelectDlg)
-        {
-            if (m_friendSelectDlg->isHidden())
-            {
-                // 获取当前群组成员ID列表，用于排除
-                QVector<QString> memberIds;
-                for (const auto& member : m_groupMemberInfo)
-                {
-                    memberIds.append(member.member_id);
-                }
-                m_friendSelectDlg->setExcludedMemberIds(memberIds);
-                m_friendSelectDlg->setGroupId(m_groupNumberId);
-                m_friendSelectDlg->setGroupName(m_groupName);
-                m_friendSelectDlg->InitData();
-                m_friendSelectDlg->show();
-            }
-            else
-            {
-                m_friendSelectDlg->hide();
-            }
-        }
-    });
-    
-    connect(m_circleMinus, &FriendButton::clicked, this, [this]() {
-        if (m_memberKickDlg)
-        {
-            if (m_memberKickDlg->isHidden())
-            {
-                m_memberKickDlg->setGroupId(m_groupNumberId);
-                m_memberKickDlg->setGroupName(m_groupName);
-                m_memberKickDlg->InitData(m_groupMemberInfo);
-                m_memberKickDlg->show();
-            }
-            else
-            {
-                m_memberKickDlg->hide();
-            }
-        }
-    });
+    // 班级群：在初始化时就创建 + 和 - 按钮，确保它们总是可见
+    // 普通群：+/- 按钮会在 renderNormalGroupMemberGrid() 里以网格 tile 的形式渲染
+    if (!m_isNormalGroup && circlesLayout) {
+        // 注意：按钮的父控件应该是 groupFriends，这样它们才会显示在正确的容器内
+        m_circlePlus = new FriendButton("+", groupFriends);
+        m_circlePlus->setFixedSize(50, 50);
+        m_circlePlus->setMinimumSize(50, 50);
+        m_circlePlus->setContextMenuEnabled(false);
+        m_circlePlus->setVisible(true);
+        circlesLayout->addWidget(m_circlePlus);
 
-    friendsLayout->addLayout(circlesLayout);
+        m_circleMinus = new FriendButton("-", groupFriends);
+        m_circleMinus->setFixedSize(50, 50);
+        m_circleMinus->setMinimumSize(50, 50);
+        m_circleMinus->setContextMenuEnabled(false);
+        m_circleMinus->setVisible(true);
+        circlesLayout->addWidget(m_circleMinus);
+
+        // 连接按钮点击事件（这些连接会在 InitGroupMember 中重新设置，但先设置确保可用）
+        connect(m_circlePlus, &FriendButton::clicked, this, [this]() {
+            if (m_friendSelectDlg)
+            {
+                if (m_friendSelectDlg->isHidden())
+                {
+                    // 获取当前群组成员ID列表，用于排除
+                    QVector<QString> memberIds;
+                    for (const auto& member : m_groupMemberInfo)
+                    {
+                        memberIds.append(member.member_id);
+                    }
+                    m_friendSelectDlg->setExcludedMemberIds(memberIds);
+                    m_friendSelectDlg->setGroupId(m_groupNumberId);
+                    m_friendSelectDlg->setGroupName(m_groupName);
+                    m_friendSelectDlg->InitData();
+                    m_friendSelectDlg->show();
+                }
+                else
+                {
+                    m_friendSelectDlg->hide();
+                }
+            }
+        });
+
+        connect(m_circleMinus, &FriendButton::clicked, this, [this]() {
+            if (m_memberKickDlg)
+            {
+                if (m_memberKickDlg->isHidden())
+                {
+                    m_memberKickDlg->setGroupId(m_groupNumberId);
+                    m_memberKickDlg->setGroupName(m_groupName);
+                    m_memberKickDlg->InitData(m_groupMemberInfo);
+                    m_memberKickDlg->show();
+                }
+                else
+                {
+                    m_memberKickDlg->hide();
+                }
+            }
+        });
+
+        friendsLayout->addLayout(circlesLayout);
+    }
     mainLayout->addWidget(groupFriends);
 
-    // 科目输入
-    QGroupBox* groupSubject = new QGroupBox("科目", this);
-    QVBoxLayout* subjectLayout = new QVBoxLayout(groupSubject);
+    // 普通群设置区：群聊名称 + 接收通知
+    if (m_isNormalGroup) {
+        QGroupBox* groupSettings = new QGroupBox(QStringLiteral(""), this);
+        QVBoxLayout* settingsLayout = new QVBoxLayout(groupSettings);
+        settingsLayout->setContentsMargins(12, 12, 12, 12);
+        settingsLayout->setSpacing(10);
+
+        // 群聊名称
+        QHBoxLayout* nameRow = new QHBoxLayout;
+        QLabel* lblName = new QLabel(QStringLiteral("群聊名称"), groupSettings);
+        m_editGroupName = new QLineEdit(m_groupName, groupSettings);
+        m_editGroupName->setReadOnly(true); // 先按截图“显示”，后续可开放编辑并接入 modifyGroupInfo
+        nameRow->addWidget(lblName);
+        nameRow->addStretch();
+        nameRow->addWidget(m_editGroupName, 1);
+        settingsLayout->addLayout(nameRow);
+
+        // 接收通知
+        QHBoxLayout* notifyRow = new QHBoxLayout;
+        QLabel* lblNotify = new QLabel(QStringLiteral("接收通知"), groupSettings);
+        m_chkReceiveNotify = new QCheckBox(groupSettings);
+        m_chkReceiveNotify->setChecked(true);
+        notifyRow->addWidget(lblNotify);
+        notifyRow->addStretch();
+        notifyRow->addWidget(m_chkReceiveNotify);
+        settingsLayout->addLayout(notifyRow);
+
+        connect(m_chkReceiveNotify, &QCheckBox::toggled, this, [this](bool on) {
+            qDebug() << "普通群 接收通知 toggled:" << on << " groupId:" << m_groupNumberId;
+            // TODO: 如需持久化/同步到服务器，可在这里接入对应接口
+        });
+
+        mainLayout->addWidget(groupSettings);
+    }
+
+    // 班级群：科目输入（普通群不显示）
+    QGroupBox* groupSubject = nullptr;
+    QVBoxLayout* subjectLayout = nullptr;
+    if (!m_isNormalGroup) {
+        groupSubject = new QGroupBox("科目", this);
+        subjectLayout = new QVBoxLayout(groupSubject);
+    }
 
     // 任教科目：tag/chip 形式（如：× 数学  × 语文  + 添加）
-    m_subjectTagContainer = new QWidget(groupSubject);
-    m_subjectTagLayout = new QHBoxLayout(m_subjectTagContainer);
+    if (!m_isNormalGroup) {
+        m_subjectTagContainer = new QWidget(groupSubject);
+        m_subjectTagLayout = new QHBoxLayout(m_subjectTagContainer);
     m_subjectTagLayout->setContentsMargins(0, 0, 0, 0);
     m_subjectTagLayout->setSpacing(8);
 
@@ -700,36 +1029,39 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, QString clas
     m_subjectTagLayout->addStretch();
     m_subjectTagLayout->addWidget(m_addSubjectBtn, 0, Qt::AlignVCenter);
 
-    subjectLayout->addWidget(m_subjectTagContainer);
+        subjectLayout->addWidget(m_subjectTagContainer);
 
     // 提示信息：放到 “+ 按钮”这一行下面
-    QLabel* subjectTip = new QLabel(QString::fromUtf8(u8"任教科目：点击 + 按钮新增；点击科目左侧“×”删除。"), groupSubject);
-    subjectTip->setStyleSheet("color: rgba(255,255,255,0.85); font-size: 12px;");
-    subjectTip->setWordWrap(true);
-    subjectLayout->addWidget(subjectTip);
+        QLabel* subjectTip = new QLabel(QString::fromUtf8(u8"任教科目：点击 + 按钮新增；点击科目左侧“×”删除。"), groupSubject);
+        subjectTip->setStyleSheet("color: rgba(255,255,255,0.85); font-size: 12px;");
+        subjectTip->setWordWrap(true);
+        subjectLayout->addWidget(subjectTip);
 
     // 顶部关闭按钮：关闭前校验科目格式（done() 已兜底，这里只是给更快的反馈）
-    if (m_closeButton) {
-        disconnect(m_closeButton, nullptr, nullptr, nullptr);
-        connect(m_closeButton, &QPushButton::clicked, this, [=]() {
-            if (!validateSubjectFormat(true)) return;
-            this->reject();
-        });
+        if (m_closeButton) {
+            disconnect(m_closeButton, nullptr, nullptr, nullptr);
+            connect(m_closeButton, &QPushButton::clicked, this, [=]() {
+                if (!validateSubjectFormat(true)) return;
+                this->reject();
+            });
+        }
+
+        mainLayout->addWidget(groupSubject);
     }
 
-    mainLayout->addWidget(groupSubject);
-
-    // 开启对讲(使用自定义自绘控件)
-    m_intercomWidget = new IntercomControlWidget(this);
-    connect(m_intercomWidget, &IntercomControlWidget::intercomToggled, this, [](bool enabled) {
-        qDebug() << "对讲开关状态:" << (enabled ? "开启" : "关闭");
-        // 这里可以添加对讲功能的开启/关闭逻辑
-    });
-    connect(m_intercomWidget, &IntercomControlWidget::buttonClicked, this, []() {
-        qDebug() << "开启对讲按钮被点击";
-        // 这里可以添加对讲按钮的点击逻辑
-    });
-    mainLayout->addWidget(m_intercomWidget);
+    // 班级群：开启对讲（普通群不显示）
+    if (!m_isNormalGroup) {
+        m_intercomWidget = new IntercomControlWidget(this);
+        connect(m_intercomWidget, &IntercomControlWidget::intercomToggled, this, [](bool enabled) {
+            qDebug() << "对讲开关状态:" << (enabled ? "开启" : "关闭");
+        });
+        connect(m_intercomWidget, &IntercomControlWidget::buttonClicked, this, []() {
+            qDebug() << "开启对讲按钮被点击";
+        });
+        mainLayout->addWidget(m_intercomWidget);
+    } else {
+        m_intercomWidget = nullptr;
+    }
 
     // 解散群聊 / 退出群聊
     // 如果按钮已经存在，先删除它们（防止重复创建）
@@ -764,21 +1096,23 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, QString clas
 
 void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> groupMemberInfo)
 {
-    // 检查传入的参数是否与已保存的参数相同
-    if (m_groupNumberId == group_id && m_groupMemberInfo.size() == groupMemberInfo.size()) {
-        // 检查成员列表是否完全相同
-        bool isSame = true;
-        for (int i = 0; i < groupMemberInfo.size(); ++i) {
-            if (m_groupMemberInfo[i].member_id != groupMemberInfo[i].member_id ||
-                m_groupMemberInfo[i].member_name != groupMemberInfo[i].member_name ||
-                m_groupMemberInfo[i].member_role != groupMemberInfo[i].member_role ||
-                m_groupMemberInfo[i].is_voice_enabled != groupMemberInfo[i].is_voice_enabled) {
-                isSame = false;
-                break;
-            }
-        }
-        if (isSame) {
-            qDebug() << "QGroupInfo::InitGroupMember 参数相同，跳过更新。群组ID:" << group_id << "，成员数量:" << groupMemberInfo.size();
+    // 普通群：如果网格还没渲染过（首次打开、列表为空等），不要被“参数相同早退”挡住
+    const bool needInitialNormalRender = m_isNormalGroup && m_memberGridLayout && (m_memberGridLayout->count() == 0);
+
+    // 检查传入的参数是否与“上一次真正渲染到 UI 的快照”相同
+    // 不能用 m_groupMemberInfo 来和入参比较：调用方常常直接传 m_groupMemberInfo 本体，这会导致永远相同从而早退，UI 无法刷新
+    if (!needInitialNormalRender &&
+        m_hasRenderedGroupMembers &&
+        m_lastRenderedGroupId == group_id &&
+        m_lastRenderedGroupMemberInfo.size() == groupMemberInfo.size()) {
+
+        // 顺序无关：只要 member_id 对应的关键字段完全一致，就认为“参数相同”
+        const bool isSame = sameMemberListUnorderedForRender(m_lastRenderedGroupMemberInfo, groupMemberInfo);
+
+        // 注意：当两边成员数量都为 0 时，也要继续往下走（用于触发UI刷新/清理），不能被“参数相同”早退挡住
+        if (isSame && !groupMemberInfo.isEmpty()) {
+            qDebug() << "QGroupInfo::InitGroupMember 参数相同（与上次渲染一致），跳过更新。群组ID:"
+                     << group_id << "，成员数量:" << groupMemberInfo.size();
             return;
         }
     }
@@ -787,6 +1121,18 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
     m_groupMemberInfo = groupMemberInfo;
 
     qDebug() << "QGroupInfo::InitGroupMember 被调用，群组ID:" << group_id << "，成员数量:" << groupMemberInfo.size();
+
+    // 普通群：使用网格布局展示（头像在上、名字在下、末尾添加/删除）
+    if (m_isNormalGroup) {
+        renderNormalGroupMemberGrid();
+        updateButtonStates();
+
+        // 记录上一次渲染快照
+        m_hasRenderedGroupMembers = true;
+        m_lastRenderedGroupId = group_id;
+        m_lastRenderedGroupMemberInfo = groupMemberInfo;
+        return;
+    }
 
     // 确保 circlesLayout 已初始化
     if (!circlesLayout) {
@@ -920,22 +1266,19 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
         updateButtonStates();
         // 根据当前用户的 is_voice_enabled 更新对讲开关状态
         updateIntercomState();
+
+        // 记录上一次渲染快照（空列表也算一次有效的“清理渲染”）
+        m_hasRenderedGroupMembers = true;
+        m_lastRenderedGroupId = group_id;
+        m_lastRenderedGroupMemberInfo = groupMemberInfo;
         return;
     }
 
     QString redStyle = "background-color:red; border-radius:25px; color:white; font-weight:bold;";
     QString blueStyle = "background-color:blue; border-radius:25px; color:white; font-weight:bold;";
 
-    // 检查当前用户是否是群主
-    UserInfo userInfo = CommonInfo::GetData();
-    QString currentUserId = userInfo.teacher_unique_id;
-    bool isOwner = false;
-    for (const auto& member : m_groupMemberInfo) {
-        if (member.member_id == currentUserId && member.member_role == "群主") {
-            isOwner = true;
-            break;
-        }
-    }
+    // 当前用户是否为群主：统一使用外部传入的 iGroupOwner（m_iGroupOwner）
+    const bool isOwner = m_iGroupOwner;
 
     // 找到 + 按钮的位置（应该在倒数第二个位置，- 按钮在最后）
     int plusButtonIndex = -1;
@@ -974,7 +1317,7 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
             circleBtn->setMemberRole(iter.member_role);
             
             // 只有当前用户是群主时，才启用右键菜单
-            circleBtn->setContextMenuEnabled(isOwner);
+            circleBtn->setContextMenuEnabled(m_iGroupOwner);
             
             // 接收右键菜单信号，传递成员ID
             QString memberId = iter.member_id;
@@ -1085,7 +1428,7 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
             circleBtn->setMemberRole(iter.member_role);
             
             // 只有当前用户是群主时，才启用右键菜单
-            circleBtn->setContextMenuEnabled(isOwner);
+            circleBtn->setContextMenuEnabled(m_iGroupOwner);
             
             // 接收右键菜单信号，传递成员ID
             QString memberId = iter.member_id;
@@ -1172,15 +1515,152 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
     // 刷新整个对话框
     this->update();
     this->repaint();
+
+    // 记录上一次渲染快照（用于下次“参数相同早退”判断）
+    m_hasRenderedGroupMembers = true;
+    m_lastRenderedGroupId = group_id;
+    m_lastRenderedGroupMemberInfo = groupMemberInfo;
+}
+
+QWidget* QGroupInfo::makeMemberTile(const QString& topText, const QString& bottomText, bool isActionTile)
+{
+    QWidget* tile = new QWidget(m_memberGridContainer ? m_memberGridContainer : this);
+    QVBoxLayout* v = new QVBoxLayout(tile);
+    v->setContentsMargins(0, 0, 0, 0);
+    v->setSpacing(6);
+
+    FriendButton* btn = new FriendButton(topText, tile);
+    btn->setFixedSize(50, 50);
+    btn->setMinimumSize(50, 50);
+    btn->setContextMenuEnabled(false);
+    btn->setCursor(Qt::PointingHandCursor);
+    if (isActionTile) {
+        btn->setStyleSheet("background-color: rgba(255,255,255,0.06); border: 1px dashed rgba(255,255,255,0.20); border-radius:25px; color:white; font-weight:800;");
+    } else {
+        btn->setStyleSheet("background-color: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.10); border-radius:25px; color:white; font-weight:800;");
+    }
+
+    QLabel* lbl = new QLabel(bottomText, tile);
+    lbl->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
+    lbl->setFixedWidth(56);
+    lbl->setWordWrap(false);
+    lbl->setToolTip(bottomText);
+    lbl->setStyleSheet("color: rgba(255,255,255,0.75); font-size: 11px;");
+
+    v->addWidget(btn, 0, Qt::AlignHCenter);
+    v->addWidget(lbl, 0, Qt::AlignHCenter);
+    return tile;
+}
+
+void QGroupInfo::renderNormalGroupMemberGrid()
+{
+    if (!m_memberGridLayout || !m_memberGridContainer) {
+        qWarning() << "普通群成员网格未初始化，无法渲染。";
+        return;
+    }
+
+    // 清空旧的 tile
+    while (m_memberGridLayout->count() > 0) {
+        QLayoutItem* it = m_memberGridLayout->takeAt(0);
+        if (it) {
+            if (it->widget()) it->widget()->deleteLater();
+            delete it;
+        }
+    }
+
+    auto firstChar = [](const QString& name) -> QString {
+        QString t = name.trimmed();
+        if (t.isEmpty()) return "?";
+        return t.left(1);
+    };
+
+    const int columns = 6; // 视觉上接近微信：一行 6 个（含 + / -）
+    int idx = 0;
+
+    // 成员 tile
+    for (const auto& m : m_groupMemberInfo) {
+        QWidget* tile = makeMemberTile(firstChar(m.member_name), m.member_name, false);
+        // 让按钮点击可以显示成员信息（后续可扩展）
+        if (FriendButton* btn = tile->findChild<FriendButton*>()) {
+            btn->setProperty("member_id", m.member_id);
+            btn->setToolTip(m.member_name);
+        }
+
+        const int row = idx / columns;
+        const int col = idx % columns;
+        m_memberGridLayout->addWidget(tile, row, col, Qt::AlignTop);
+        idx++;
+    }
+
+    // 添加 / 删除 tile（固定最后两个）
+    QWidget* addTile = makeMemberTile("+", QStringLiteral("添加"), true);
+    if (FriendButton* addBtn = addTile->findChild<FriendButton*>()) {
+        connect(addBtn, &QPushButton::clicked, this, [this]() {
+            if (!m_friendSelectDlg) return;
+            if (m_friendSelectDlg->isHidden())
+            {
+                QVector<QString> memberIds;
+                for (const auto& member : m_groupMemberInfo)
+                {
+                    memberIds.append(member.member_id);
+                }
+                m_friendSelectDlg->setExcludedMemberIds(memberIds);
+                m_friendSelectDlg->setGroupId(m_groupNumberId);
+                m_friendSelectDlg->setGroupName(m_groupName);
+                m_friendSelectDlg->InitData();
+                m_friendSelectDlg->show();
+            }
+            else
+            {
+                m_friendSelectDlg->hide();
+            }
+        });
+    }
+
+    QWidget* delTile = makeMemberTile("-", QStringLiteral("删除"), true);
+    if (FriendButton* delBtn = delTile->findChild<FriendButton*>()) {
+        connect(delBtn, &QPushButton::clicked, this, [this]() {
+            if (!m_memberKickDlg) return;
+            if (m_memberKickDlg->isHidden())
+            {
+                m_memberKickDlg->setGroupId(m_groupNumberId);
+                m_memberKickDlg->setGroupName(m_groupName);
+                m_memberKickDlg->InitData(m_groupMemberInfo);
+                m_memberKickDlg->show();
+            }
+            else
+            {
+                m_memberKickDlg->hide();
+            }
+        });
+    }
+
+    {
+        const int row = idx / columns;
+        const int col = idx % columns;
+        m_memberGridLayout->addWidget(addTile, row, col, Qt::AlignTop);
+        idx++;
+    }
+    {
+        const int row = idx / columns;
+        const int col = idx % columns;
+        m_memberGridLayout->addWidget(delTile, row, col, Qt::AlignTop);
+        idx++;
+    }
+
+    // 让底部留一点空白
+    m_memberGridLayout->setRowStretch((idx / columns) + 1, 1);
 }
 
 
 void QGroupInfo::InitGroupMember()
 {
-    if (m_groupMemberInfo.size() == 0)
-    {
+    // circlesLayout 未初始化时，无法刷新成员圆圈
+    if (!circlesLayout) {
+        qWarning() << "circlesLayout 未初始化，无法显示好友列表！";
         return;
     }
+    // 注意：当成员数量为 0 时也要继续往下走，用于清理旧UI（避免残留上一轮成员）
 
     //m_groupNumberId = group_id;
     //m_groupMemberInfo = groupMemberInfo;
@@ -1304,16 +1784,8 @@ void QGroupInfo::InitGroupMember()
     QString redStyle = "background-color:red; border-radius:25px; color:white; font-weight:bold;";
     QString blueStyle = "background-color:blue; border-radius:25px; color:white; font-weight:bold;";
 
-    // 检查当前用户是否是群主
-    UserInfo userInfo = CommonInfo::GetData();
-    QString currentUserId = userInfo.teacher_unique_id;
-    bool isOwner = false;
-    for (const auto& member : m_groupMemberInfo) {
-        if (member.member_id == currentUserId && member.member_role == "群主") {
-            isOwner = true;
-            break;
-        }
-    }
+    // 当前用户是否为群主：统一使用外部传入的 iGroupOwner（m_iGroupOwner）
+    const bool isOwner = m_iGroupOwner;
 
     // 找到 + 按钮的位置（应该在倒数第二个位置，- 按钮在最后）
     int plusButtonIndex = -1;
@@ -1388,7 +1860,7 @@ void QGroupInfo::InitGroupMember()
         circleBtn->setMemberRole(iter.member_role);
         
         // 只有当前用户是群主时，才启用右键菜单
-        circleBtn->setContextMenuEnabled(isOwner);
+        circleBtn->setContextMenuEnabled(m_iGroupOwner);
         
         // 接收右键菜单信号，传递成员ID
         QString memberId = iter.member_id;
@@ -1458,33 +1930,27 @@ void QGroupInfo::updateIntercomState()
 
 void QGroupInfo::updateButtonStates()
 {
-    // 获取当前用户信息
-    UserInfo userInfo = CommonInfo::GetData();
-    QString currentUserId = userInfo.teacher_unique_id;
-    
-    // 查找当前用户在成员列表中的角色
-    bool isOwner = false;
-    for (const auto& member : m_groupMemberInfo) {
-        if (member.member_id == currentUserId) {
-            if (member.member_role == "群主") {
-                isOwner = true;
-            }
-            break;
-        }
-    }
+    // 当前用户是否为群主：统一使用外部传入的 iGroupOwner（m_iGroupOwner）
+    const bool isOwner = m_iGroupOwner;
     
     // 根据当前用户是否是群主来设置按钮状态
     if (m_btnDismiss && m_btnExit) {
-        if (isOwner) {
-            // 当前用户是群主：解散群聊按钮可用，退出群聊按钮也可用（需要先转让群主）
-            m_btnDismiss->setEnabled(true);
-            m_btnExit->setEnabled(true);
-            qDebug() << "当前用户是群主，解散群聊按钮可用，退出群聊按钮可用（需要先转让群主）";
+        if (m_isNormalGroup) {
+            // 普通群：按腾讯SDK规则，群主不能退出（只能解散）；成员可退出
+            m_btnDismiss->setEnabled(isOwner);
+            m_btnExit->setEnabled(!isOwner);
+            qDebug() << "普通群按钮状态，isOwner:" << isOwner << "dismiss:" << m_btnDismiss->isEnabled() << "exit:" << m_btnExit->isEnabled();
         } else {
-            // 当前用户不是群主：解散群聊按钮禁用，退出群聊按钮可用
-            m_btnDismiss->setEnabled(false);
-            m_btnExit->setEnabled(true);
-            qDebug() << "当前用户不是群主，解散群聊按钮禁用，退出群聊按钮可用";
+            // 班级群：保留现有逻辑（群主可转让后退出）
+            if (isOwner) {
+                m_btnDismiss->setEnabled(true);
+                m_btnExit->setEnabled(true);
+                qDebug() << "当前用户是群主，解散群聊按钮可用，退出群聊按钮可用（需要先转让群主）";
+            } else {
+                m_btnDismiss->setEnabled(false);
+                m_btnExit->setEnabled(true);
+                qDebug() << "当前用户不是群主，解散群聊按钮禁用，退出群聊按钮可用";
+            }
         }
     }
 }
@@ -1501,13 +1967,77 @@ void QGroupInfo::onExitGroupClicked()
     QString userId = userInfo.teacher_unique_id;
     QString userName = userInfo.strName;
     
-    // 检查当前用户是否是群主
-    bool isOwner = false;
-    for (const auto& member : m_groupMemberInfo) {
-        if (member.member_id == userId && member.member_role == "群主") {
-            isOwner = true;
-            break;
+    // 当前用户是否为群主：统一使用外部传入的 iGroupOwner（m_iGroupOwner）
+    const bool isOwner = m_iGroupOwner;
+
+    // 普通群：不走自建服务器，直接调用腾讯 IM SDK
+    if (m_isNormalGroup) {
+        if (isOwner) {
+            QMessageBox::information(this, "提示", "普通群群主不能退出群聊，请使用“解散群聊”。");
+            return;
         }
+
+        int ret = QMessageBox::question(this, "确认退出",
+            QString("确定要退出群聊 \"%1\" 吗？").arg(m_groupName),
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No);
+        if (ret != QMessageBox::Yes) {
+            return;
+        }
+
+        struct QuitGroupSDKCbData {
+            QPointer<QGroupInfo> dlg;
+            QString groupId;
+            QString userId;
+        };
+        QuitGroupSDKCbData* cbData = new QuitGroupSDKCbData;
+        cbData->dlg = this;
+        cbData->groupId = m_groupNumberId;
+        cbData->userId = userId;
+
+        const QByteArray gid = m_groupNumberId.toUtf8();
+        int callRet = TIMGroupQuit(gid.constData(),
+            [](int32_t code, const char* desc, const char* /*json_param*/, const void* user_data) {
+                QuitGroupSDKCbData* d = (QuitGroupSDKCbData*)user_data;
+                if (!d) return;
+                if (!d->dlg) { delete d; return; }
+
+                const QPointer<QGroupInfo> dlg = d->dlg;
+                const QString groupId = d->groupId;
+                const QString userId = d->userId;
+                const QString errDesc = QString::fromUtf8(desc ? desc : "");
+
+                if (dlg) {
+                    QMetaObject::invokeMethod(dlg, [dlg, groupId, userId, code, errDesc]() {
+                        if (!dlg) return;
+                        if (code != 0) {
+                            QString err = QString("退出群聊失败\n错误码: %1\n错误描述: %2").arg(code).arg(errDesc);
+                            QMessageBox::warning(dlg, "退出失败", err);
+                            return;
+                        }
+
+                        // 更新本地列表并通知外部
+                        QVector<GroupMemberInfo> updated;
+                        for (const auto& m : dlg->m_groupMemberInfo) {
+                            if (m.member_id != userId) updated.append(m);
+                        }
+                        dlg->m_groupMemberInfo = updated;
+                        dlg->InitGroupMember(groupId, dlg->m_groupMemberInfo);
+
+                        emit dlg->memberLeftGroup(groupId, userId);
+                        QMessageBox::information(dlg, "退出成功", QString("已成功退出群聊 \"%1\"！").arg(dlg->m_groupName));
+                        dlg->accept();
+                    }, Qt::QueuedConnection);
+                }
+                delete d;
+            },
+            cbData);
+
+        if (callRet != TIM_SUCC) {
+            delete cbData;
+            QMessageBox::warning(this, "退出失败", QString("TIMGroupQuit 调用失败，错误码: %1").arg(callRet));
+        }
+        return;
     }
     
     // 如果是群主，需要检查是否有其他管理员
@@ -1707,6 +2237,52 @@ void QGroupInfo::onDismissGroupClicked()
     if (ret != QMessageBox::Yes) {
         return;
     }
+
+    // 普通群：不走自建服务器，直接调用腾讯 IM SDK
+    if (m_isNormalGroup) {
+        struct DeleteGroupSDKCbData {
+            QPointer<QGroupInfo> dlg;
+            QString groupId;
+        };
+        DeleteGroupSDKCbData* cbData = new DeleteGroupSDKCbData;
+        cbData->dlg = this;
+        cbData->groupId = m_groupNumberId;
+
+        const QByteArray gid = m_groupNumberId.toUtf8();
+        int callRet = TIMGroupDelete(gid.constData(),
+            [](int32_t code, const char* desc, const char* /*json_param*/, const void* user_data) {
+                DeleteGroupSDKCbData* d = (DeleteGroupSDKCbData*)user_data;
+                if (!d) return;
+                if (!d->dlg) { delete d; return; }
+
+                const QPointer<QGroupInfo> dlg = d->dlg;
+                const QString groupId = d->groupId;
+                const QString errDesc = QString::fromUtf8(desc ? desc : "");
+
+                if (dlg) {
+                    QMetaObject::invokeMethod(dlg, [dlg, groupId, code, errDesc]() {
+                        if (!dlg) return;
+                        if (code != 0) {
+                            QString err = QString("解散群聊失败\n错误码: %1\n错误描述: %2").arg(code).arg(errDesc);
+                            QMessageBox::warning(dlg, "解散失败", err);
+                            return;
+                        }
+
+                        emit dlg->groupDismissed(groupId);
+                        QMessageBox::information(dlg, "解散成功", QString("已成功解散群聊 \"%1\"！").arg(dlg->m_groupName));
+                        dlg->accept();
+                    }, Qt::QueuedConnection);
+                }
+                delete d;
+            },
+            cbData);
+
+        if (callRet != TIM_SUCC) {
+            delete cbData;
+            QMessageBox::warning(this, "解散失败", QString("TIMGroupDelete 调用失败，错误码: %1").arg(callRet));
+        }
+        return;
+    }
     
     // 获取当前用户信息
     UserInfo userInfo = CommonInfo::GetData();
@@ -1825,6 +2401,11 @@ void QGroupInfo::refreshMemberList(const QString& groupId)
     // 通知父窗口（ScheduleDialog）刷新成员列表
     emit membersRefreshed(groupId);
     qDebug() << "发出成员列表刷新信号，群组ID:" << groupId;
+
+    // 普通群：直接通过腾讯IM SDK 刷新成员列表，避免依赖外部窗口转发
+    if (m_isNormalGroup) {
+        fetchGroupMemberListFromSDK(groupId);
+    }
 }
 
 void QGroupInfo::fetchGroupMemberListFromREST(const QString& groupId)
@@ -1851,10 +2432,29 @@ void QGroupInfo::fetchGroupMemberListFromREST(const QString& groupId)
                 qDebug() << "获取群成员列表失败，错误码:" << errorCode << "，描述:" << errorDesc;
                 return;
             }
-            
+
+            // DEBUG: 打印完整返回，方便定位“成员名字”字段（仅 Debug 构建输出，避免 Release 刷屏）
+#ifdef QT_DEBUG
+            qDebug().noquote() << "getGroupMemberList REST raw result:\n"
+                               << QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Indented));
+#endif
             // 解析成员列表
             QVector<GroupMemberInfo> memberList;
             QJsonArray memberArray = result["MemberList"].toArray();
+
+            // DEBUG: 打印 MemberList 前几项的关键字段（避免日志过大，只打前3个；仅 Debug 构建输出）
+#ifdef QT_DEBUG
+            {
+                const int debugN = qMin(3, memberArray.size());
+                for (int i = 0; i < debugN; ++i) {
+                    const QJsonObject o = memberArray.at(i).toObject();
+                    qDebug() << "MemberList[" << i << "] keys:" << o.keys();
+                    qDebug() << "MemberList[" << i << "] Member_Account:" << o.value("Member_Account").toString()
+                             << "NameCard:" << o.value("NameCard").toString()
+                             << "Nick:" << o.value("Nick").toString();
+                }
+            }
+#endif
             
             for (const QJsonValue& value : memberArray) {
                 if (!value.isObject()) continue;
@@ -1876,8 +2476,13 @@ void QGroupInfo::fetchGroupMemberListFromREST(const QString& groupId)
                 }
                 
                 // 获取成员名称（如果有）
-                if (memberObj.contains("NameCard") && !memberObj["NameCard"].toString().isEmpty()) {
-                    memberInfo.member_name = memberObj["NameCard"].toString();
+                // 常见字段：NameCard(群名片) / Nick(昵称)。优先 NameCard，其次 Nick，最后退回 member_id
+                const QString nameCard = memberObj.value("NameCard").toString();
+                const QString nick = memberObj.value("Nick").toString();
+                if (!nameCard.isEmpty()) {
+                    memberInfo.member_name = nameCard;
+                } else if (!nick.isEmpty()) {
+                    memberInfo.member_name = nick;
                 } else {
                     // 如果没有群名片，使用账号ID
                     memberInfo.member_name = memberInfo.member_id;
@@ -1927,21 +2532,26 @@ void QGroupInfo::fetchGroupMemberListFromREST(const QString& groupId)
         });
 }
 
+void QGroupInfo::fetchGroupMemberListFromSDK(const QString& groupId)
+{
+    if (groupId.trimmed().isEmpty()) return;
+
+    // 首次打开先渲染一次（至少显示添加/删除），避免空白
+    if (m_isNormalGroup && m_memberGridLayout && m_memberGridLayout->count() == 0) {
+        renderNormalGroupMemberGrid();
+    }
+
+    GroupMemberFetchSDKData* data = new GroupMemberFetchSDKData;
+    data->dlg = this;
+    data->groupId = groupId;
+    data->members.clear();
+    startFetchMembersFromSDK(data, 0);
+}
+
 void QGroupInfo::onSetLeaderRequested(const QString& memberId)
 {
-    // 检查当前用户是否是群主
-    UserInfo userInfo = CommonInfo::GetData();
-    QString currentUserId = userInfo.teacher_unique_id;
-    
-    bool isOwner = false;
-    for (const auto& member : m_groupMemberInfo) {
-        if (member.member_id == currentUserId && member.member_role == "群主") {
-            isOwner = true;
-            break;
-        }
-    }
-    
-    if (!isOwner) {
+    // 当前用户是否为群主：统一使用外部传入的 iGroupOwner（m_iGroupOwner）
+    if (!m_iGroupOwner) {
         QMessageBox::warning(this, "权限不足", "只有群主可以设置管理员！");
         return;
     }
@@ -2050,19 +2660,8 @@ void QGroupInfo::onSetLeaderRequested(const QString& memberId)
 
 void QGroupInfo::onCancelLeaderRequested(const QString& memberId)
 {
-    // 检查当前用户是否是群主
-    UserInfo userInfo = CommonInfo::GetData();
-    QString currentUserId = userInfo.teacher_unique_id;
-    
-    bool isOwner = false;
-    for (const auto& member : m_groupMemberInfo) {
-        if (member.member_id == currentUserId && member.member_role == "群主") {
-            isOwner = true;
-            break;
-        }
-    }
-    
-    if (!isOwner) {
+    // 当前用户是否为群主：统一使用外部传入的 iGroupOwner（m_iGroupOwner）
+    if (!m_iGroupOwner) {
         QMessageBox::warning(this, "权限不足", "只有群主可以取消管理员！");
         return;
     }

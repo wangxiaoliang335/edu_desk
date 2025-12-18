@@ -6,6 +6,8 @@
 class MemberKickDialog; // 前向声明
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QGridLayout>
+#include <QScrollArea>
 #include <QLabel>
 #include <QPushButton>
 #include <QLineEdit>
@@ -42,6 +44,7 @@ class MemberKickDialog; // 前向声明
 #include "ImSDK/includes/TIMCloudCallback.h"
 #include "TIMRestAPI.h"
 #include "GenerateTestUserSig.h"
+#include <QPointer>
 
 class ClassTeacherDialog;
 class ClassTeacherDelDialog;
@@ -155,7 +158,8 @@ public:
     ~QGroupInfo();
 
 public:
-    void initData(QString groupName, QString groupNumberId, QString classid = "");
+    // iGroupOwner: 当前用户在该群里是否为群主（由外部传入，QGroupInfo 内部统一以此判断权限）
+    void initData(QString groupName, QString groupNumberId, bool iGroupOwner, QString classid = "");
     void InitGroupMember(QString group_id, QVector<GroupMemberInfo> groupMemberInfo);
     void InitGroupMember();
     QVector<GroupMemberInfo> getGroupMemberInfo() const { return m_groupMemberInfo; } // 获取当前成员列表
@@ -165,6 +169,12 @@ public:
      * @param groupId 群组ID
      */
     void fetchGroupMemberListFromREST(const QString& groupId);
+
+    /**
+     * @brief 使用腾讯 IM SDK 获取群成员列表（无需管理员REST鉴权，适合普通群）
+     * @param groupId 群组ID
+     */
+    void fetchGroupMemberListFromSDK(const QString& groupId);
     
 signals:
     void memberLeftGroup(const QString& groupId, const QString& leftUserId); // 成员退出群聊信号，传递退出的用户ID
@@ -172,6 +182,13 @@ signals:
     void membersRefreshed(const QString& groupId); // 成员列表需要刷新信号，通知父窗口刷新成员列表
 
 private:
+    // 普通群成员区（网格布局：头像在上，名字在下）
+    QWidget* m_memberGridContainer = nullptr;
+    QScrollArea* m_memberScrollArea = nullptr;
+    QGridLayout* m_memberGridLayout = nullptr;
+
+    void renderNormalGroupMemberGrid(); // 普通群：渲染成员网格
+    QWidget* makeMemberTile(const QString& topText, const QString& bottomText, bool isActionTile);
     void updateButtonStates(); // 根据当前用户角色更新按钮状态
     void onExitGroupClicked(); // 退出群聊按钮点击处理
     void onDismissGroupClicked(); // 解散群聊按钮点击处理
@@ -196,6 +213,9 @@ protected:
     TIMRestAPI* m_restAPI = NULL;
     QString m_groupName;
     QString m_groupNumberId;
+    QString m_classId;
+    bool m_isNormalGroup = false; // classid为空时，按“普通群群管理”模式展示
+    bool m_iGroupOwner = false;   // 当前用户是否为群主（外部传入）
     QVector<GroupMemberInfo> m_groupMemberInfo;
     QHBoxLayout* circlesLayout = NULL;
     FriendButton* m_circlePlus = nullptr; // + 按钮（添加成员）
@@ -215,6 +235,16 @@ protected:
     bool m_dragging = false; // 是否正在拖动
     QPoint m_dragStartPos; // 拖动起始位置
     bool m_initialized = false; // 是否已经初始化
+
+    // 上一次真正渲染到 UI 的成员列表快照（用于避免重复渲染/重复刷新）
+    // 注意：不要用 m_groupMemberInfo 自己来和入参比较，否则当调用方传入 m_groupMemberInfo 本体时会“永远相同”导致 UI 不刷新
+    bool m_hasRenderedGroupMembers = false;
+    QString m_lastRenderedGroupId;
+    QVector<GroupMemberInfo> m_lastRenderedGroupMemberInfo;
+
+    // 普通群模式下的设置区
+    QLineEdit* m_editGroupName = nullptr;     // 群聊名称（默认只读显示）
+    QCheckBox* m_chkReceiveNotify = nullptr;  // 接收通知开关（先做UI，后续可接入后端）
     
     // 根据当前用户的 is_voice_enabled 更新对讲开关状态
     void updateIntercomState();

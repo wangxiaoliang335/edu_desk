@@ -2,12 +2,16 @@
 #include <QDialog>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QFrame>
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QList>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QPainterPath>
+#include <QRegion>
+#include <QResizeEvent>
 #include <QPixmap>
 #include <QFile>
 #include <QFileInfo>
@@ -18,6 +22,8 @@
 #include <QMouseEvent>
 #include <QDesktopServices>
 #include <QUrl>
+#include <QUrlQuery>
+#include <QJsonDocument>
 #include <QJsonParseError>
 #include <qjsonarray.h>
 #include <qjsonobject.h>
@@ -45,6 +51,7 @@
 #include "ImSDK/includes/TIMCloudDef.h"
 #include "ImSDK/includes/TIMCloudCallback.h"
 #include "GroupNotifyDialog.h"
+#include "QGroupInfo.h"
 
 struct ChatMessage {
     QString avatarPath;
@@ -75,49 +82,312 @@ protected:
 class ChatDialog : public QDialog
 {
     Q_OBJECT
+signals:
+    // 当前用户退出/群解散（用于通知外部刷新列表/关闭窗口）
+    void groupLeft(const QString& groupId);
+    void groupDismissed(const QString& groupId);
+
+    // 兼容：普通群专用信号
+    void normalGroupLeft(const QString& groupId);
+    void normalGroupDismissed(const QString& groupId);
 public:
     ChatDialog(QWidget* parent = nullptr, TaQTWebSocket* pWs = NULL) : QDialog(parent)
     {
         setWindowTitle("多类型聊天对话框");
         resize(500, 660);
 
+        // 圆角无边框窗口（普通群弹窗需要四角椭圆/圆角效果）
+        setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+        setAttribute(Qt::WA_TranslucentBackground);
+        m_cornerRadius = 16;
+        updateMask();
+
         m_pWs = pWs;
 
-        QVBoxLayout* mainLayout = new QVBoxLayout(this);
+        // 外层容器：负责背景/圆角边框
+        QVBoxLayout* rootLayout = new QVBoxLayout(this);
+        rootLayout->setContentsMargins(0, 0, 0, 0);
+        rootLayout->setSpacing(0);
+
+        m_container = new QFrame(this);
+        m_container->setObjectName("chatContainer");
+        m_container->setStyleSheet(
+            "#chatContainer {"
+            "  background-color: #1E1F22;"
+            "  border: 1px solid rgba(255,255,255,0.14);"
+            "  border-radius: 16px;"
+            "}"
+        );
+        rootLayout->addWidget(m_container);
+
+        // 容器内布局：顶部栏 + 内容区（列表/输入）
+        QVBoxLayout* mainLayout = new QVBoxLayout(m_container);
+        mainLayout->setContentsMargins(0, 0, 0, 0);
+        mainLayout->setSpacing(0);
+
+        // 顶部栏（更像微信：单独背景 + 分割线 + 圆角顶边）
+        m_titleBar = new QFrame(m_container);
+        m_titleBar->setObjectName("chatTitleBar");
+        m_titleBar->setFixedHeight(48);
+        m_titleBar->setStyleSheet(
+            "#chatTitleBar {"
+            "  background-color: #565656;"
+            "  border-bottom: 1px solid rgba(255,255,255,0.10);"
+            "  border-top-left-radius: 16px;"
+            "  border-top-right-radius: 16px;"
+            "}"
+        );
+
+        QHBoxLayout* titleLayout = new QHBoxLayout(m_titleBar);
+        titleLayout->setContentsMargins(12, 0, 12, 0);
+        titleLayout->setSpacing(8);
+
+        // 为了让标题真正居中：左侧放一个占位宽度（等于关闭按钮宽度）
+        m_titleLeftSpacer = new QWidget(m_titleBar);
+        // 默认按普通群（m_isClassGroup=false）显示“...”，右侧为“...+×”
+        m_titleLeftSpacer->setFixedWidth(60);
+
+        m_titleLabel = new QLabel(windowTitle(), m_titleBar);
+        m_titleLabel->setAlignment(Qt::AlignCenter);
+        // 标题文字 + 背景色（按 UI 设计稿/截图）
+        // 若希望整个标题栏都同色，请同步修改 m_titleBar 的 background-color
+        m_titleLabel->setStyleSheet("background: transparent; color:#ffffff; font-size:14px; font-weight:600;");
+        m_titleLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+
+        m_btnMore = new QPushButton(QStringLiteral("..."), m_titleBar);
+        m_btnMore->setFixedSize(26, 26);
+        m_btnMore->setCursor(Qt::PointingHandCursor);
+        m_btnMore->setStyleSheet(
+            "QPushButton { background-color: rgba(255,255,255,0.06); color: rgba(255,255,255,0.92); border: 1px solid rgba(255,255,255,0.10); border-radius: 8px; font-weight: 800; }"
+            "QPushButton:hover { background-color: rgba(255,255,255,0.10); }"
+        );
+
+        m_btnClose = new QPushButton(QStringLiteral("×"), m_titleBar);
+        m_btnClose->setFixedSize(26, 26);
+        m_btnClose->setCursor(Qt::PointingHandCursor);
+        m_btnClose->setStyleSheet(
+            "QPushButton { background-color: rgba(255,255,255,0.06); color: rgba(255,255,255,0.92); border: 1px solid rgba(255,255,255,0.10); border-radius: 8px; font-weight: 900; }"
+            "QPushButton:hover { background-color: rgba(255,255,255,0.10); }"
+        );
+        connect(m_btnClose, &QPushButton::clicked, this, &QDialog::reject);
+
+        // 默认普通群显示“...”按钮（由 setGroupContext 决定）
+        m_btnMore->setVisible(true);
+        connect(m_btnMore, &QPushButton::clicked, this, [this]() {
+            if (m_unique_group_id.trimmed().isEmpty()) return;
+            // 群管理弹窗：班级群进入“班级管理”，普通群进入“群管理”
+            QGroupInfo* dlg = new QGroupInfo(this);
+            dlg->setAttribute(Qt::WA_DeleteOnClose);
+            const QString classIdForDlg = m_isClassGroup ? m_classId : QString();
+            dlg->initData(this->windowTitle(), m_unique_group_id, m_iGroupOwner, classIdForDlg);
+
+            if (!m_isClassGroup) {
+                // 普通群：优先用腾讯IM SDK拉成员（无需管理员REST鉴权）；同时先渲染一次，避免成员区空白
+                dlg->InitGroupMember(m_unique_group_id, QVector<GroupMemberInfo>());
+                dlg->fetchGroupMemberListFromSDK(m_unique_group_id);
+            } else {
+                // 班级群：成员列表来自自家服务器（/groups/members），不走腾讯 SDK
+                QPointer<QGroupInfo> dlgPtr = dlg;
+                QNetworkAccessManager* manager = new QNetworkAccessManager(dlg);
+                QUrl url("http://47.100.126.194:5000/groups/members");
+                QUrlQuery query;
+                query.addQueryItem("group_id", m_unique_group_id);
+                url.setQuery(query);
+
+                QNetworkRequest req(url);
+                QNetworkReply* reply = manager->get(req);
+                connect(reply, &QNetworkReply::finished, dlg, [reply, manager, dlgPtr, gid = m_unique_group_id]() {
+                    const QByteArray raw = reply->readAll();
+                    const QNetworkReply::NetworkError err = reply->error();
+                    reply->deleteLater();
+                    manager->deleteLater();
+
+                    if (!dlgPtr) return;
+                    if (err != QNetworkReply::NoError) {
+                        qWarning() << "班级群获取成员失败:" << gid << err << reply->errorString();
+                        return;
+                    }
+
+                    QJsonParseError pe;
+                    QJsonDocument doc = QJsonDocument::fromJson(raw, &pe);
+                    if (pe.error != QJsonParseError::NoError || !doc.isObject()) {
+                        qWarning() << "班级群成员响应JSON解析失败:" << gid << pe.errorString();
+                        return;
+                    }
+
+                    QJsonObject root = doc.object();
+                    QJsonObject dataObj = root.value("data").toObject();
+                    if (dataObj.isEmpty()) dataObj = root;
+
+                    const QString groupId = dataObj.value("group_id").toString(gid);
+                    const QJsonArray membersArr = dataObj.value("members").toArray();
+
+                    QVector<GroupMemberInfo> members;
+                    members.reserve(membersArr.size());
+
+                    for (const auto& v : membersArr) {
+                        if (!v.isObject()) continue;
+                        const QJsonObject memberObj = v.toObject();
+
+                        QString member_id = memberObj.value("user_id").toString();
+                        QString member_name = memberObj.value("user_name").toString();
+                        if (member_name.isEmpty()) member_name = memberObj.value("member_name").toString();
+                        if (member_id.isEmpty()) continue;
+                        if (member_name.isEmpty()) member_name = member_id;
+
+                        int self_role = memberObj.value("self_role").toInt();
+                        QString member_role = QStringLiteral("成员");
+                        if (self_role == 400) member_role = QStringLiteral("群主");
+
+                        if (memberObj.contains("role")) {
+                            const QString roleStr = memberObj.value("role").toString();
+                            if (roleStr == "owner" || roleStr == "Owner" || roleStr == "群主") {
+                                member_role = QStringLiteral("群主");
+                            }
+                        }
+
+                        bool is_voice_enabled = false;
+                        if (memberObj.contains("is_voice_enabled")) {
+                            is_voice_enabled = memberObj.value("is_voice_enabled").toInt();
+                        }
+
+                        QStringList teachSubjects;
+                        if (memberObj.contains("teach_subjects") && memberObj.value("teach_subjects").isArray()) {
+                            const QJsonArray subjectArr = memberObj.value("teach_subjects").toArray();
+                            for (const auto& sv : subjectArr) {
+                                const QString s = sv.toString().trimmed();
+                                if (!s.isEmpty()) teachSubjects.append(s);
+                            }
+                        }
+
+                        GroupMemberInfo info;
+                        info.member_id = member_id;
+                        info.member_name = member_name;
+                        info.member_role = member_role;
+                        info.is_voice_enabled = is_voice_enabled;
+                        info.teach_subjects = teachSubjects;
+                        members.append(info);
+                    }
+
+                    dlgPtr->InitGroupMember(groupId, members);
+                });
+            }
+
+            // 退出/解散后：关闭聊天窗口，并通知外部刷新群列表
+            connect(dlg, &QGroupInfo::groupDismissed, this, [this](const QString& groupId) {
+                emit groupDismissed(groupId);
+                emit normalGroupDismissed(groupId);
+                this->close();
+            }, Qt::UniqueConnection);
+            connect(dlg, &QGroupInfo::memberLeftGroup, this, [this](const QString& groupId, const QString& leftUserId) {
+                UserInfo ui = CommonInfo::GetData();
+                if (leftUserId == ui.teacher_unique_id) {
+                    emit groupLeft(groupId);
+                    emit normalGroupLeft(groupId);
+                    this->close();
+                }
+            }, Qt::UniqueConnection);
+
+            dlg->show();
+            dlg->raise();
+            dlg->activateWindow();
+        });
+
+        titleLayout->addWidget(m_titleLeftSpacer);
+        titleLayout->addWidget(m_titleLabel);
+        titleLayout->addWidget(m_btnMore);
+        titleLayout->addWidget(m_btnClose);
+
+        mainLayout->addWidget(m_titleBar);
+
+        // 内容区（左右内边距一致）
+        m_contentWidget = new QWidget(m_container);
+        QVBoxLayout* contentLayout = new QVBoxLayout(m_contentWidget);
+        contentLayout->setContentsMargins(12, 10, 12, 10);
+        contentLayout->setSpacing(10);
+
         // 消息列表
         m_listWidget = new QListWidget();
-        m_listWidget->setStyleSheet("QListWidget { background-color: #F5F5F5; border:none; }");
-        mainLayout->addWidget(m_listWidget, 1);
+        m_listWidget->setStyleSheet(
+            "QListWidget { background: transparent; border:none; color:#ffffff; outline: none; }"
+            "QListWidget::item { border:none; }"
+            "QScrollBar:vertical { background: transparent; width: 8px; margin: 6px 2px 6px 2px; }"
+            "QScrollBar::handle:vertical { background: rgba(255,255,255,0.18); border-radius: 4px; min-height: 24px; }"
+            "QScrollBar::handle:vertical:hover { background: rgba(255,255,255,0.26); }"
+            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
+            "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }"
+        );
+        m_listWidget->setFrameShape(QFrame::NoFrame);
+        m_listWidget->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+        contentLayout->addWidget(m_listWidget, 1);
 
         // 输入区
         QHBoxLayout* inputLayout = new QHBoxLayout();
+        inputLayout->setContentsMargins(0, 0, 0, 0);
+        inputLayout->setSpacing(8);
         m_lineEdit = new QLineEdit();
         m_lineEdit->setPlaceholderText("请输入文字...");
         m_lineEdit->setMinimumHeight(36);
+        m_lineEdit->setStyleSheet(
+            "QLineEdit {"
+            "  background-color: rgba(255,255,255,0.06);"
+            "  border: 1px solid rgba(255,255,255,0.10);"
+            "  border-radius: 18px;"
+            "  padding: 8px 12px;"
+            "  color: #ffffff;"
+            "}"
+            "QLineEdit:focus { border: 1px solid rgba(255,255,255,0.18); }"
+        );
 
         QPushButton* btnSend = new QPushButton("发送");
         btnSend->setFixedSize(60, 36);
+        btnSend->setCursor(Qt::PointingHandCursor);
+        btnSend->setStyleSheet(
+            "QPushButton { background-color: #2D7DFF; color: #ffffff; border: none; border-radius: 18px; font-weight: 700; }"
+            "QPushButton:hover { background-color: #3A8BFF; }"
+        );
 
         QPushButton* btnImage = new QPushButton("📷");
         btnImage->setFixedSize(36, 36);
+        btnImage->setCursor(Qt::PointingHandCursor);
+        btnImage->setStyleSheet("QPushButton { background-color: rgba(255,255,255,0.06); color: white; border: 1px solid rgba(255,255,255,0.10); border-radius: 18px; } QPushButton:hover { background-color: rgba(255,255,255,0.10); }");
 
         QPushButton* btnFile = new QPushButton("📎");
         btnFile->setFixedSize(36, 36);
+        btnFile->setCursor(Qt::PointingHandCursor);
+        btnFile->setStyleSheet("QPushButton { background-color: rgba(255,255,255,0.06); color: white; border: 1px solid rgba(255,255,255,0.10); border-radius: 18px; } QPushButton:hover { background-color: rgba(255,255,255,0.10); }");
 
         QPushButton* btnVoice = new QPushButton("🎤");
         btnVoice->setFixedSize(36, 36);
+        btnVoice->setCursor(Qt::PointingHandCursor);
+        btnVoice->setStyleSheet("QPushButton { background-color: rgba(255,255,255,0.06); color: white; border: 1px solid rgba(255,255,255,0.10); border-radius: 18px; } QPushButton:hover { background-color: rgba(255,255,255,0.10); }");
 
         inputLayout->addWidget(m_lineEdit);
         inputLayout->addWidget(btnSend);
         inputLayout->addWidget(btnImage);
         inputLayout->addWidget(btnFile);
         inputLayout->addWidget(btnVoice);
-        mainLayout->addLayout(inputLayout);
+
+        m_inputBar = new QFrame(m_contentWidget);
+        m_inputBar->setObjectName("chatInputBar");
+        m_inputBar->setStyleSheet(
+            "#chatInputBar {"
+            "  background-color: rgba(255,255,255,0.04);"
+            "  border: 1px solid rgba(255,255,255,0.08);"
+            "  border-radius: 22px;"
+            "  padding: 8px;"
+            "}"
+        );
+        QHBoxLayout* inputBarLayout = new QHBoxLayout(m_inputBar);
+        inputBarLayout->setContentsMargins(10, 6, 10, 6);
+        inputBarLayout->setSpacing(8);
+        inputBarLayout->addLayout(inputLayout);
+        contentLayout->addWidget(m_inputBar);
         
         // 录音波形显示区域（初始隐藏）
-        m_voiceWaveformWidget = new QWidget(this);
+        m_voiceWaveformWidget = new QWidget(m_container);
         m_voiceWaveformWidget->setFixedHeight(40);
-        m_voiceWaveformWidget->setStyleSheet("background-color: #f0f0f0; border: 1px solid #ddd; border-radius: 4px;");
+        m_voiceWaveformWidget->setStyleSheet("background-color: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;");
         m_voiceWaveformWidget->hide();
         
         QHBoxLayout* waveformLayout = new QHBoxLayout(m_voiceWaveformWidget);
@@ -154,7 +424,7 @@ public:
         m_voiceDurationLabel = durationLabel;
         waveformLayout->addWidget(durationLabel);
         
-        mainLayout->addWidget(m_voiceWaveformWidget);
+        contentLayout->addWidget(m_voiceWaveformWidget);
 
         connect(btnSend, &QPushButton::clicked, this, &ChatDialog::sendMyTextMessage);
         connect(m_lineEdit, &QLineEdit::returnPressed, this, &ChatDialog::sendMyTextMessage);
@@ -164,21 +434,51 @@ public:
         connect(btnVoice, &QPushButton::pressed, this, &ChatDialog::startVoiceRecording);
         connect(btnVoice, &QPushButton::released, this, &ChatDialog::stopVoiceRecordingAndSend);
 
-        // 测试对话
-        addTextMessage(":/res/img/home.png", "班主任", "李老师，今天家里有事，我们调一下课吧", false);
-        addTextMessage(":/res/img/home.png", "语文老师", "可以", false);
+        // 标题跟随 windowTitle 变化（外部 setWindowTitle 时同步到顶部栏）
+        connect(this, &QWidget::windowTitleChanged, this, [=](const QString& t) {
+            if (m_titleLabel) m_titleLabel->setText(t);
+        });
+
+        // 线上使用：不插入任何演示消息，历史消息由 InitData() -> loadHistoryMessages() 加载
+
+        mainLayout->addWidget(m_contentWidget);
     }
 
     void InitData(QString unique_group_id, bool iGroupOwner)
     {
+        const bool groupChanged = (m_unique_group_id != unique_group_id);
         m_unique_group_id = unique_group_id;
         m_iGroupOwner = iGroupOwner;
         
         // 注册到静态实例列表
         registerInstance();
         
-        // 加载历史消息
-        loadHistoryMessages();
+        // 加载历史消息：避免同一群重复 InitData 时反复加载导致重复显示
+        if (groupChanged) {
+            // 群切换时可在此清理 UI（目前业务里一个窗口只对应一个群）
+            if (m_listWidget) m_listWidget->clear();
+            m_historyLoaded = false;
+        }
+        if (!m_historyLoaded) {
+            loadHistoryMessages();
+            m_historyLoaded = true;
+        }
+    }
+
+    // 由外部设置群类型上下文（ChatDialog 同时被班级群/普通群复用）
+    void setGroupContext(const QString& classid, bool isClassGroup)
+    {
+        m_classId = classid;
+        m_isClassGroup = isClassGroup;
+
+        // UI：普通群显示“...”，班级群隐藏“...”
+        if (m_btnMore) {
+            m_btnMore->setVisible(!m_isClassGroup);
+        }
+        // 标题居中占位：右侧如果有“...+×”则占位 60，否则占位 26
+        if (m_titleLeftSpacer) {
+            m_titleLeftSpacer->setFixedWidth(m_isClassGroup ? 26 : 60);
+        }
     }
     
     ~ChatDialog()
@@ -187,6 +487,7 @@ public:
         unregisterInstance();
     }
 
+    // 供外部（如 ScheduleDialog/FriendGroupDialog）调用的公共接口
     void InitWebSocket()
     {
         /*TaQTWebSocket::regRecvDlg(this);
@@ -212,7 +513,7 @@ public:
             }
         }
     }
-    
+
     // 静态方法：提前注册消息回调（应在登录前调用，确保能接收到离线消息）
     static void ensureCallbackRegistered()
     {
@@ -224,6 +525,45 @@ public:
         }
     }
 
+protected:
+    void resizeEvent(QResizeEvent* e) override
+    {
+        QDialog::resizeEvent(e);
+        updateMask();
+    }
+
+    void mousePressEvent(QMouseEvent* event) override
+    {
+        if (event->button() == Qt::LeftButton) {
+            m_dragging = true;
+            m_dragStartPos = event->globalPos() - frameGeometry().topLeft();
+        }
+        QDialog::mousePressEvent(event);
+    }
+
+    void mouseMoveEvent(QMouseEvent* event) override
+    {
+        if (m_dragging && (event->buttons() & Qt::LeftButton)) {
+            move(event->globalPos() - m_dragStartPos);
+        }
+        QDialog::mouseMoveEvent(event);
+    }
+
+    void mouseReleaseEvent(QMouseEvent* event) override
+    {
+        m_dragging = false;
+        QDialog::mouseReleaseEvent(event);
+    }
+
+private:
+    void updateMask()
+    {
+        const int r = qMax(0, m_cornerRadius);
+        QPainterPath path;
+        path.addRoundedRect(rect(), r, r);
+        setMask(QRegion(path.toFillPolygon().toPolygon()));
+    }
+    
 private slots:
     void sendMyTextMessage()
     {
@@ -626,6 +966,21 @@ private slots:
 private:
     QListWidget* m_listWidget;
     QLineEdit* m_lineEdit;
+
+    // 窗口外观/交互（圆角、关闭、拖拽）
+    QFrame* m_container = nullptr;
+    QFrame* m_titleBar = nullptr;
+    QWidget* m_contentWidget = nullptr;
+    QFrame* m_inputBar = nullptr;
+    QLabel* m_titleLabel = nullptr;
+    QPushButton* m_btnClose = nullptr;
+    QPushButton* m_btnMore = nullptr;
+    QWidget* m_titleLeftSpacer = nullptr;
+    int m_cornerRadius = 16;
+    bool m_dragging = false;
+    QPoint m_dragStartPos;
+    bool m_historyLoaded = false;
+
     ChatMessage m_lastMessage;
     bool m_hasLastMessage = false;
     
@@ -648,8 +1003,17 @@ private:
         QListWidgetItem* timeItem = new QListWidgetItem(m_listWidget);
         QLabel* lblTime = new QLabel(time.toString("yyyy-MM-dd hh:mm"));
         lblTime->setAlignment(Qt::AlignCenter);
-        lblTime->setStyleSheet("color: gray; font-size: 12px;");
-        timeItem->setSizeHint(QSize(0, 25));
+        lblTime->setStyleSheet(
+            "QLabel {"
+            "  color: rgba(255,255,255,0.55);"
+            "  background-color: rgba(255,255,255,0.06);"
+            "  border: 1px solid rgba(255,255,255,0.08);"
+            "  border-radius: 10px;"
+            "  padding: 2px 10px;"
+            "  font-size: 11px;"
+            "}"
+        );
+        timeItem->setSizeHint(QSize(0, 28));
         m_listWidget->addItem(timeItem);
         m_listWidget->setItemWidget(timeItem, lblTime);
     }
@@ -672,7 +1036,7 @@ private:
 
         // ====== 第一行：发送者名称 ======
         QLabel* lblName = new QLabel(senderName);
-        lblName->setStyleSheet("color: gray; font-size: 12px;");
+        lblName->setStyleSheet("color: rgba(255,255,255,0.55); font-size: 12px;");
         if (isMine) {
             lblName->setAlignment(Qt::AlignRight);
         }
@@ -701,14 +1065,26 @@ private:
 
         if (isMine)
         {
-            contentWidget->setStyleSheet("background-color: #A0E75A; color: black; border-radius: 12px; padding: 8px;");
+            // 我方气泡：右侧蓝色（适配暗色背景）
+            contentWidget->setStyleSheet(
+                "background-color: #2D7DFF;"
+                "color: #ffffff;"
+                "border-radius: 14px;"
+                "padding: 8px 12px;"
+            );
             hLayout->addStretch();
             hLayout->addWidget(contentWidget);
             if (!hideAvatar) hLayout->addWidget(lblAvatar);
         }
         else
         {
-            contentWidget->setStyleSheet("background-color: #EAEAEA; color: black; border-radius: 12px; padding: 8px;");
+            // 对方气泡：左侧灰色（适配暗色背景）
+            contentWidget->setStyleSheet(
+                "background-color: rgba(255,255,255,0.10);"
+                "color: #ffffff;"
+                "border-radius: 14px;"
+                "padding: 8px 12px;"
+            );
             if (!hideAvatar) hLayout->addWidget(lblAvatar);
             hLayout->addWidget(contentWidget);
             hLayout->addStretch();
@@ -3463,6 +3839,10 @@ private:
     TaQTWebSocket* m_pWs = NULL;
     QString m_unique_group_id;
     bool m_iGroupOwner = false;
+
+    // ChatDialog 同时服务于班级群/普通群：用于控制“...”群管理入口的模式
+    QString m_classId;
+    bool m_isClassGroup = false;
     // 文件上传进度映射：文件路径 -> (进度条, 状态标签)
     QMap<QString, QPair<QProgressBar*, QLabel*>> m_fileUploadProgressMap;
     // 文件下载进度映射：文件路径 -> (进度条, 状态标签)

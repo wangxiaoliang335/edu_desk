@@ -1,4 +1,5 @@
 #include "ScheduleDialog.h"
+#include "ChatDialog.h"
 #include "FriendGroupDialog.h"
 #include <QApplication>
 #include <QCoreApplication>
@@ -356,29 +357,69 @@ void FriendGroupDialog::openScheduleForGroup(const QString& groupName, const QSt
     if (unique_group_id.isEmpty())
         return;
 
-    ScheduleDialog* dlg = m_scheduleDlg.value(unique_group_id, nullptr);
-    if (!dlg) {
-        dlg = new ScheduleDialog(classid, this, m_pWs);
-        dlg->InitWebSocket();
-        QList<Notification> curNotification;
-        for (const auto& iter : notifications) {
-            if (iter.unique_group_id == unique_group_id) {
-                curNotification.append(iter);
+    // 分流逻辑：
+    // - 班级群：isClassGroup=true -> 继续走 ScheduleDialog
+    // - 班级（好友树里的班级节点）：classid == groupId -> 继续走 ScheduleDialog
+    // - 其余（普通群）：走普通群聊天窗口
+    //
+    // 备注：普通群当前也可能带 classid，因此不能用“classid 是否为空”来判断普通群。
+    const bool isPureClassNode = !classid.trimmed().isEmpty() && (classid == unique_group_id);
+    const bool openSchedule = isClassGroup || isPureClassNode;
+
+    if (openSchedule) {
+        ScheduleDialog* dlg = m_scheduleDlg.value(unique_group_id, nullptr);
+        if (!dlg) {
+            dlg = new ScheduleDialog(classid, this, m_pWs);
+            dlg->InitWebSocket();
+            QList<Notification> curNotification;
+            for (const auto& iter : notifications) {
+                if (iter.unique_group_id == unique_group_id) {
+                    curNotification.append(iter);
+                }
             }
+            dlg->setNoticeMsg(curNotification);
+            if (m_prepareClassHistoryCache.contains(unique_group_id)) {
+                dlg->setPrepareClassHistory(m_prepareClassHistoryCache.value(unique_group_id));
+            }
+            connectGroupLeftSignal(dlg, unique_group_id);
+            m_scheduleDlg[unique_group_id] = dlg;
         }
-        dlg->setNoticeMsg(curNotification);
-        if (m_prepareClassHistoryCache.contains(unique_group_id)) {
-            dlg->setPrepareClassHistory(m_prepareClassHistoryCache.value(unique_group_id));
+
+        if (dlg->isHidden()) {
+            dlg->InitData(groupName, unique_group_id, classid, iGroupOwner, isClassGroup);
+            dlg->show();
+        } else {
+            dlg->hide();
         }
-        connectGroupLeftSignal(dlg, unique_group_id);
-        m_scheduleDlg[unique_group_id] = dlg;
+        return;
     }
 
-    if (dlg->isHidden()) {
-        dlg->InitData(groupName, unique_group_id, classid, iGroupOwner, isClassGroup);
-        dlg->show();
+    // 普通群：打开聊天窗口（圆角弹窗）
+    ChatDialog* chatDlg = m_normalGroupChatDlg.value(unique_group_id, nullptr);
+    if (!chatDlg) {
+        chatDlg = new ChatDialog(this, m_pWs);
+        chatDlg->InitWebSocket();
+        chatDlg->InitData(unique_group_id, iGroupOwner);
+        // 普通群：显式设置上下文（即使当前 classid 可能不为空，也按普通群处理）
+        chatDlg->setGroupContext(classid, false);
+        connectNormalGroupLeftSignal(chatDlg, unique_group_id);
+        m_normalGroupChatDlg[unique_group_id] = chatDlg;
     } else {
-        dlg->hide();
+        // 重新确保 owner 状态最新
+        chatDlg->InitData(unique_group_id, iGroupOwner);
+        chatDlg->setGroupContext(classid, false);
+    }
+
+    if (!groupName.trimmed().isEmpty()) {
+        chatDlg->setWindowTitle(groupName.trimmed());
+    }
+
+    if (chatDlg->isHidden()) {
+        chatDlg->show();
+        chatDlg->raise();
+        chatDlg->activateWindow();
+    } else {
+        chatDlg->hide();
     }
 }
 
@@ -1034,6 +1075,30 @@ void FriendGroupDialog::connectGroupLeftSignal(ScheduleDialog* scheduleDlg, cons
     }, Qt::UniqueConnection); // 使用 UniqueConnection 避免重复连接
 }
 
+void FriendGroupDialog::connectNormalGroupLeftSignal(ChatDialog* chatDlg, const QString& groupId)
+{
+    if (!chatDlg) return;
+
+    // 普通群：退出/解散后刷新群列表并清理缓存窗口
+    connect(chatDlg, &ChatDialog::normalGroupLeft, this, [this](const QString& leftGroupId) {
+        qDebug() << "收到普通群退出信号，刷新群列表，群组ID:" << leftGroupId;
+        if (m_normalGroupChatDlg.contains(leftGroupId)) {
+            m_normalGroupChatDlg[leftGroupId]->deleteLater();
+            m_normalGroupChatDlg.remove(leftGroupId);
+        }
+        this->InitData();
+    }, Qt::UniqueConnection);
+
+    connect(chatDlg, &ChatDialog::normalGroupDismissed, this, [this](const QString& dismissedGroupId) {
+        qDebug() << "收到普通群解散信号，刷新群列表，群组ID:" << dismissedGroupId;
+        if (m_normalGroupChatDlg.contains(dismissedGroupId)) {
+            m_normalGroupChatDlg[dismissedGroupId]->deleteLater();
+            m_normalGroupChatDlg.remove(dismissedGroupId);
+        }
+        this->InitData();
+    }, Qt::UniqueConnection);
+}
+
 // 帮助函数：生成一行两个不同用途的按钮（如头像+昵称）
 void FriendGroupDialog::InitData()
 {
@@ -1125,15 +1190,8 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
             return QString();
         };
 
-        auto isMeetingType = [](const QString& groupType) -> bool {
-            // Project convention: Meeting/ChatRoom == class group.
-            // Some backends may store it as "Meeting".
-            if (groupType.compare(QStringLiteral("Meeting"), Qt::CaseInsensitive) == 0) return true;
-            if (groupType.compare(QStringLiteral("ChatRoom"), Qt::CaseInsensitive) == 0) return true;
-            // Tencent IM commonly uses "AVChatRoom" for AV-style groups; treat it as class group as well.
-            if (groupType.compare(QStringLiteral("AVChatRoom"), Qt::CaseInsensitive) == 0) return true;
-            return false;
-        };
+        // 统一规则：腾讯 IM 群类型 groupType == "Public" 视为普通群，其它类型一律视为班级群
+        // （后端 classid / 文案兜底不再参与判定，避免误判）
 
         for (int i = 0; i < json_group_list.size(); i++) {
             QJsonObject group = json_group_list[i].toObject();
@@ -1183,25 +1241,11 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
             QString introduction = group[kTIMGroupDetialInfoIntroduction].toString();
             QString notification = group[kTIMGroupDetialInfoNotification].toString();
             
-            // 判断是否是班级群：
-            // - 会议群（Meeting）是班级群
-            // - 公开群（Public）是普通群
-            // 其他类型：保持兼容（基于 classid / 文案的旧逻辑兜底）
-            bool isClassGroup = false;
-            if (isMeetingType(groupType)) {
-                isClassGroup = true;
-            } else if (groupType.compare(QStringLiteral("Public"), Qt::CaseInsensitive) == 0) {
-                isClassGroup = false;
-            } else if (!classid.isEmpty()) {
-                isClassGroup = true;
-            } else if (groupName.contains(QStringLiteral("班级群")) ||
-                       introduction.contains(QStringLiteral("班级群")) ||
-                       notification.contains(QStringLiteral("班级群"))) {
-                isClassGroup = true;
-            }
+            // 判断是否是班级群：按统一规则，仅 Public 为普通群，其它类型都认为是班级群
+            const bool isClassGroup = (groupType.compare(QStringLiteral("Public"), Qt::CaseInsensitive) != 0);
             
-            // 如果班级ID为空，则将群组ID去掉末尾的两位作为班级ID
-            if (classid.isEmpty() && !groupid.isEmpty() && groupid.length() >= 2) {
+            // 仅班级群：如果班级ID为空，则将群组ID去掉末尾的两位作为班级ID（兜底）
+            if (isClassGroup && classid.isEmpty() && !groupid.isEmpty() && groupid.length() >= 2) {
                 classid = groupid.left(groupid.length() - 2);
             }
             
@@ -1289,7 +1333,7 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
                 QNetworkReply* r = mgr->post(req, postData);
 
                 // 使用 ths 作为接收者，确保信号能正确触发
-                QObject::connect(r, &QNetworkReply::finished, ths, [mgr, r]() {
+                QObject::connect(r, &QNetworkReply::finished, ths, [mgr, r, ths]() {
                     auto cleanup = [mgr, r]() {
                         if (r) r->deleteLater();
                         if (mgr) mgr->deleteLater();

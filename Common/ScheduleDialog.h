@@ -2845,6 +2845,8 @@ public:
 			}
 			m_lblAvatar->setText(classText);
 		}
+		// ChatDialog 同时被班级群/普通群复用：这里是班级群场景，必须设置上下文
+		m_chatDlg->setGroupContext(m_classid, isClassGroup);
 		m_chatDlg->InitData(m_unique_group_id, iGroupOwner);
 		UserInfo userInfo = CommonInfo::GetData();
 		m_userId = userInfo.teacher_unique_id;
@@ -2852,7 +2854,7 @@ public:
 
 		if (m_groupInfo)
 		{
-			m_groupInfo->initData(groupName, unique_group_id, classid);
+			m_groupInfo->initData(groupName, unique_group_id, m_iGroupOwner, classid);
 			
 			// 优先使用REST API获取群成员列表（从腾讯云IM直接获取，数据更准确）
 			// 如果REST API失败，可以回退到使用自己的服务器接口

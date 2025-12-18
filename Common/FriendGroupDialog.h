@@ -33,6 +33,7 @@
 #include <QNetworkReply>
 
 class ScheduleDialog;
+class ChatDialog;
 
 class RowItem : public QFrame {
     Q_OBJECT
@@ -54,6 +55,8 @@ public:
 
     // 辅助函数：为 ScheduleDialog 建立群聊退出信号连接
     void connectGroupLeftSignal(ScheduleDialog* scheduleDlg, const QString& groupId);
+    // 辅助函数：为普通群 ChatDialog 建立退出/解散信号连接
+    void connectNormalGroupLeftSignal(ChatDialog* chatDlg, const QString& groupId);
 
     void InitData();
 
@@ -112,6 +115,7 @@ private:
     QVBoxLayout* gLayout = NULL;
     TaQTWebSocket* m_pWs = NULL;
     QMap<QString, ScheduleDialog*> m_scheduleDlg;
+    QMap<QString, ChatDialog*> m_normalGroupChatDlg;
     QList<Notification> notifications;
     QSet<QString> m_setClassId;
 

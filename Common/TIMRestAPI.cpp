@@ -390,6 +390,19 @@ void TIMRestAPI::getGroupMemberList(const QString& groupId, int limit, int offse
     requestBody["Limit"] = limit;
     requestBody["Offset"] = offset;
 
+    // 显式指定需要返回的成员字段。
+    // 如果不传 MemberInfoFilter，服务端可能只返回基础字段，导致 NameCard（群名片）缺失，从而 UI 只能退回显示 Member_Account。
+    QJsonArray memberInfoFilter;
+    memberInfoFilter.append("Role");
+    memberInfoFilter.append("JoinTime");
+    memberInfoFilter.append("LastSendMsgTime");
+    memberInfoFilter.append("MsgFlag");
+    memberInfoFilter.append("MsgSeq");
+    memberInfoFilter.append("MuteUntil");
+    memberInfoFilter.append("NameCard");
+    memberInfoFilter.append("ShutUpUntil");
+    requestBody["MemberInfoFilter"] = memberInfoFilter;
+
     sendRestAPIRequest("group_open_http_svc/get_group_member_info", requestBody, callback);
 }
 
