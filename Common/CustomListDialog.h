@@ -100,8 +100,20 @@ public:
         // 连接"+"按钮点击事件，导入Excel表格
         connect(btnAdd, &QPushButton::clicked, this, &CustomListDialog::onImportExcel);
         
-        // 扫描并加载已下载的Excel文件（在初始化时调用）
+        // 不再扫描本地 excel_files（用户要求：不通过本地 Excel 重建窗口）
+        // 由 ScheduleDialog 从服务器拉取到 /student-scores 与 /group-scores 后，调用 setServerScoreCaches() 来刷新。
         loadDownloadedExcelFiles();
+    }
+
+    // 由 ScheduleDialog 注入服务器缓存（替代扫描本地 Excel 文件）
+    void setServerScoreCaches(const QList<StudentInfo>& studentScores,
+                              const QList<StudentInfo>& groupScores,
+                              const QString& term)
+    {
+        m_cachedStudentScores = studentScores;
+        m_cachedGroupScores = groupScores;
+        m_cachedTerm = term;
+        refreshFromServerScores();
     }
     
 protected:
@@ -496,6 +508,7 @@ private slots:
             });
         } else if (isGroupScore) {
             GroupScoreDialog* groupScoreDlg = new GroupScoreDialog(m_classid, this);
+            groupScoreDlg->setTerm(term);
             // 传递Excel文件路径
             groupScoreDlg->importData(headers, dataRows, fileName);
             // 设置对话框标题为文件名（去掉扩展名）
@@ -837,72 +850,171 @@ private:
     QPushButton* m_btnClose = nullptr; // 关闭按钮
     QPoint m_dragPosition; // 用于窗口拖动
     QSet<QString> m_loadedFiles; // 已加载的文件路径，避免重复加载
+
+    // 服务器缓存（由 ScheduleDialog 注入），用于不扫描本地 Excel 的刷新路径
+    QList<StudentInfo> m_cachedStudentScores;
+    QList<StudentInfo> m_cachedGroupScores;
+    QString m_cachedTerm;
+
+    void refreshFromServerScores()
+    {
+        // 若没有任何缓存数据，则不刷新（初始化阶段）
+        if (m_cachedStudentScores.isEmpty() && m_cachedGroupScores.isEmpty()) return;
+
+        const QString term = m_cachedTerm;
+
+        auto baseNameOfExcel = [](const QString& excelFilename) -> QString {
+            QString base = excelFilename;
+            if (base.endsWith(".xlsx", Qt::CaseInsensitive) || base.endsWith(".xls", Qt::CaseInsensitive) || base.endsWith(".csv", Qt::CaseInsensitive)) {
+                const int dot = base.lastIndexOf('.');
+                if (dot > 0) base = base.left(dot);
+            }
+            return base.trimmed();
+        };
+
+        auto upsertGroupScoreDialogForExcel = [&](const QString& excelFilename) {
+            // 收集字段
+            QSet<QString> fieldSet;
+            for (const auto& s : m_cachedGroupScores) {
+                if (!s.attributesByExcel.contains(excelFilename)) continue;
+                const auto& attrs = s.attributesByExcel[excelFilename];
+                for (auto it = attrs.begin(); it != attrs.end(); ++it) {
+                    const QString k = it.key();
+                    if (k.isEmpty()) continue;
+                    if (k == QString::fromUtf8(u8"总分")) continue;
+                    fieldSet.insert(k);
+                }
+            }
+            QStringList fields = fieldSet.values();
+            std::sort(fields.begin(), fields.end());
+
+            // 表头：组号/学号/姓名/字段.../总分/小组总分
+            QStringList headers;
+            headers << QString::fromUtf8(u8"组号") << QString::fromUtf8(u8"学号") << QString::fromUtf8(u8"姓名");
+            headers.append(fields);
+            headers << QString::fromUtf8(u8"总分") << QString::fromUtf8(u8"小组总分");
+
+            // 数据行：按组号 + 学号排序（尽量稳定）
+            QList<StudentInfo> students = m_cachedGroupScores;
+            std::sort(students.begin(), students.end(), [](const StudentInfo& a, const StudentInfo& b) {
+                if (a.groupName != b.groupName) return a.groupName < b.groupName;
+                return a.id < b.id;
+            });
+
+            QList<QStringList> dataRows;
+            dataRows.reserve(students.size());
+            for (const auto& s : students) {
+                QStringList row;
+                row << s.groupName << s.id << s.name;
+                for (const QString& f : fields) {
+                    const double v = s.getAttributeValue(f, excelFilename);
+                    row << (v == 0.0 ? QString() : QString::number(v));
+                }
+                // 总分：优先取该 Excel 下的“总分”，否则回退用 s.score
+                const double excelTotal = s.getAttributeValue(QString::fromUtf8(u8"总分"), excelFilename);
+                row << QString::number(excelTotal != 0.0 ? excelTotal : s.score);
+                row << QString::number(s.groupTotalScore);
+                dataRows.append(row);
+            }
+
+            // 用带前缀的 key 避免与 student 侧同名 excel 冲突
+            const QString keyName = QStringLiteral("group::") + excelFilename;
+            QDialog* existingDialog = m_dialogMap.value(keyName, nullptr);
+
+            const QString niceTitle = baseNameOfExcel(excelFilename);
+
+            if (existingDialog) {
+                GroupScoreDialog* dlg = qobject_cast<GroupScoreDialog*>(existingDialog);
+                if (dlg) {
+                    dlg->setTerm(term);
+                    dlg->setExcelFileName(excelFilename);
+                    dlg->setWindowTitle(niceTitle);
+                    // 这里传入 excelFilename（作为“伪路径”也可），避免 GroupScoreDialog::importData 清空 m_excelFileName
+                    dlg->importData(headers, dataRows, excelFilename);
+                    return;
+                }
+            }
+
+            // 新建对话框与按钮
+            GroupScoreDialog* dlg = new GroupScoreDialog(m_classid, this);
+            dlg->setTerm(term);
+            dlg->setExcelFileName(excelFilename);
+            dlg->setWindowTitle(niceTitle);
+            dlg->importData(headers, dataRows, excelFilename);
+
+            // 保存映射与学期
+            m_dialogMap[keyName] = dlg;
+            m_fileNameToTermMap[keyName] = term;
+
+            // 创建按钮行（在"+"按钮之前插入）
+            int insertIndex = m_mainLayout->count() - 1;
+            if (insertIndex < 0) insertIndex = 0;
+            QHBoxLayout *rowLayout = new QHBoxLayout;
+            rowLayout->setSpacing(0);
+
+            QPushButton *btnTitle = new QPushButton(excelFilename);
+            btnTitle->setStyleSheet(
+                "QPushButton { background-color: green; color: white; font-size: 14px; padding: 4px; border: 1px solid #555; }"
+                "QPushButton:hover { background-color: darkgreen; }"
+            );
+            btnTitle->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+
+            QPushButton *btnClose = new QPushButton("X");
+            btnClose->setFixedWidth(30);
+            btnClose->setStyleSheet(
+                "QPushButton { background-color: orange; color: white; font-weight:bold; border: 1px solid #555; }"
+                "QPushButton:hover { background-color: #cc6600; }"
+            );
+
+            rowLayout->addWidget(btnTitle);
+            rowLayout->addWidget(btnClose);
+            m_mainLayout->insertLayout(insertIndex, rowLayout);
+
+            m_buttonToFileNameMap[btnTitle] = keyName;
+
+            connect(btnTitle, &QPushButton::clicked, this, [=]() {
+                if (dlg && dlg->isHidden()) {
+                    dlg->show();
+                    dlg->raise();
+                    dlg->activateWindow();
+                } else if (dlg && !dlg->isHidden()) {
+                    dlg->hide();
+                }
+            });
+
+            connect(btnClose, &QPushButton::clicked, this, [=]() {
+                m_dialogMap.remove(keyName);
+                m_buttonToFileNameMap.remove(btnTitle);
+                m_fileNameToTermMap.remove(keyName);
+
+                m_mainLayout->removeItem(rowLayout);
+                btnTitle->deleteLater();
+                btnClose->deleteLater();
+                rowLayout->deleteLater();
+                if (dlg) dlg->deleteLater();
+            });
+        };
+
+        // 只用 group-scores 的缓存构建小组表（student-scores 的表格若也需要，再补齐）
+        QSet<QString> excelSet;
+        for (const auto& s : m_cachedGroupScores) {
+            for (auto it = s.attributesByExcel.begin(); it != s.attributesByExcel.end(); ++it) {
+                if (!it.key().trimmed().isEmpty()) excelSet.insert(it.key().trimmed());
+            }
+        }
+        for (const QString& excelFilename : excelSet.values()) {
+            upsertGroupScoreDialogForExcel(excelFilename);
+        }
+    }
 };
 
 // 扫描并加载已下载的Excel文件
 // 现在支持扫描 group/ 和 student/ 两个子目录
 inline void CustomListDialog::loadDownloadedExcelFiles()
 {
-    // 获取学校ID和班级ID
-    UserInfo userInfo = CommonInfo::GetData();
-    QString schoolId = userInfo.schoolId;
-    QString classId = m_classid;
-    
-    if (schoolId.isEmpty() || classId.isEmpty()) {
-        qDebug() << "学校ID或班级ID为空，无法加载已下载的Excel文件";
-        return;
-    }
-    
-    // 构建Excel文件目录路径
-    QString baseDir = QCoreApplication::applicationDirPath() + "/excel_files";
-    QString schoolDir = baseDir + "/" + schoolId;
-    QString classDir = schoolDir + "/" + classId;
-    
-    QStringList filters;
-    filters << "*.xlsx" << "*.xls" << "*.csv";
-    QFileInfoList fileList;
-    
-    // 扫描主目录（向后兼容）
-    QDir dir(classDir);
-    if (dir.exists()) {
-        QFileInfoList mainFiles = dir.entryInfoList(filters, QDir::Files);
-        fileList.append(mainFiles);
-    }
-    
-    // 扫描 group/ 子目录
-    QDir groupDir(classDir + "/group");
-    if (groupDir.exists()) {
-        QFileInfoList groupFiles = groupDir.entryInfoList(filters, QDir::Files);
-        fileList.append(groupFiles);
-    }
-    
-    // 扫描 student/ 子目录
-    QDir studentDir(classDir + "/student");
-    if (studentDir.exists()) {
-        QFileInfoList studentFiles = studentDir.entryInfoList(filters, QDir::Files);
-        fileList.append(studentFiles);
-    }
-    
-    if (fileList.isEmpty()) {
-        qDebug() << "Excel文件目录不存在或没有文件:" << classDir;
-        return;
-    }
-    
-    qDebug() << "找到" << fileList.size() << "个Excel文件";
-    
-    // 为每个文件创建按钮（如果还没有加载过）
-    for (const QFileInfo& fileInfo : fileList) {
-        QString filePath = fileInfo.absoluteFilePath();
-        QString fileName = fileInfo.fileName();
-        
-        // 检查是否已经加载过
-        if (m_loadedFiles.contains(filePath) || m_dialogMap.contains(fileName)) {
-            continue;
-        }
-        
-        // 加载文件并创建按钮
-        loadExcelFileAndCreateButton(filePath);
-    }
+    // 用户要求：不要扫描本地 excel_files 来加载。
+    // 这里改为：若 ScheduleDialog 已经注入了服务器缓存，则直接用缓存刷新；否则不做任何事 (初始化阶段)。
+    refreshFromServerScores();
 }
 
 // 加载单个Excel文件并创建按钮
@@ -1002,6 +1114,7 @@ inline void CustomListDialog::loadExcelFileAndCreateButton(const QString& filePa
             } else if (isGroupScore) {
                 GroupScoreDialog* groupScoreDlg = qobject_cast<GroupScoreDialog*>(existingDialog);
                 if (groupScoreDlg) {
+                    groupScoreDlg->setTerm(term);
                     // 重新导入数据
                     groupScoreDlg->importData(headers, dataRows, filePath);
                     qDebug() << "已更新已有对话框的数据:" << fileName << "学期:" << term;
@@ -1046,6 +1159,7 @@ inline void CustomListDialog::loadExcelFileAndCreateButton(const QString& filePa
         dialog = physiqueDlg;
     } else if (isGroupScore) {
         GroupScoreDialog* groupScoreDlg = new GroupScoreDialog(m_classid, this);
+        groupScoreDlg->setTerm(term);
         groupScoreDlg->importData(headers, dataRows, filePath);
         // 设置对话框标题为文件名（去掉扩展名）
         groupScoreDlg->setWindowTitle(fileInfo.baseName());

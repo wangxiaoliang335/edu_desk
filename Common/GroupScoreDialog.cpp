@@ -35,6 +35,24 @@
 #include <QMimeType>
 #include <QCoreApplication>
 
+static QString computeCurrentTermString()
+{
+    QDate currentDate = QDate::currentDate();
+    int year = currentDate.year();
+    int month = currentDate.month();
+    QString term;
+    if (month >= 9 || month <= 1) {
+        if (month >= 9) {
+            term = QString("%1-%2-1").arg(year).arg(year + 1);
+        } else {
+            term = QString("%1-%2-1").arg(year - 1).arg(year);
+        }
+    } else {
+        term = QString("%1-%2-2").arg(year - 1).arg(year);
+    }
+    return term;
+}
+
 GroupScoreDialog::GroupScoreDialog(QString classid, QWidget* parent) : QDialog(parent)
 {
     // 去掉标题栏
@@ -190,6 +208,10 @@ void GroupScoreDialog::importData(const QStringList& headers, const QList<QStrin
 {
     if (!table) return;
 
+    // 导入属于批量更新：避免 itemChanged 触发大量 updateGroupTotal
+    m_isBulkUpdating = true;
+    const QSignalBlocker blocker(table);
+
     // 保存Excel文件路径和文件名
     m_excelFilePath = excelFilePath;
     if (!excelFilePath.isEmpty()) {
@@ -200,7 +222,11 @@ void GroupScoreDialog::importData(const QStringList& headers, const QList<QStrin
             m_lblTitle->setText(fileInfo.baseName());
         }
     } else {
-        m_excelFileName.clear();
+        // 服务器缓存刷新模式下可能不会有本地文件路径，但我们仍需要 m_excelFileName 用于 set-score/set-comment。
+        // 因此：仅当当前也没有已知文件名时才清空。
+        if (m_excelFileName.isEmpty()) {
+            m_excelFileName.clear();
+        }
     }
 
     // 根据导入的Excel列头动态设置表格列头
@@ -309,6 +335,13 @@ void GroupScoreDialog::importData(const QStringList& headers, const QList<QStrin
                 item->setData(Qt::UserRole, QVariant());
                 continue;
             }
+
+            // 总分/小组总分列：不可编辑（由程序/服务端计算），清空注释
+            if (headerText == "总分" || headerText == "小组总分") {
+                item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
+                item->setData(Qt::UserRole, QVariant());
+                continue;
+            }
             
             // 如果是属性列（非组号/小组、学号、姓名、总分、小组总分），尝试从全局存储中获取注释
             if (headerText != "组号" && headerText != "小组" && headerText != "总分" && headerText != "小组总分") {
@@ -320,23 +353,11 @@ void GroupScoreDialog::importData(const QStringList& headers, const QList<QStrin
                 
                 // 如果学号不为空，尝试从全局存储中获取注释
                 if (!studentId.isEmpty() && m_classid.isEmpty() == false) {
-                    // 计算学期
-                    QDate currentDate = QDate::currentDate();
-                    int year = currentDate.year();
-                    int month = currentDate.month();
-                    QString term;
-                    if (month >= 9 || month <= 1) {
-                        if (month >= 9) {
-                            term = QString("%1-%2-1").arg(year).arg(year + 1);
-                        } else {
-                            term = QString("%1-%2-1").arg(year - 1).arg(year);
-                        }
-                    } else {
-                        term = QString("%1-%2-2").arg(year - 1).arg(year);
-                    }
+                    const QString term = m_term.isEmpty() ? computeCurrentTermString() : m_term;
                     
-                    // 从全局存储中获取注释（使用小组管理表相关的examName）
-                    QString comment = CommentStorage::getComment(m_classid, "小组管理", term, studentId, headerText);
+                    // 从全局存储中获取注释：需要带表格名，避免同名字段在不同表覆盖
+                    const QString tableNameForComments = !m_excelFileName.isEmpty() ? m_excelFileName : QString();
+                    QString comment = CommentStorage::getComment(m_classid, term, studentId, headerText, tableNameForComments);
                     if (!comment.isEmpty()) {
                         item->setData(Qt::UserRole, comment);
                     }
@@ -350,6 +371,9 @@ void GroupScoreDialog::importData(const QStringList& headers, const QList<QStrin
         updateRowTotal(row);
     }
     updateGroupTotal();
+
+    // 批量更新结束：恢复正常行为
+    m_isBulkUpdating = false;
     
     // 确保表格可见并刷新显示
     table->setVisible(true);
@@ -398,6 +422,8 @@ void GroupScoreDialog::onAddRow()
         } else if (headerText == "总分" || headerText == "小组总分") {
             // 总分和小组总分列初始为空，会自动计算
             item->setData(Qt::UserRole, QVariant());
+            // 总分/小组总分列不可编辑
+            item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
         } else {
             // 除了组号、学号、姓名、总分、小组总分，其他字段默认值都为0
             item->setText("0");
@@ -1234,6 +1260,11 @@ void GroupScoreDialog::onCellClicked(int row, int column)
     // 获取列头名称，检查是否是组号、学号或姓名列
     QTableWidgetItem* headerItem = table->horizontalHeaderItem(column);
     QString headerText = headerItem ? headerItem->text() : "";
+
+    // 总分/小组总分列不允许手动编辑
+    if (headerText == "总分" || headerText == "小组总分") {
+        return;
+    }
     
     // 如果是组号/小组、学号或姓名列，直接进入编辑状态
     if (headerText == "组号" || headerText == "小组" || headerText == "学号" || headerText == "姓名") {
@@ -1268,6 +1299,7 @@ void GroupScoreDialog::onCellEntered(int row, int column)
 void GroupScoreDialog::onItemChanged(QTableWidgetItem* item)
 {
     if (!item) return;
+    if (m_isBulkUpdating) return;
     
     int row = item->row();
     int column = item->column();
@@ -1275,6 +1307,36 @@ void GroupScoreDialog::onItemChanged(QTableWidgetItem* item)
     // 获取列头名称
     QTableWidgetItem* headerItem = table->horizontalHeaderItem(column);
     QString headerText = headerItem ? headerItem->text() : "";
+
+    // 如果是属性列（可编辑分数），同步到服务器（单字段更新）
+    if (headerText != "总分" && headerText != "小组总分" && headerText != "组号" && headerText != "小组" &&
+        headerText != "学号" && headerText != "姓名" && !headerText.isEmpty()) {
+
+        // 获取学生信息（学号优先）
+        int colId = -1, colName = -1;
+        for (int c = 0; c < table->columnCount(); ++c) {
+            QTableWidgetItem* h = table->horizontalHeaderItem(c);
+            if (!h) continue;
+            const QString t = h->text();
+            if (t == "学号") colId = c;
+            else if (t == "姓名") colName = c;
+        }
+        QString studentId;
+        QString studentName;
+        if (colId >= 0) {
+            QTableWidgetItem* idItem = table->item(row, colId);
+            if (idItem) studentId = idItem->text().trimmed();
+        }
+        if (colName >= 0) {
+            QTableWidgetItem* nameItem = table->item(row, colName);
+            if (nameItem) studentName = nameItem->text().trimmed();
+        }
+
+        // 注意：这里不强制要求姓名，但至少需要 studentId 或 studentName 之一
+        if (!studentId.isEmpty() || !studentName.isEmpty()) {
+            setScoreToServer(row, studentName, studentId, headerText, item->text());
+        }
+    }
     
     // 如果修改的不是"总分"列、"小组总分"列、"组号/小组"列、"学号"列、"姓名"列，则更新该行的总分和小组总分
     if (headerText != "总分" && headerText != "小组总分" && headerText != "组号" && headerText != "小组" &&
@@ -1285,6 +1347,173 @@ void GroupScoreDialog::onItemChanged(QTableWidgetItem* item)
         // 如果修改的是个人总分，只更新小组总分
         updateGroupTotal();
     }
+}
+
+void GroupScoreDialog::setScoreToServer(int row, const QString& studentName, const QString& studentId,
+                                       const QString& fieldName, const QString& cellText)
+{
+    if (!networkManager) return;
+    if (m_classid.trimmed().isEmpty()) return;
+    if (fieldName.trimmed().isEmpty()) return;
+    if (studentId.trimmed().isEmpty() && studentName.trimmed().isEmpty()) return;
+
+    // score：空字符串/空白 -> 删除（null）
+    const QString trimmed = cellText.trimmed();
+    QJsonValue scoreVal(QJsonValue::Null);
+    if (!trimmed.isEmpty()) {
+        bool ok = false;
+        const double v = trimmed.toDouble(&ok);
+        if (!ok) {
+            QMessageBox::warning(this, "提示", QString("字段“%1”只支持数字；清空表示删除。").arg(fieldName));
+            return;
+        }
+        scoreVal = v;
+    }
+
+    // table_name / excel_filename：优先使用 excel_filename（带 .xlsx），其次使用 table_name（不带扩展名）
+    const QString excelFilename = m_excelFileName.trimmed();
+    // 优先使用 windowTitle（CustomListDialog 会把它设为真实表名）；其次才用 m_lblTitle
+    QString tableName = windowTitle().trimmed();
+    if (tableName.isEmpty()) tableName = m_lblTitle ? m_lblTitle->text().trimmed() : QString();
+
+    QJsonObject requestObj;
+    requestObj["class_id"] = m_classid;
+    const QString term = m_term.isEmpty() ? computeCurrentTermString() : m_term;
+    if (!term.isEmpty()) requestObj["term"] = term;
+    requestObj["field_name"] = fieldName;
+    requestObj["score"] = scoreVal;
+    if (!studentId.trimmed().isEmpty()) requestObj["student_id"] = studentId.trimmed();
+    else requestObj["student_name"] = studentName.trimmed();
+    if (!excelFilename.isEmpty()) requestObj["excel_filename"] = excelFilename;
+    else if (!tableName.isEmpty()) requestObj["table_name"] = tableName;
+    else return;
+
+    QJsonDocument doc(requestObj);
+    const QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+
+    const QString url = "http://47.100.126.194:5000/group-scores/set-score";
+    // 避免 C++ “most vexing parse”：不要写成 QNetworkRequest request(QUrl(url));
+    QNetworkRequest req;
+    req.setUrl(QUrl(url));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    QNetworkReply* reply = networkManager->post(req, jsonData);
+
+    connect(reply, &QNetworkReply::finished, this, [=]() {
+        if (reply->error() != QNetworkReply::NoError) {
+            reply->deleteLater();
+            return;
+        }
+        const QJsonDocument resp = QJsonDocument::fromJson(reply->readAll());
+        reply->deleteLater();
+        if (!resp.isObject()) return;
+        const QJsonObject root = resp.object();
+        const int code = root.value("code").toInt(-1);
+        if (code != 200) return;
+
+        const QJsonObject dataObj = root.value("data").toObject();
+        // excel_total_score：当前 Excel 表下的总分（更适合写回此表的“总分”列）
+        const bool hasExcelTotalScore = dataObj.contains("excel_total_score") && !dataObj.value("excel_total_score").isNull();
+        const double excelTotalScore = dataObj.value("excel_total_score").toDouble(0.0);
+        const double totalScore = dataObj.value("total_score").toDouble(0.0);
+        const bool hasGroupTotalScore = dataObj.contains("group_total_score") && !dataObj.value("group_total_score").isNull();
+        const double groupTotalScore = dataObj.value("group_total_score").toDouble(0.0);
+
+        // 用服务端返回的 score 强制回写当前单元格（delete -> 清空；避免本地格式化差异）
+        {
+            int fieldCol = -1;
+            for (int c = 0; c < table->columnCount(); ++c) {
+                QTableWidgetItem* h = table->horizontalHeaderItem(c);
+                if (!h) continue;
+                if (h->text() == fieldName) {
+                    fieldCol = c;
+                    break;
+                }
+            }
+            if (fieldCol >= 0) {
+                const QSignalBlocker blocker(table);
+                QTableWidgetItem* cellItem = table->item(row, fieldCol);
+                if (!cellItem) {
+                    cellItem = new QTableWidgetItem("");
+                    cellItem->setTextAlignment(Qt::AlignCenter);
+                    table->setItem(row, fieldCol, cellItem);
+                }
+
+                const QJsonValue scoreV = dataObj.value(QStringLiteral("score"));
+                if (scoreV.isNull()) {
+                    cellItem->setText(QString());
+                } else if (scoreV.isDouble()) {
+                    cellItem->setText(QString::number(scoreV.toDouble()));
+                } else if (scoreV.isString()) {
+                    cellItem->setText(scoreV.toString());
+                }
+            }
+        }
+
+        // 将服务端重算的总分写回“总分”列（避免与服务端规则不一致）
+        int totalCol = -1;
+        int groupCol = -1;
+        int groupTotalCol = -1;
+        for (int c = 0; c < table->columnCount(); ++c) {
+            QTableWidgetItem* h = table->horizontalHeaderItem(c);
+            if (!h) continue;
+            const QString t = h->text();
+            if (t == "总分") totalCol = c;
+            else if (t == "组号" || t == "小组") groupCol = c;
+            else if (t == "小组总分") groupTotalCol = c;
+        }
+
+        if (totalCol >= 0) {
+            const QSignalBlocker blocker(table);
+            QTableWidgetItem* totalItem = table->item(row, totalCol);
+            if (!totalItem) {
+                totalItem = new QTableWidgetItem("");
+                totalItem->setTextAlignment(Qt::AlignCenter);
+                table->setItem(row, totalCol, totalItem);
+            }
+            // 优先写 excel_total_score（对应该 Excel 表）；否则回退 total_score
+            totalItem->setText(QString::number(hasExcelTotalScore ? excelTotalScore : totalScore));
+        }
+
+        // 服务端会重算并回写同组所有行：这里把 UI 同步一下
+        if (groupCol >= 0 && groupTotalCol >= 0 && hasGroupTotalScore) {
+            // 取当前行的组号（支持向上寻找填充）
+            QString gName;
+            for (int r = row; r >= 0; --r) {
+                QTableWidgetItem* gItem = table->item(r, groupCol);
+                if (gItem && !gItem->text().trimmed().isEmpty()) {
+                    gName = gItem->text().trimmed();
+                    break;
+                }
+            }
+            if (!gName.isEmpty()) {
+                const QSignalBlocker blocker(table);
+                QString currentGroup = "";
+                bool firstRowWrittenForTargetGroup = false;
+                for (int r = 0; r < table->rowCount(); ++r) {
+                    QTableWidgetItem* gItem = table->item(r, groupCol);
+                    if (gItem && !gItem->text().trimmed().isEmpty()) {
+                        currentGroup = gItem->text().trimmed();
+                    }
+                    if (currentGroup == gName) {
+                        QTableWidgetItem* gtItem = table->item(r, groupTotalCol);
+                        if (!gtItem) {
+                            gtItem = new QTableWidgetItem("");
+                            gtItem->setTextAlignment(Qt::AlignCenter);
+                            table->setItem(r, groupTotalCol, gtItem);
+                        }
+                        // 仅在该小组的第一行显示“小组总分”，其它行清空。
+                        // 注意：不能依赖“组号列是否为空”来判断第一行（有些表每行都会填组号）。
+                        if (!firstRowWrittenForTargetGroup) {
+                            gtItem->setText(QString::number(groupTotalScore));
+                            firstRowWrittenForTargetGroup = true;
+                        } else {
+                            gtItem->setText(QString());
+                        }
+                    }
+                }
+            }
+        }
+    });
 }
 
 void GroupScoreDialog::updateRowTotal(int row)
@@ -1468,110 +1697,6 @@ void GroupScoreDialog::updateGroupTotal()
         lastGroupName = groupName; // 更新上一行的组号
     }
     table->blockSignals(false);
-    
-    // 收集所有组号，查询临时语音房间
-    QSet<QString> groupIdSet;
-    if (groupCol >= 0) {
-        QString currentGroupName = "";
-        for (int row = 0; row < table->rowCount(); ++row) {
-            QTableWidgetItem* groupItem = table->item(row, groupCol);
-            if (groupItem) {
-                QString groupText = groupItem->text().trimmed();
-                if (!groupText.isEmpty()) {
-                    currentGroupName = groupText;
-                    groupIdSet.insert(currentGroupName);
-                } else if (!currentGroupName.isEmpty()) {
-                    groupIdSet.insert(currentGroupName);
-                }
-            } else if (!currentGroupName.isEmpty()) {
-                groupIdSet.insert(currentGroupName);
-            }
-        }
-    }
-    
-    if (!groupIdSet.isEmpty()) {
-        QJsonArray groupIdArray;
-        for (const QString& gid : groupIdSet) {
-            QString trimmed = gid.trimmed();
-            if (!trimmed.isEmpty()) {
-                groupIdArray.append(trimmed);
-            }
-        }
-        if (!groupIdArray.isEmpty()) {
-            QJsonObject payload;
-            payload["group_ids"] = groupIdArray;
-            QByteArray postData = QJsonDocument(payload).toJson(QJsonDocument::Compact);
-            
-            QNetworkRequest req(QUrl("http://47.100.126.194:5000/temp_rooms/query"));
-            req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-            
-            QNetworkReply* r = networkManager->post(req, postData);
-            
-            // 使用 this 作为接收者，确保信号能正确触发
-            QObject::connect(r, &QNetworkReply::finished, this, [r]() {
-                if (!r) {
-                    qWarning() << "QNetworkReply 为空";
-                    return;
-                }
-                
-                if (r->error() != QNetworkReply::NoError) {
-                    qWarning() << "查询临时语音房间失败:" << r->errorString();
-                    r->deleteLater();
-                    return;
-                }
-                
-                QByteArray resp = r->readAll();
-                QJsonParseError perr;
-                QJsonDocument doc = QJsonDocument::fromJson(resp, &perr);
-                
-                if (perr.error != QJsonParseError::NoError || !doc.isObject()) {
-                    qWarning() << "解析临时语音房间响应失败:" << perr.errorString();
-                    r->deleteLater();
-                    return;
-                }
-                
-                QJsonObject obj = doc.object();
-                if (obj["code"].toInt() != 200) {
-                    qWarning() << "查询临时语音房间返回非200:" << resp;
-                    r->deleteLater();
-                    return;
-                }
-                
-                if (obj.contains("data") && obj["data"].isObject()) {
-                    QJsonObject dataObj = obj["data"].toObject();
-                    if (dataObj.contains("rooms") && dataObj["rooms"].isArray()) {
-                        QJsonArray rooms = dataObj["rooms"].toArray();
-                        for (const QJsonValue& v : rooms) {
-                            if (!v.isObject()) continue;
-                            QJsonObject roomObj = v.toObject();
-                            
-                            // 解析 TempRoomInfo 结构
-                            TempRoomInfo info;
-                            info.group_id = roomObj["group_id"].toString();
-                            info.room_id = roomObj["room_id"].toString();
-                            info.whip_url = roomObj["publish_url"].toString();
-                            info.whep_url = roomObj["play_url"].toString();
-                            info.stream_name = roomObj["stream_name"].toString();
-                            info.owner_id = roomObj["owner_id"].toString();
-                            info.owner_name = roomObj["owner_name"].toString();
-                            info.owner_icon = roomObj["owner_icon"].toString();
-                            
-                            if (!info.group_id.isEmpty()) {
-                                TempRoomStorage::saveTempRoomInfo(info.group_id, info);
-                                qDebug() << "已缓存语音房间:" << info.group_id << info.room_id;
-                            }
-                        }
-                    }
-                }
-                
-                r->deleteLater();
-            });
-        } else {
-            qWarning() << "group_ids 为空，跳过 temp_rooms/query 调用";
-        }
-    } else {
-        qWarning() << "未收集到群组ID，跳过 temp_rooms/query 调用";
-    }
 }
 
 void GroupScoreDialog::onTableContextMenu(const QPoint& pos)
@@ -1718,7 +1843,7 @@ void GroupScoreDialog::showCellComment(int row, int column)
         }
         
         // 调用服务器接口设置注释（点击确定按钮时发送）
-        if (!studentName.isEmpty() && !fieldName.isEmpty()) {
+        if ((!studentId.isEmpty() || !studentName.isEmpty()) && !fieldName.isEmpty()) {
             setCommentToServer(studentName, studentId, fieldName, comment);
         }
     }
@@ -1727,21 +1852,30 @@ void GroupScoreDialog::showCellComment(int row, int column)
 void GroupScoreDialog::setCommentToServer(const QString& studentName, const QString& studentId, 
                                             const QString& fieldName, const QString& comment)
 {
-    // 检查 score_header_id 是否有效
-    if (m_scoreHeaderId <= 0) {
-        qDebug() << "score_header_id 无效，无法设置注释到服务器";
-        // 不显示错误提示，因为可能是本地编辑，还没有上传到服务器
-        return;
-    }
+    if (!networkManager) return;
+    if (m_classid.trimmed().isEmpty()) return;
+    if (fieldName.trimmed().isEmpty()) return;
+    if (studentId.trimmed().isEmpty() && studentName.trimmed().isEmpty()) return;
     
     // 构造请求 JSON
     QJsonObject requestObj;
-    requestObj["score_header_id"] = m_scoreHeaderId;
-    requestObj["student_name"] = studentName;
-    if (!studentId.isEmpty()) {
-        requestObj["student_id"] = studentId;
-    }
+    requestObj["class_id"] = m_classid;
+    const QString term = m_term.isEmpty() ? computeCurrentTermString() : m_term;
+    if (!term.isEmpty()) requestObj["term"] = term;
+    if (!studentId.trimmed().isEmpty()) requestObj["student_id"] = studentId.trimmed();
+    else requestObj["student_name"] = studentName.trimmed();
     requestObj["field_name"] = fieldName;
+
+    // table_name / excel_filename：优先使用 excel_filename（带 .xlsx），其次使用 table_name（不带扩展名）
+    const QString excelFilename = m_excelFileName.trimmed();
+    // 优先使用 windowTitle（CustomListDialog 会把它设为真实表名）；其次才用 m_lblTitle
+    QString tableName = windowTitle().trimmed();
+    if (tableName.isEmpty()) tableName = m_lblTitle ? m_lblTitle->text().trimmed() : QString();
+    if (!excelFilename.isEmpty()) requestObj["excel_filename"] = excelFilename;
+    else if (!tableName.isEmpty()) requestObj["table_name"] = tableName;
+    else return;
+
+    // 空字符串表示删除注释
     requestObj["comment"] = comment;
     
     QJsonDocument doc(requestObj);
@@ -1766,12 +1900,46 @@ void GroupScoreDialog::setCommentToServer(const QString& studentName, const QStr
                 int code = responseObj["code"].toInt();
                 
                 if (code == 200) {
-                    qDebug() << "注释设置成功:" << studentName << fieldName;
-                    // 可以更新本地存储的注释信息
-                    QJsonObject dataObj = responseObj["data"].toObject();
-                    if (dataObj.contains("comments_json") && dataObj["comments_json"].isObject()) {
-                        QJsonObject commentsJson = dataObj["comments_json"].toObject();
-                        // 可以在这里更新本地注释缓存
+                    qDebug() << "注释设置成功:" << (studentId.isEmpty() ? studentName : studentId) << fieldName;
+
+                    // 同步到全局 CommentStorage（优先用服务端返回的 comment_key）
+                    const QJsonObject dataObj = responseObj.value("data").toObject();
+                    const QString commentKey = dataObj.value("comment_key").toString();
+                    const QString termForCache = m_term.isEmpty() ? computeCurrentTermString() : m_term;
+                    const QString sid = studentId.trimmed();
+                    if (!sid.isEmpty()) {
+                        // 若服务端返回整段 comments_json，则用它覆盖本地缓存（可正确反映删除后的“不存在”）
+                        if (dataObj.contains("comments_json") && dataObj.value("comments_json").isObject()) {
+                            const QJsonObject commentsJson = dataObj.value("comments_json").toObject();
+                            CommentStorage::clearStudentComments(m_classid, termForCache, sid);
+                            for (auto it = commentsJson.begin(); it != commentsJson.end(); ++it) {
+                                const QString k = it.key();
+                                const QString v = it.value().toString();
+                                if (!k.isEmpty() && !v.isEmpty()) {
+                                    const QString inferredTable = CommentStorage::inferTableNameFromFieldKey(k);
+                                    CommentStorage::saveComment(m_classid, termForCache, sid, k, inferredTable, v);
+                                }
+                            }
+                            // 兼容：也存一份纯字段名（用于旧界面）
+                            const QString keyToSave = commentKey.isEmpty() ? fieldName : commentKey;
+                            const QString v = commentsJson.value(keyToSave).toString();
+                            if (!fieldName.isEmpty() && !v.isEmpty()) {
+                                // 纯字段名需要带表格名避免冲突
+                                CommentStorage::saveComment(m_classid, termForCache, sid, fieldName, m_excelFileName, v);
+                            } else if (!fieldName.isEmpty() && v.isEmpty()) {
+                                // 删除时也清理纯字段名
+                                CommentStorage::saveComment(m_classid, termForCache, sid, fieldName, m_excelFileName, "");
+                            }
+                        } else {
+                            // 没有整段 comments_json：只更新本次字段
+                            const QString keyToSave = commentKey.isEmpty() ? fieldName : commentKey;
+                            const QString tableNameForKey = !commentKey.isEmpty() ? CommentStorage::inferTableNameFromFieldKey(keyToSave) : m_excelFileName;
+                            CommentStorage::saveComment(m_classid, termForCache, sid, keyToSave, tableNameForKey, comment);
+                            // 兼容：同时存一份“纯字段名”，便于旧界面读取
+                            if (CommentStorage::getComment(m_classid, termForCache, sid, fieldName, m_excelFileName).isEmpty()) {
+                                CommentStorage::saveComment(m_classid, termForCache, sid, fieldName, m_excelFileName, comment);
+                            }
+                        }
                     }
                 } else {
                     QString errorMsg = responseObj["message"].toString();

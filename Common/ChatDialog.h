@@ -131,7 +131,7 @@ public:
         m_titleBar->setFixedHeight(48);
         m_titleBar->setStyleSheet(
             "#chatTitleBar {"
-            "  background-color: #565656;"
+            "  background-color: #1E1F22;"
             "  border-bottom: 1px solid rgba(255,255,255,0.10);"
             "  border-top-left-radius: 16px;"
             "  border-top-right-radius: 16px;"
@@ -308,9 +308,21 @@ public:
 
         // 消息列表
         m_listWidget = new QListWidget();
+        // 彻底关闭“行背景/交替行”导致的灰条，并让 viewport 透明显示容器背景
+        m_listWidget->setAlternatingRowColors(false);
+        m_listWidget->setAutoFillBackground(false);
+        m_listWidget->setAttribute(Qt::WA_TranslucentBackground, true);
+        if (m_listWidget->viewport()) {
+            m_listWidget->viewport()->setAutoFillBackground(false);
+            m_listWidget->viewport()->setAttribute(Qt::WA_TranslucentBackground, true);
+            m_listWidget->viewport()->setStyleSheet("background: transparent;");
+        }
         m_listWidget->setStyleSheet(
             "QListWidget { background: transparent; border:none; color:#ffffff; outline: none; }"
-            "QListWidget::item { border:none; }"
+            // item 背景强制透明，避免 setItemWidget 后出现“整行灰底条”（尤其是名字行所在区域）
+            "QListWidget::item { background: transparent; border:none; }"
+            "QListWidget::item:selected { background: transparent; }"
+            "QListWidget::item:hover { background: transparent; }"
             "QScrollBar:vertical { background: transparent; width: 8px; margin: 6px 2px 6px 2px; }"
             "QScrollBar::handle:vertical { background: rgba(255,255,255,0.18); border-radius: 4px; min-height: 24px; }"
             "QScrollBar::handle:vertical:hover { background: rgba(255,255,255,0.26); }"
@@ -1030,13 +1042,16 @@ private:
     QWidget* buildMessageWidget(const QString& avatarPath, const QString& senderName, QWidget* contentWidget, bool isMine, bool hideAvatar)
     {
         QWidget* msgWidget = new QWidget();
+        // 确保消息 widget 自身不绘制背景，否则会在名字行/空白处形成“灰条”
+        msgWidget->setStyleSheet("background: transparent;");
+        msgWidget->setAttribute(Qt::WA_TranslucentBackground, true);
         QVBoxLayout* vLayout = new QVBoxLayout(msgWidget);
         vLayout->setContentsMargins(5, 5, 5, 5);
         vLayout->setSpacing(2);
 
         // ====== 第一行：发送者名称 ======
         QLabel* lblName = new QLabel(senderName);
-        lblName->setStyleSheet("color: rgba(255,255,255,0.55); font-size: 12px;");
+        lblName->setStyleSheet("background: transparent; color: rgba(255,255,255,0.55); font-size: 12px;");
         if (isMine) {
             lblName->setAlignment(Qt::AlignRight);
         }

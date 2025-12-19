@@ -58,6 +58,12 @@ public:
     
     // 导入Excel数据
     void importData(const QStringList& headers, const QList<QStringList>& dataRows, const QString& excelFilePath = QString());
+
+    // 设置学期（用于 /group-scores/set-score 与 /group-scores/set-comment 定位到正确表头）
+    void setTerm(const QString& term) { m_term = term; }
+
+    // 在“无本地 Excel 文件路径”的刷新模式下（从服务器缓存构建表格），也需要显式设置表格名
+    void setExcelFileName(const QString& excelFileName) { m_excelFileName = excelFileName; }
     
     // 设置成绩表头ID
     void setScoreHeaderId(int scoreHeaderId) { m_scoreHeaderId = scoreHeaderId; }
@@ -101,6 +107,8 @@ private slots:
 private:
     void sortTable(bool ascending);
     void showCellComment(int row, int column);
+    void setScoreToServer(int row, const QString& studentName, const QString& studentId,
+                          const QString& fieldName, const QString& cellText);
     void setCommentToServer(const QString& studentName, const QString& studentId, 
                            const QString& fieldName, const QString& comment);
     void updateRowTotal(int row); // 更新指定行的个人总分
@@ -128,11 +136,15 @@ private:
     int totalColumnIndex; // 个人总分列索引（倒数第二列）
     int groupTotalColumnIndex; // 小组总分列索引（最后一列）
     QString m_classid;
+    QString m_term; // 学期（优先使用外部传入；为空则回退当前学期计算）
     QPushButton* m_btnClose = nullptr; // 关闭按钮
     QPoint m_dragPosition; // 用于窗口拖动
     QString m_excelFilePath; // Excel文件路径
     QString m_excelFileName; // Excel文件名
     CellCommentWidget* commentWidget = nullptr; // 注释窗口
     int m_scoreHeaderId = -1; // 成绩表头ID，用于设置注释
+
+    // 批量更新标记（导入Excel等场景），用于避免 itemChanged 触发大量计算/网络
+    bool m_isBulkUpdating = false;
 };
 

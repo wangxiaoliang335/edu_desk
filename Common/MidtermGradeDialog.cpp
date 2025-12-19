@@ -367,8 +367,8 @@ void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStr
                     // exam_name 由当前表格标题/文件名推导
                     const QString examName = resolveExamName(windowTitle().isEmpty() ? m_excelFileName : windowTitle());
                     
-                    // 从全局存储中获取注释
-                    QString comment = CommentStorage::getComment(m_classid, examName, term, studentId, headerText);
+                    // 从全局存储中获取注释（按表格名区分，避免不同表同字段覆盖）
+                    QString comment = CommentStorage::getComment(m_classid, term, studentId, headerText, m_excelFileName);
                     if (!comment.isEmpty()) {
                         item->setData(Qt::UserRole, comment);
                     }
@@ -1149,11 +1149,11 @@ void MidtermGradeDialog::onCellEntered(int row, int column)
                 }
                 if (!studentId.isEmpty()) {
                     const QString term = calcCurrentTerm();
-                    comment = CommentStorage::getComment(m_classid, term, studentId, fieldName);
+                    comment = CommentStorage::getComment(m_classid, term, studentId, fieldName, m_excelFileName);
                     // 兼容：如果缓存里是复合键名，也尝试读一次
                     if (comment.isEmpty() && !m_excelFileName.isEmpty()) {
                         QString compositeKey = QString("%1_%2").arg(fieldName).arg(m_excelFileName);
-                        comment = CommentStorage::getComment(m_classid, term, studentId, compositeKey);
+                        comment = CommentStorage::getComment(m_classid, term, studentId, compositeKey, m_excelFileName);
                     }
                     if (!comment.isEmpty()) {
                         item->setData(Qt::UserRole, comment);
@@ -1500,10 +1500,10 @@ void MidtermGradeDialog::showCellComment(int row, int column)
     // 懒加载：右键编辑前，若当前为空则从全局缓存补一次（避免 importData 先于缓存写入导致的空白）
     if (currentComment.isEmpty() && !m_classid.isEmpty() && !studentId.isEmpty() && !fieldName.isEmpty()) {
         const QString term = calcCurrentTerm();
-        currentComment = CommentStorage::getComment(m_classid, term, studentId, fieldName);
+        currentComment = CommentStorage::getComment(m_classid, term, studentId, fieldName, m_excelFileName);
         if (currentComment.isEmpty() && !m_excelFileName.isEmpty()) {
             QString compositeKey = QString("%1_%2").arg(fieldName).arg(m_excelFileName);
-            currentComment = CommentStorage::getComment(m_classid, term, studentId, compositeKey);
+            currentComment = CommentStorage::getComment(m_classid, term, studentId, compositeKey, m_excelFileName);
         }
         if (!currentComment.isEmpty()) {
             item->setData(Qt::UserRole, currentComment);
@@ -1617,10 +1617,10 @@ bool MidtermGradeDialog::eventFilter(QObject *obj, QEvent *event)
                         }
                         if (!studentId.isEmpty()) {
                             const QString term = calcCurrentTerm();
-                            comment = CommentStorage::getComment(m_classid, term, studentId, fieldName);
+                            comment = CommentStorage::getComment(m_classid, term, studentId, fieldName, m_excelFileName);
                             if (comment.isEmpty() && !m_excelFileName.isEmpty()) {
                                 QString compositeKey = QString("%1_%2").arg(fieldName).arg(m_excelFileName);
-                                comment = CommentStorage::getComment(m_classid, term, studentId, compositeKey);
+                                comment = CommentStorage::getComment(m_classid, term, studentId, compositeKey, m_excelFileName);
                             }
                             if (!comment.isEmpty()) {
                                 item->setData(Qt::UserRole, comment);

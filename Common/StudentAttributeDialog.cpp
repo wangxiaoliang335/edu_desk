@@ -657,7 +657,13 @@ void StudentAttributeDialog::onAnnotationClicked()
                         const QString fieldKey = m_selectedExcelTable.isEmpty()
                             ? attributeName
                             : QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable);
-                        currentComment = CommentStorage::getComment(m_classId, m_examName, m_term, m_student.id, fieldKey);
+                        // 先按 “字段名 + 表格名” 取；为空则兼容旧的复合键存储（字段_Excel文件名）
+                        currentComment = CommentStorage::getComment(m_classId, m_term, m_student.id, attributeName, m_selectedExcelTable);
+                        if (currentComment.isEmpty() && !m_selectedExcelTable.isEmpty()) {
+                            const QString compositeKey = QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable);
+                            const QString inferredTable = CommentStorage::inferTableNameFromFieldKey(compositeKey);
+                            currentComment = CommentStorage::getComment(m_classId, m_term, m_student.id, compositeKey, inferredTable);
+                        }
                     }
 
                     bool okText = false;
@@ -678,7 +684,14 @@ void StudentAttributeDialog::onAnnotationClicked()
                         const QString fieldKey = m_selectedExcelTable.isEmpty()
                             ? attributeName
                             : QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable);
-                        CommentStorage::saveComment(m_classId, m_examName, m_term, m_student.id, fieldKey, newComment);
+                        // 新存储：字段 + 表格名
+                        CommentStorage::saveComment(m_classId, m_term, m_student.id, attributeName, m_selectedExcelTable, newComment);
+                        // 兼容：同时存一份复合键（字段_Excel文件名），避免旧页面取不到
+                        if (!m_selectedExcelTable.isEmpty()) {
+                            const QString compositeKey = QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable);
+                            const QString inferredTable = CommentStorage::inferTableNameFromFieldKey(compositeKey);
+                            CommentStorage::saveComment(m_classId, m_term, m_student.id, compositeKey, inferredTable, newComment);
+                        }
                     }
 
                     QJsonObject requestObj;
@@ -733,7 +746,12 @@ void StudentAttributeDialog::onAnnotationClicked()
         const QString fieldKey = m_selectedExcelTable.isEmpty()
             ? attributeName
             : QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable);
-        currentComment = CommentStorage::getComment(m_classId, m_examName, m_term, m_student.id, fieldKey);
+        currentComment = CommentStorage::getComment(m_classId, m_term, m_student.id, attributeName, m_selectedExcelTable);
+        if (currentComment.isEmpty() && !m_selectedExcelTable.isEmpty()) {
+            const QString compositeKey = QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable);
+            const QString inferredTable = CommentStorage::inferTableNameFromFieldKey(compositeKey);
+            currentComment = CommentStorage::getComment(m_classId, m_term, m_student.id, compositeKey, inferredTable);
+        }
     }
 
     bool ok = false;
@@ -756,7 +774,12 @@ void StudentAttributeDialog::onAnnotationClicked()
         const QString fieldKey = m_selectedExcelTable.isEmpty()
             ? attributeName
             : QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable);
-        CommentStorage::saveComment(m_classId, m_examName, m_term, m_student.id, fieldKey, newComment);
+        CommentStorage::saveComment(m_classId, m_term, m_student.id, attributeName, m_selectedExcelTable, newComment);
+        if (!m_selectedExcelTable.isEmpty()) {
+            const QString compositeKey = QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable);
+            const QString inferredTable = CommentStorage::inferTableNameFromFieldKey(compositeKey);
+            CommentStorage::saveComment(m_classId, m_term, m_student.id, compositeKey, inferredTable, newComment);
+        }
     }
 
     // 发送到服务器：/student-scores/set-comment
