@@ -18,4 +18,5 @@ private:
 private:
 	class TASchoolCalendarWidget* m_schoolCalendarWidget = nullptr;
 	class TACTeacherCourseScheduleWindow* m_teacherCourseScheduleWindow = nullptr; // 教师课程表窗口（mainwindow.cpp 的实现）
+	class SchoolCourseScheduleDialog* m_schoolCourseScheduleDialog = nullptr; // 学校/年级课程表总览
 };

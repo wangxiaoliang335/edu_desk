@@ -6,6 +6,7 @@
 #include "common.h"
 #include "TACalendarDialog.h"
 #include "TACTeacherCourseScheduleWindow.h"
+#include "SchoolCourseScheduleDialog.h"
 TACDesktopManagerWidget::TACDesktopManagerWidget(QWidget *parent)
 	: TAFloatingWidget(parent)
 {
@@ -62,6 +63,18 @@ TACDesktopManagerWidget::TACDesktopManagerWidget(QWidget *parent)
 
 	QPushButton* tabelButton = new QPushButton("表格对话框", this);
 	layout->addWidget(tabelButton);
+	connect(tabelButton, &QPushButton::clicked, this, [this]() {
+		if (!m_schoolCourseScheduleDialog) {
+			m_schoolCourseScheduleDialog = new SchoolCourseScheduleDialog(nullptr);
+			m_schoolCourseScheduleDialog->setObjectName(QStringLiteral("SchoolCourseScheduleDialog"));
+		}
+		const QPoint anchor = this->mapToGlobal(QPoint(this->width() + 10, 0));
+		m_schoolCourseScheduleDialog->move(anchor);
+		m_schoolCourseScheduleDialog->show();
+		m_schoolCourseScheduleDialog->raise();
+		m_schoolCourseScheduleDialog->activateWindow();
+		m_schoolCourseScheduleDialog->refresh();
+	});
 
 	QPushButton* textButton = new QPushButton("文本对话框", this);
 	layout->addWidget(textButton);
