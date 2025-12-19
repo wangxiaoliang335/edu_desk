@@ -2006,21 +2006,30 @@ private:
     void setCommentToServer(const QString& studentName, const QString& studentId, 
                            const QString& fieldName, const QString& comment)
     {
-        // 检查 score_header_id 是否有效
-        if (m_scoreHeaderId <= 0) {
-            qDebug() << "score_header_id 无效，无法设置注释到服务器";
-            // 不显示错误提示，因为可能是本地编辑，还没有上传到服务器
-            return;
-        }
-        
         // 构造请求 JSON
         QJsonObject requestObj;
-        requestObj["score_header_id"] = m_scoreHeaderId;
-        requestObj["student_name"] = studentName;
-        if (!studentId.isEmpty()) {
-            requestObj["student_id"] = studentId;
+        // 不传 score_header_id，改用 class_id + term (+ excel_filename) 自动定位
+        if (!m_classid.trimmed().isEmpty()) requestObj["class_id"] = m_classid.trimmed();
+        // 这里没有显式保存 term（上传时由用户输入），先按当前日期推断学期，保持与本地 CommentStorage 一致
+        const auto calcTerm = []() -> QString {
+            QDate currentDate = QDate::currentDate();
+            int year = currentDate.year();
+            int month = currentDate.month();
+            if (month >= 9 || month <= 1) {
+                if (month >= 9) return QString("%1-%2-1").arg(year).arg(year + 1);
+                return QString("%1-%2-1").arg(year - 1).arg(year);
+            }
+            return QString("%1-%2-2").arg(year - 1).arg(year);
+        };
+        const QString term = calcTerm();
+        if (!term.trimmed().isEmpty()) requestObj["term"] = term.trimmed();
+
+        requestObj["student_name"] = studentName.trimmed();
+        if (!studentId.trimmed().isEmpty()) {
+            requestObj["student_id"] = studentId.trimmed();
         }
         requestObj["field_name"] = fieldName;
+        if (!m_excelFileName.trimmed().isEmpty()) requestObj["excel_filename"] = m_excelFileName.trimmed();
         requestObj["comment"] = comment;
         
         QJsonDocument doc(requestObj);

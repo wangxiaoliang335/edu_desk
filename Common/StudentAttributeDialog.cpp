@@ -530,20 +530,15 @@ void StudentAttributeDialog::sendScoreToServer(const QString& attributeName, dou
     }
     if (m_student.name.isEmpty()) return;
 
-    // 需要 score_header_id 才能保存到服务器；若无则先自动拉取一次
-    if (m_scoreHeaderId <= 0) {
-        fetchScoreHeaderIdFromServer([this, attributeName, scoreValue](bool ok) {
-            if (!ok || m_scoreHeaderId <= 0) {
-                qDebug() << "set-score: score_header_id 无效，跳过上传";
-                return;
-            }
-            sendScoreToServer(attributeName, scoreValue);
-        });
+    // 不传 score_header_id：改用 class_id + term (+ excel_filename) 自动定位
+    if (m_classId.trimmed().isEmpty() || m_term.trimmed().isEmpty()) {
+        qDebug() << "set-score: context missing, skip upload. class_id=" << m_classId << "term=" << m_term;
         return;
     }
 
     QJsonObject requestObj;
-    requestObj["score_header_id"] = m_scoreHeaderId;
+    requestObj["class_id"] = m_classId.trimmed();
+    requestObj["term"] = m_term.trimmed();
     requestObj["student_name"] = m_student.name;
     if (!m_student.id.isEmpty()) {
         requestObj["student_id"] = m_student.id;
@@ -584,9 +579,14 @@ void StudentAttributeDialog::sendScoreToServer(const QString& attributeName, dou
                         // 如果服务端没返回 excel_filename，则用当前选择值（如果有）
                         excelFileName = m_selectedExcelTable;
                     }
-                    if (dataObj.contains("excel_total_score") && !dataObj.value("excel_total_score").isNull()
-                        && !excelFileName.isEmpty()) {
-                        double excelTotal = dataObj.value("excel_total_score").toDouble();
+                    // 当前 Excel 表维度总分：兼容新字段 excel_total 与旧字段 excel_total_score
+                    const bool hasExcelTotal =
+                        (dataObj.contains("excel_total") && !dataObj.value("excel_total").isNull())
+                        || (dataObj.contains("excel_total_score") && !dataObj.value("excel_total_score").isNull());
+                    if (hasExcelTotal && !excelFileName.isEmpty()) {
+                        const double excelTotal = dataObj.contains("excel_total")
+                            ? dataObj.value("excel_total").toDouble()
+                            : dataObj.value("excel_total_score").toDouble();
                         // 写回本地（按表格维度）
                         m_student.attributesByExcel[excelFileName][totalName] = excelTotal;
                         m_student.attributesFull[QString("%1_%2").arg(totalName).arg(excelFileName)] = excelTotal;
@@ -639,106 +639,6 @@ void StudentAttributeDialog::onAnnotationClicked()
     QString attributeName = btn->property("attributeName").toString();
     if (attributeName.isEmpty()) return;
 
-    // 需要 score_header_id 才能保存到服务器；若无则先自动拉取一次
-    if (m_scoreHeaderId <= 0) {
-        fetchScoreHeaderIdFromServer([this, attributeName](bool ok) {
-            if (!ok || m_scoreHeaderId <= 0) {
-                QMessageBox::warning(this, QString::fromUtf8(u8"提示"),
-                                     QString::fromUtf8(u8"未获取到成绩表ID（score_header_id）。\n请确认已成功获取成绩表数据后再设置注释。"));
-                return;
-            }
-            // 重新走一遍注释流程（此时 score_header_id 已就绪）
-            if (m_annotationButtons.contains(attributeName)) {
-                QMetaObject::invokeMethod(this, [this, attributeName]() {
-                    // 构造一个临时 sender 流程太重，直接复用后续逻辑：用 attributeName 继续执行
-                    // 这里调用内部实现：复制后续逻辑到一个 lambda 中
-                    QString currentComment = m_student.getComment(attributeName, m_selectedExcelTable);
-                    if (currentComment.isEmpty() && !m_classId.isEmpty() && !m_examName.isEmpty() && !m_term.isEmpty() && !m_student.id.isEmpty()) {
-                        const QString fieldKey = m_selectedExcelTable.isEmpty()
-                            ? attributeName
-                            : QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable);
-                        // 先按 “字段名 + 表格名” 取；为空则兼容旧的复合键存储（字段_Excel文件名）
-                        currentComment = CommentStorage::getComment(m_classId, m_term, m_student.id, attributeName, m_selectedExcelTable);
-                        if (currentComment.isEmpty() && !m_selectedExcelTable.isEmpty()) {
-                            const QString compositeKey = QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable);
-                            const QString inferredTable = CommentStorage::inferTableNameFromFieldKey(compositeKey);
-                            currentComment = CommentStorage::getComment(m_classId, m_term, m_student.id, compositeKey, inferredTable);
-                        }
-                    }
-
-                    bool okText = false;
-                    QString newComment = QInputDialog::getText(this, QString::fromUtf8(u8"设置注释"),
-                                                               QString::fromUtf8(u8"请输入 %1 的注释：").arg(attributeName),
-                                                               QLineEdit::Normal, currentComment, &okText);
-                    if (!okText) return;
-                    newComment = newComment.trimmed();
-
-                    if (!m_selectedExcelTable.isEmpty()) {
-                        m_student.commentsByExcel[m_selectedExcelTable][attributeName] = newComment;
-                        m_student.commentsFull[QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable)] = newComment;
-                    } else {
-                        m_student.comments[attributeName] = newComment;
-                    }
-
-                    if (!m_classId.isEmpty() && !m_examName.isEmpty() && !m_term.isEmpty() && !m_student.id.isEmpty()) {
-                        const QString fieldKey = m_selectedExcelTable.isEmpty()
-                            ? attributeName
-                            : QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable);
-                        // 新存储：字段 + 表格名
-                        CommentStorage::saveComment(m_classId, m_term, m_student.id, attributeName, m_selectedExcelTable, newComment);
-                        // 兼容：同时存一份复合键（字段_Excel文件名），避免旧页面取不到
-                        if (!m_selectedExcelTable.isEmpty()) {
-                            const QString compositeKey = QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable);
-                            const QString inferredTable = CommentStorage::inferTableNameFromFieldKey(compositeKey);
-                            CommentStorage::saveComment(m_classId, m_term, m_student.id, compositeKey, inferredTable, newComment);
-                        }
-                    }
-
-                    QJsonObject requestObj;
-                    requestObj["score_header_id"] = m_scoreHeaderId;
-                    requestObj["student_name"] = m_student.name;
-                    if (!m_student.id.isEmpty()) {
-                        requestObj["student_id"] = m_student.id;
-                    }
-                    const QString serverFieldName = m_selectedExcelTable.isEmpty()
-                        ? attributeName
-                        : QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable);
-                    requestObj["field_name"] = serverFieldName;
-                    requestObj["comment"] = newComment;
-
-                    QJsonDocument doc(requestObj);
-                    QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
-
-                    QNetworkAccessManager* networkManager = new QNetworkAccessManager(this);
-                    QNetworkRequest request;
-                    request.setUrl(QUrl("http://47.100.126.194:5000/student-scores/set-comment"));
-                    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-
-                    QNetworkReply* reply = networkManager->post(request, jsonData);
-                    connect(reply, &QNetworkReply::finished, this, [reply, networkManager]() {
-                        if (reply->error() == QNetworkReply::NoError) {
-                            const QByteArray responseData = reply->readAll();
-                            QJsonDocument respDoc = QJsonDocument::fromJson(responseData);
-                            if (respDoc.isObject()) {
-                                QJsonObject obj = respDoc.object();
-                                int code = obj.value("code").toInt(-1);
-                                QString msg = obj.value("message").toString();
-                                qDebug() << "set-comment resp code=" << code << "msg=" << msg;
-                            } else {
-                                qDebug() << "set-comment resp:" << responseData;
-                            }
-                        } else {
-                            qDebug() << "set-comment network error:" << reply->errorString();
-                        }
-                        reply->deleteLater();
-                        networkManager->deleteLater();
-                    });
-                }, Qt::QueuedConnection);
-            }
-        });
-        return;
-    }
-
     // 当前注释（优先按选中表格取注释）
     QString currentComment = m_student.getComment(attributeName, m_selectedExcelTable);
     // 若没有，尝试从全局注释缓存取（key 统一用“字段_Excel文件名”）
@@ -784,7 +684,9 @@ void StudentAttributeDialog::onAnnotationClicked()
 
     // 发送到服务器：/student-scores/set-comment
     QJsonObject requestObj;
-    requestObj["score_header_id"] = m_scoreHeaderId;
+    // 不传 score_header_id：改用 class_id + term (+ excel_filename) 自动定位
+    if (!m_classId.trimmed().isEmpty()) requestObj["class_id"] = m_classId.trimmed();
+    if (!m_term.trimmed().isEmpty()) requestObj["term"] = m_term.trimmed();
     requestObj["student_name"] = m_student.name;
     if (!m_student.id.isEmpty()) {
         requestObj["student_id"] = m_student.id;
@@ -794,6 +696,9 @@ void StudentAttributeDialog::onAnnotationClicked()
         ? attributeName
         : QString("%1_%2").arg(attributeName).arg(m_selectedExcelTable);
     requestObj["field_name"] = serverFieldName;
+    if (!m_selectedExcelTable.isEmpty()) {
+        requestObj["excel_filename"] = m_selectedExcelTable;
+    }
     requestObj["comment"] = newComment;
 
     QJsonDocument doc(requestObj);

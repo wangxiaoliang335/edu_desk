@@ -872,7 +872,7 @@ private:
             return base.trimmed();
         };
 
-        auto upsertGroupScoreDialogForExcel = [&](const QString& excelFilename) {
+        auto upsertGroupScoreDialogForExcel = [&](const QString& tableId, const QString& excelFilename) {
             // 收集字段
             QSet<QString> fieldSet;
             for (const auto& s : m_cachedGroupScores) {
@@ -917,15 +917,34 @@ private:
                 dataRows.append(row);
             }
 
-            // 用带前缀的 key 避免与 student 侧同名 excel 冲突
-            const QString keyName = QStringLiteral("group::") + excelFilename;
+            // 用带前缀的 key 避免与 student 侧同名表冲突；tableId 使用“去后缀”的表名，避免重复
+            const QString keyName = QStringLiteral("group::") + tableId;
+            const QString legacyKeyName = QStringLiteral("group::") + excelFilename; // 兼容旧key（带后缀）
             QDialog* existingDialog = m_dialogMap.value(keyName, nullptr);
+            if (!existingDialog) existingDialog = m_dialogMap.value(legacyKeyName, nullptr);
 
-            const QString niceTitle = baseNameOfExcel(excelFilename);
+            const QString niceTitle = tableId;
 
             if (existingDialog) {
                 GroupScoreDialog* dlg = qobject_cast<GroupScoreDialog*>(existingDialog);
                 if (dlg) {
+                    // 若命中旧 key，则迁移到新 key（去后缀）
+                    if (!m_dialogMap.contains(keyName) && m_dialogMap.contains(legacyKeyName)) {
+                        m_dialogMap.remove(legacyKeyName);
+                        m_dialogMap[keyName] = dlg;
+                        // 同步按钮映射（把旧 key 改成新 key）并把按钮文本改成去后缀的表名
+                        for (auto it = m_buttonToFileNameMap.begin(); it != m_buttonToFileNameMap.end(); ++it) {
+                            if (it.value() == legacyKeyName) {
+                                it.value() = keyName;
+                                if (it.key()) it.key()->setText(tableId);
+                            }
+                        }
+                        // term map 同步迁移
+                        if (m_fileNameToTermMap.contains(legacyKeyName) && !m_fileNameToTermMap.contains(keyName)) {
+                            m_fileNameToTermMap[keyName] = m_fileNameToTermMap.value(legacyKeyName);
+                            m_fileNameToTermMap.remove(legacyKeyName);
+                        }
+                    }
                     dlg->setTerm(term);
                     dlg->setExcelFileName(excelFilename);
                     dlg->setWindowTitle(niceTitle);
@@ -952,7 +971,8 @@ private:
             QHBoxLayout *rowLayout = new QHBoxLayout;
             rowLayout->setSpacing(0);
 
-            QPushButton *btnTitle = new QPushButton(excelFilename);
+            // 按钮显示去后缀的表名，避免 .xlsx/.xls/.csv 重复
+            QPushButton *btnTitle = new QPushButton(tableId);
             btnTitle->setStyleSheet(
                 "QPushButton { background-color: green; color: white; font-size: 14px; padding: 4px; border: 1px solid #555; }"
                 "QPushButton:hover { background-color: darkgreen; }"
@@ -995,15 +1015,181 @@ private:
             });
         };
 
-        // 只用 group-scores 的缓存构建小组表（student-scores 的表格若也需要，再补齐）
-        QSet<QString> excelSet;
+        auto upsertStudentScoreDialogForExcel = [&](const QString& tableId, const QString& excelFilename) {
+            // 收集字段（排除“总分”）
+            QSet<QString> fieldSet;
+            for (const auto& s : m_cachedStudentScores) {
+                if (!s.attributesByExcel.contains(excelFilename)) continue;
+                const auto& attrs = s.attributesByExcel[excelFilename];
+                for (auto it = attrs.begin(); it != attrs.end(); ++it) {
+                    const QString k = it.key();
+                    if (k.isEmpty()) continue;
+                    if (k == QString::fromUtf8(u8"总分")) continue;
+                    fieldSet.insert(k);
+                }
+            }
+            QStringList fields = fieldSet.values();
+            std::sort(fields.begin(), fields.end());
+
+            // 表头：学号/姓名/字段.../总分
+            QStringList headers;
+            headers << QString::fromUtf8(u8"学号") << QString::fromUtf8(u8"姓名");
+            headers.append(fields);
+            headers << QString::fromUtf8(u8"总分");
+
+            QList<StudentInfo> students = m_cachedStudentScores;
+            std::sort(students.begin(), students.end(), [](const StudentInfo& a, const StudentInfo& b) {
+                return a.id < b.id;
+            });
+
+            QList<QStringList> dataRows;
+            dataRows.reserve(students.size());
+            for (const auto& s : students) {
+                // 若该学生在此 excel 下没有任何字段，跳过（避免把其它表的学生也塞进来）
+                if (!s.attributesByExcel.contains(excelFilename) && !s.attributesFull.contains(QString("%1_%2").arg(QString::fromUtf8(u8"总分"), excelFilename))) {
+                    // 兜底：如果 attributesByExcel 没包含，也允许后续 fields 全空（某些情况下服务端只回 total）
+                }
+                QStringList row;
+                row << s.id << s.name;
+                for (const QString& f : fields) {
+                    const double v = s.getAttributeValue(f, excelFilename);
+                    row << (v == 0.0 ? QString() : QString::number(v));
+                }
+                const double excelTotal = s.getAttributeValue(QString::fromUtf8(u8"总分"), excelFilename);
+                row << QString::number(excelTotal != 0.0 ? excelTotal : s.score);
+                dataRows.append(row);
+            }
+
+            const QString keyName = QStringLiteral("student::") + tableId;
+            const QString legacyKeyName = QStringLiteral("student::") + excelFilename;
+            QDialog* existingDialog = m_dialogMap.value(keyName, nullptr);
+            if (!existingDialog) existingDialog = m_dialogMap.value(legacyKeyName, nullptr);
+            const QString niceTitle = tableId;
+
+            if (existingDialog) {
+                MidtermGradeDialog* dlg = qobject_cast<MidtermGradeDialog*>(existingDialog);
+                if (dlg) {
+                    if (!m_dialogMap.contains(keyName) && m_dialogMap.contains(legacyKeyName)) {
+                        m_dialogMap.remove(legacyKeyName);
+                        m_dialogMap[keyName] = dlg;
+                        for (auto it = m_buttonToFileNameMap.begin(); it != m_buttonToFileNameMap.end(); ++it) {
+                            if (it.value() == legacyKeyName) {
+                                it.value() = keyName;
+                                if (it.key()) it.key()->setText(tableId);
+                            }
+                        }
+                        if (m_fileNameToTermMap.contains(legacyKeyName) && !m_fileNameToTermMap.contains(keyName)) {
+                            m_fileNameToTermMap[keyName] = m_fileNameToTermMap.value(legacyKeyName);
+                            m_fileNameToTermMap.remove(legacyKeyName);
+                        }
+                    }
+                    dlg->importData(headers, dataRows, excelFilename);
+                    dlg->setWindowTitle(niceTitle);
+                    // 尝试为对话框设置 score_header_id（若已缓存）
+                    const int scoreHeaderId = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, term);
+                    if (scoreHeaderId > 0) dlg->setScoreHeaderId(scoreHeaderId);
+                    return;
+                }
+            }
+
+            MidtermGradeDialog* dlg = new MidtermGradeDialog(m_classid, this);
+            dlg->importData(headers, dataRows, excelFilename);
+            dlg->setWindowTitle(niceTitle);
+            const int scoreHeaderId = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, term);
+            if (scoreHeaderId > 0) dlg->setScoreHeaderId(scoreHeaderId);
+
+            m_dialogMap[keyName] = dlg;
+            m_fileNameToTermMap[keyName] = term;
+
+            int insertIndex = m_mainLayout->count() - 1;
+            if (insertIndex < 0) insertIndex = 0;
+            QHBoxLayout *rowLayout = new QHBoxLayout;
+            rowLayout->setSpacing(0);
+
+            QPushButton *btnTitle = new QPushButton(tableId);
+            btnTitle->setStyleSheet(
+                "QPushButton { background-color: green; color: white; font-size: 14px; padding: 4px; border: 1px solid #555; }"
+                "QPushButton:hover { background-color: darkgreen; }"
+            );
+            btnTitle->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+
+            QPushButton *btnClose = new QPushButton("X");
+            btnClose->setFixedWidth(30);
+            btnClose->setStyleSheet(
+                "QPushButton { background-color: orange; color: white; font-weight:bold; border: 1px solid #555; }"
+                "QPushButton:hover { background-color: #cc6600; }"
+            );
+
+            rowLayout->addWidget(btnTitle);
+            rowLayout->addWidget(btnClose);
+            m_mainLayout->insertLayout(insertIndex, rowLayout);
+
+            m_buttonToFileNameMap[btnTitle] = keyName;
+
+            connect(btnTitle, &QPushButton::clicked, this, [=]() {
+                if (dlg && dlg->isHidden()) {
+                    dlg->show();
+                    dlg->raise();
+                    dlg->activateWindow();
+                } else if (dlg && !dlg->isHidden()) {
+                    dlg->hide();
+                }
+            });
+
+            connect(btnClose, &QPushButton::clicked, this, [=]() {
+                m_dialogMap.remove(keyName);
+                m_buttonToFileNameMap.remove(btnTitle);
+                m_fileNameToTermMap.remove(keyName);
+
+                m_mainLayout->removeItem(rowLayout);
+                btnTitle->deleteLater();
+                btnClose->deleteLater();
+                rowLayout->deleteLater();
+                if (dlg) dlg->deleteLater();
+            });
+        };
+
+        // group-scores：用“去后缀表名”去重（学生体质统计表 / 学生体质统计表.xlsx 视为同一张表）
+        QMap<QString, QString> groupTableToBestExcel; // tableId -> excelFilename(优先带后缀)
         for (const auto& s : m_cachedGroupScores) {
             for (auto it = s.attributesByExcel.begin(); it != s.attributesByExcel.end(); ++it) {
-                if (!it.key().trimmed().isEmpty()) excelSet.insert(it.key().trimmed());
+                const QString raw = it.key().trimmed();
+                if (raw.isEmpty()) continue;
+                const QString tableId = baseNameOfExcel(raw);
+                if (!groupTableToBestExcel.contains(tableId)) {
+                    groupTableToBestExcel[tableId] = raw;
+                } else {
+                    const QString cur = groupTableToBestExcel.value(tableId);
+                    // 更偏好带扩展名的
+                    const bool rawHasExt = raw.contains('.');
+                    const bool curHasExt = cur.contains('.');
+                    if (rawHasExt && !curHasExt) groupTableToBestExcel[tableId] = raw;
+                }
             }
         }
-        for (const QString& excelFilename : excelSet.values()) {
-            upsertGroupScoreDialogForExcel(excelFilename);
+        for (auto it = groupTableToBestExcel.begin(); it != groupTableToBestExcel.end(); ++it) {
+            upsertGroupScoreDialogForExcel(it.key(), it.value());
+        }
+
+        // student-scores：同样用去后缀表名去重
+        QMap<QString, QString> studentTableToBestExcel;
+        for (const auto& s : m_cachedStudentScores) {
+            for (auto it = s.attributesByExcel.begin(); it != s.attributesByExcel.end(); ++it) {
+                const QString raw = it.key().trimmed();
+                if (raw.isEmpty()) continue;
+                const QString tableId = baseNameOfExcel(raw);
+                if (!studentTableToBestExcel.contains(tableId)) {
+                    studentTableToBestExcel[tableId] = raw;
+                } else {
+                    const QString cur = studentTableToBestExcel.value(tableId);
+                    const bool rawHasExt = raw.contains('.');
+                    const bool curHasExt = cur.contains('.');
+                    if (rawHasExt && !curHasExt) studentTableToBestExcel[tableId] = raw;
+                }
+            }
+        }
+        for (auto it = studentTableToBestExcel.begin(); it != studentTableToBestExcel.end(); ++it) {
+            upsertStudentScoreDialogForExcel(it.key(), it.value());
         }
     }
 };

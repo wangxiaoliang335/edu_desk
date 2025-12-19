@@ -561,12 +561,9 @@ public:
                                                         student.comments[fieldName] = comment;
                                                     }
 
-                                                    // 同步到全局注释缓存：同时保存复合键与纯字段名（便于不同界面读取）
-                                                    CommentStorage::saveComment(m_classid, termForCache, student.id, key, excelFileName, comment);
-                                                    // 纯字段名注释需要按表格名区分，避免不同表同字段互相覆盖
-                                                    if (CommentStorage::getComment(m_classid, termForCache, student.id, fieldName, excelFileName).isEmpty()) {
-                                                        CommentStorage::saveComment(m_classid, termForCache, student.id, fieldName, excelFileName, comment);
-                                                    }
+                                                    // 同步到全局注释缓存：不再保存复合键 key（字段_Excel文件名）
+                                                    // 只保存“纯字段名 + 表格名(excelFileName)”这一份，避免不同表同字段互相覆盖
+                                                    CommentStorage::saveComment(m_classid, termForCache, student.id, fieldName, excelFileName, comment);
                                                 } else {
                                                     // 普通字段注释
                                                     student.comments[key] = comment;
@@ -1766,11 +1763,30 @@ public:
                             if (shouldApplyStudentPrefixedSideEffects) {
                                 const QString term = termForCache;
                                 for (const StudentInfo& student : m_students) {
-                                    for (auto it = student.comments.begin(); it != student.comments.end(); ++it) {
-                                        const QString fieldName = it.key();
+                                    // 优先使用 commentsFull（复合键：字段_Excel文件名），否则回退 comments（向后兼容）
+                                    const QMap<QString, QString>& src = !student.commentsFull.isEmpty()
+                                        ? student.commentsFull
+                                        : student.comments;
+                                    for (auto it = src.begin(); it != src.end(); ++it) {
+                                        const QString fieldKey = it.key();
                                         const QString comment = it.value();
-                                        if (fieldName.isEmpty()) continue;
-                                        CommentStorage::saveComment(m_classid, term, student.id, studentFieldPrefix + fieldName, QString(), comment);
+                                        if (fieldKey.isEmpty()) continue;
+
+                                        // commentsFull 的 key 形如：字段_Excel文件名.xlsx
+                                        // 写入 CommentStorage 时使用 buildKey(..., tableName, fieldName)：
+                                        // - fieldName 用“字段”（如：早读）
+                                        // - tableName 用“Excel文件名.xlsx”（如：学生体质统计表.xlsx）
+                                        QString fieldName = fieldKey;
+                                        QString tableName = CommentStorage::inferTableNameFromFieldKey(fieldKey);
+                                        if (!tableName.isEmpty()) {
+                                            const int underscorePos = fieldKey.lastIndexOf('_');
+                                            if (underscorePos > 0) {
+                                                fieldName = fieldKey.left(underscorePos);
+                                            }
+                                        }
+
+                                        CommentStorage::saveComment(m_classid, term, student.id,
+                                                                   fieldName, tableName, comment);
                                     }
                                 }
                             }

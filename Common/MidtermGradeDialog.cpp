@@ -241,6 +241,10 @@ void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStr
 {
     if (!table) return;
 
+    // 导入属于批量更新：避免 itemChanged 触发大量 set-score/总分计算
+    m_isBulkUpdating = true;
+    const QSignalBlocker blocker(table);
+
     // 保存Excel文件路径和文件名
     m_excelFilePath = excelFilePath;
     if (!excelFilePath.isEmpty()) {
@@ -251,7 +255,10 @@ void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStr
             m_lblTitle->setText(fileInfo.baseName());
         }
     } else {
-        m_excelFileName.clear();
+        // 服务器缓存刷新模式下可能不会有本地文件路径，但我们仍需要 m_excelFileName 用于 set-score。
+        if (m_excelFileName.isEmpty()) {
+            m_excelFileName.clear();
+        }
     }
 
     // 根据导入的Excel列头动态设置表格列头
@@ -344,6 +351,13 @@ void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStr
                 item->setData(Qt::UserRole, QVariant());
                 continue;
             }
+
+            // 总分列：不可编辑（由程序/服务端计算）
+            if (headerText == "总分") {
+                item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
+                item->setData(Qt::UserRole, QVariant());
+                continue;
+            }
             
             // 如果是属性列（非学号、姓名、总分），尝试从全局存储中获取注释
             if (headerText != "总分") {
@@ -384,6 +398,7 @@ void MidtermGradeDialog::importData(const QStringList& headers, const QList<QStr
     table->repaint();
     
     qDebug() << "导入完成，共" << table->rowCount() << "行数据";
+    m_isBulkUpdating = false;
 }
 
 void MidtermGradeDialog::onAddRow()
@@ -419,6 +434,10 @@ void MidtermGradeDialog::onAddRow()
         // 学号、姓名列去掉注释（保持可编辑），其他列默认值为"0"
         if (headerText == "学号" || headerText == "姓名") {
             item->setData(Qt::UserRole, QVariant());
+        } else if (headerText == "总分") {
+            // 总分列由程序/服务端计算，不可编辑
+            item->setData(Qt::UserRole, QVariant());
+            item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
         } else {
             // 除了学号和姓名，其他字段默认值都为0
             item->setText("0");
@@ -1105,6 +1124,11 @@ void MidtermGradeDialog::onCellClicked(int row, int column)
     // 获取列头名称，检查是否是学号或姓名列
     QTableWidgetItem* headerItem = table->horizontalHeaderItem(column);
     QString headerText = headerItem ? headerItem->text() : "";
+
+    // 总分列不允许手动编辑
+    if (headerText == "总分") {
+        return;
+    }
     
     // 如果是学号或姓名列，直接进入编辑状态
     if (headerText == "学号" || headerText == "姓名") {
@@ -1171,6 +1195,7 @@ void MidtermGradeDialog::onCellEntered(int row, int column)
 void MidtermGradeDialog::onItemChanged(QTableWidgetItem* item)
 {
     if (!item) return;
+    if (m_isBulkUpdating) return;
     
     int row = item->row();
     int column = item->column();
@@ -1179,10 +1204,133 @@ void MidtermGradeDialog::onItemChanged(QTableWidgetItem* item)
     QTableWidgetItem* headerItem = table->horizontalHeaderItem(column);
     QString headerText = headerItem ? headerItem->text() : "";
     
-    // 如果修改的不是"总分"列，则更新该行的总分
-    if (headerText != "总分" && headerText != "学号" && headerText != "姓名") {
+    // 如果修改的是成绩字段，先本地更新总分，再写回服务端（/student-scores/set-score）
+    if (headerText != "总分" && headerText != "学号" && headerText != "姓名" && !headerText.isEmpty()) {
         updateRowTotal(row);
+
+        // 获取学生信息（学号/姓名）
+        int colId = -1, colName = -1, colTotal = -1;
+        for (int c = 0; c < table->columnCount(); ++c) {
+            QTableWidgetItem* h = table->horizontalHeaderItem(c);
+            if (!h) continue;
+            const QString t = h->text();
+            if (t == "学号") colId = c;
+            else if (t == "姓名") colName = c;
+            else if (t == "总分") colTotal = c;
+        }
+        QString studentId;
+        QString studentName;
+        if (colId >= 0) {
+            QTableWidgetItem* idItem = table->item(row, colId);
+            if (idItem) studentId = idItem->text().trimmed();
+        }
+        if (colName >= 0) {
+            QTableWidgetItem* nameItem = table->item(row, colName);
+            if (nameItem) studentName = nameItem->text().trimmed();
+        }
+        if (!studentId.isEmpty() || !studentName.isEmpty()) {
+            setScoreToServer(row, studentName, studentId, headerText, item->text());
+        }
     }
+}
+
+void MidtermGradeDialog::setScoreToServer(int row, const QString& studentName, const QString& studentId,
+                                         const QString& fieldName, const QString& cellText)
+{
+    if (!networkManager) return;
+    if (fieldName.trimmed().isEmpty()) return;
+    if (studentId.trimmed().isEmpty() && studentName.trimmed().isEmpty()) return;
+
+    // score：空字符串/空白 -> 删除（null）
+    const QString trimmed = cellText.trimmed();
+    QJsonValue scoreVal(QJsonValue::Null);
+    if (!trimmed.isEmpty()) {
+        bool ok = false;
+        const double v = trimmed.toDouble(&ok);
+        if (!ok) {
+            QMessageBox::warning(this, "提示", QString("字段“%1”只支持数字；清空表示删除。").arg(fieldName));
+            return;
+        }
+        scoreVal = v;
+    }
+
+    QJsonObject requestObj;
+    // 写法A：不传 score_header_id，改用 class_id + term 自动定位表头
+    requestObj["class_id"] = m_classid;
+    const QString term = calcCurrentTerm();
+    if (!term.isEmpty()) requestObj["term"] = term;
+    requestObj["student_name"] = studentName.trimmed();
+    if (!studentId.trimmed().isEmpty()) requestObj["student_id"] = studentId.trimmed();
+    requestObj["field_name"] = fieldName;
+    if (!m_excelFileName.trimmed().isEmpty()) requestObj["excel_filename"] = m_excelFileName.trimmed();
+    requestObj["score"] = scoreVal;
+
+    QJsonDocument doc(requestObj);
+    const QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+
+    const QString url = "http://47.100.126.194:5000/student-scores/set-score";
+    QNetworkRequest req;
+    req.setUrl(QUrl(url));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    QNetworkReply* reply = networkManager->post(req, jsonData);
+
+    connect(reply, &QNetworkReply::finished, this, [=]() {
+        if (reply->error() != QNetworkReply::NoError) {
+            reply->deleteLater();
+            return;
+        }
+        const QJsonDocument resp = QJsonDocument::fromJson(reply->readAll());
+        reply->deleteLater();
+        if (!resp.isObject()) return;
+        const QJsonObject root = resp.object();
+        if (root.value("code").toInt(-1) != 200) return;
+        const QJsonObject dataObj = root.value("data").toObject();
+
+        // 回写当前单元格 score（delete -> 清空）与该行 total_score
+        int totalCol = -1;
+        int fieldCol = -1;
+        for (int c = 0; c < table->columnCount(); ++c) {
+            QTableWidgetItem* h = table->horizontalHeaderItem(c);
+            if (!h) continue;
+            const QString t = h->text();
+            if (t == "总分") totalCol = c;
+            if (t == fieldName) fieldCol = c;
+        }
+
+        const QSignalBlocker blocker(table);
+        if (fieldCol >= 0) {
+            QTableWidgetItem* cellItem = table->item(row, fieldCol);
+            if (!cellItem) {
+                cellItem = new QTableWidgetItem("");
+                cellItem->setTextAlignment(Qt::AlignCenter);
+                table->setItem(row, fieldCol, cellItem);
+            }
+            const QJsonValue scoreV = dataObj.value(QStringLiteral("score"));
+            if (scoreV.isNull()) cellItem->setText(QString());
+            else if (scoreV.isDouble()) cellItem->setText(QString::number(scoreV.toDouble()));
+            else if (scoreV.isString()) cellItem->setText(scoreV.toString());
+        }
+
+        if (totalCol >= 0) {
+            QTableWidgetItem* totalItem = table->item(row, totalCol);
+            if (!totalItem) {
+                totalItem = new QTableWidgetItem("");
+                totalItem->setTextAlignment(Qt::AlignCenter);
+                totalItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
+                table->setItem(row, totalCol, totalItem);
+            }
+            // “总分”列：优先使用当前 Excel 表维度总分（excel_total / excel_total_score），否则回退整体 total_score
+            double totalScore = 0.0;
+            if (dataObj.contains(QStringLiteral("excel_total")) && !dataObj.value(QStringLiteral("excel_total")).isNull()) {
+                totalScore = dataObj.value(QStringLiteral("excel_total")).toDouble(0.0);
+            } else if (dataObj.contains(QStringLiteral("excel_total_score")) && !dataObj.value(QStringLiteral("excel_total_score")).isNull()) {
+                totalScore = dataObj.value(QStringLiteral("excel_total_score")).toDouble(0.0);
+            } else {
+                totalScore = dataObj.value(QStringLiteral("total_score")).toDouble(0.0);
+            }
+            totalItem->setText(QString::number(totalScore));
+        }
+    });
 }
 
 void MidtermGradeDialog::updateRowTotal(int row)
@@ -1681,90 +1829,22 @@ void MidtermGradeDialog::showEvent(QShowEvent *event)
 void MidtermGradeDialog::setCommentToServer(const QString& studentName, const QString& studentId, 
                                             const QString& fieldName, const QString& comment)
 {
-    // 若 score_header_id 还没赋值（未上传过），尝试从全局缓存/服务器补齐
-    if (m_scoreHeaderId <= 0) {
-        const QString term = calcCurrentTerm();
-        const QString examName = resolveExamName(windowTitle().isEmpty() ? m_excelFileName : windowTitle());
-        if (examName.isEmpty()) {
-            qDebug() << "MidtermGradeDialog: examName 为空，无法获取/设置注释";
-            return;
-        }
-
-        // 1) 先从全局缓存取
-        int cached = ScoreHeaderIdStorage::getScoreHeaderId(m_classid, examName, term);
-        if (cached > 0) {
-            m_scoreHeaderId = cached;
-            qDebug() << "MidtermGradeDialog: 从 ScoreHeaderIdStorage 取到 score_header_id=" << m_scoreHeaderId;
-        }
-
-        // 2) 还没有就拉一次 /student-scores 获取 headers[0].id
-        if (m_scoreHeaderId <= 0) {
-            if (m_fetchingScoreHeaderId) {
-                qDebug() << "MidtermGradeDialog: 正在拉取 score_header_id，稍后再试";
-                return;
-            }
-            m_fetchingScoreHeaderId = true;
-
-            QUrl url("http://47.100.126.194:5000/student-scores");
-            QUrlQuery q;
-            q.addQueryItem("class_id", m_classid);
-            q.addQueryItem("exam_name", examName);
-            q.addQueryItem("term", term);
-            url.setQuery(q);
-
-            QNetworkRequest req(url);
-            QNetworkReply* r = networkManager->get(req);
-            connect(r, &QNetworkReply::finished, this, [=]() {
-                m_fetchingScoreHeaderId = false;
-                if (r->error() == QNetworkReply::NoError) {
-                    QByteArray bytes = r->readAll();
-                    QJsonDocument doc = QJsonDocument::fromJson(bytes);
-                    if (doc.isObject()) {
-                        QJsonObject root = doc.object();
-                        QJsonObject dataObj = root.value("data").toObject();
-                        int sid = -1;
-                        if (dataObj.contains("headers") && dataObj.value("headers").isArray()) {
-                            QJsonArray headers = dataObj.value("headers").toArray();
-                            if (!headers.isEmpty() && headers.first().isObject()) {
-                                QJsonObject headerObj = headers.first().toObject();
-                                sid = headerObj.value("score_header_id").toInt(-1);
-                                if (sid <= 0) sid = headerObj.value("id").toInt(-1);
-                            }
-                        }
-                        if (sid > 0) {
-                            m_scoreHeaderId = sid;
-                            ScoreHeaderIdStorage::saveScoreHeaderId(m_classid, examName, term, m_scoreHeaderId);
-                            qDebug() << "MidtermGradeDialog: 拉取到 score_header_id=" << m_scoreHeaderId;
-                            // 继续执行本次注释提交
-                            setCommentToServer(studentName, studentId, fieldName, comment);
-                        } else {
-                            qDebug() << "MidtermGradeDialog: 响应中未找到 score_header_id";
-                        }
-                    }
-                } else {
-                    qDebug() << "MidtermGradeDialog: 拉取 score_header_id 失败:" << r->errorString();
-                }
-                r->deleteLater();
-            });
-            return;
-        }
-    }
-
-    // 检查 score_header_id 是否有效
-    if (m_scoreHeaderId <= 0) {
-        qDebug() << "score_header_id 无效，无法设置注释到服务器";
-        // 不显示错误提示，因为可能是本地编辑，还没有上传到服务器
-        return;
-    }
+    if (!networkManager) return;
+    if (fieldName.trimmed().isEmpty()) return;
+    if (studentId.trimmed().isEmpty() && studentName.trimmed().isEmpty()) return;
     
     // 构造请求 JSON
     QJsonObject requestObj;
-    requestObj["score_header_id"] = m_scoreHeaderId;
-    requestObj["student_name"] = studentName;
-    if (!studentId.isEmpty()) {
-        requestObj["student_id"] = studentId;
+    // 不传 score_header_id，改用 class_id + term + excel_filename 自动定位
+    if (!m_classid.trimmed().isEmpty()) requestObj["class_id"] = m_classid.trimmed();
+    const QString term = calcCurrentTerm();
+    if (!term.trimmed().isEmpty()) requestObj["term"] = term.trimmed();
+    requestObj["student_name"] = studentName.trimmed();
+    if (!studentId.trimmed().isEmpty()) {
+        requestObj["student_id"] = studentId.trimmed();
     }
     requestObj["field_name"] = fieldName;
+    if (!m_excelFileName.trimmed().isEmpty()) requestObj["excel_filename"] = m_excelFileName.trimmed();
     requestObj["comment"] = comment;
     
     QJsonDocument doc(requestObj);

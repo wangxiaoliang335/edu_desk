@@ -102,6 +102,8 @@ private:
     void showCellComment(int row, int column);
     void setCommentToServer(const QString& studentName, const QString& studentId, 
                            const QString& fieldName, const QString& comment);
+    void setScoreToServer(int row, const QString& studentName, const QString& studentId,
+                          const QString& fieldName, const QString& cellText);
     void updateRowTotal(int row); // 更新指定行的总分
 
 private:
@@ -130,4 +132,5 @@ private:
     CellCommentWidget* commentWidget = nullptr; // 注释窗口
     int m_scoreHeaderId = -1; // 成绩表头ID，用于设置注释
     bool m_fetchingScoreHeaderId = false; // 避免重复拉取 score_header_id
+    bool m_isBulkUpdating = false; // 批量更新（导入/程序回写）标记，避免触发 set-score 网络请求
 };
