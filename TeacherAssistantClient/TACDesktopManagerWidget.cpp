@@ -7,6 +7,7 @@
 #include "TACalendarDialog.h"
 #include "TACTeacherCourseScheduleWindow.h"
 #include "SchoolCourseScheduleDialog.h"
+#include "CommonInfo.h"
 TACDesktopManagerWidget::TACDesktopManagerWidget(QWidget *parent)
 	: TAFloatingWidget(parent)
 {
@@ -64,16 +65,13 @@ TACDesktopManagerWidget::TACDesktopManagerWidget(QWidget *parent)
 	QPushButton* tabelButton = new QPushButton("表格对话框", this);
 	layout->addWidget(tabelButton);
 	connect(tabelButton, &QPushButton::clicked, this, [this]() {
-		if (!m_schoolCourseScheduleDialog) {
-			m_schoolCourseScheduleDialog = new SchoolCourseScheduleDialog(nullptr);
-			m_schoolCourseScheduleDialog->setObjectName(QStringLiteral("SchoolCourseScheduleDialog"));
+		if (m_schoolCourseScheduleDialog) {
+			const QPoint anchor = this->mapToGlobal(QPoint(this->width() + 10, 0));
+			m_schoolCourseScheduleDialog->move(anchor);
+			m_schoolCourseScheduleDialog->show();
+			m_schoolCourseScheduleDialog->raise();
+			m_schoolCourseScheduleDialog->activateWindow();
 		}
-		const QPoint anchor = this->mapToGlobal(QPoint(this->width() + 10, 0));
-		m_schoolCourseScheduleDialog->move(anchor);
-		m_schoolCourseScheduleDialog->show();
-		m_schoolCourseScheduleDialog->raise();
-		m_schoolCourseScheduleDialog->activateWindow();
-		m_schoolCourseScheduleDialog->refresh();
 	});
 
 	QPushButton* textButton = new QPushButton("文本对话框", this);
@@ -105,6 +103,10 @@ TACDesktopManagerWidget::TACDesktopManagerWidget(QWidget *parent)
 	setLayout(layout);
 	resize(230, 780);
 
+	// 创建学校课程表对话框（延迟初始化数据）
+	m_schoolCourseScheduleDialog = new SchoolCourseScheduleDialog(nullptr);
+	m_schoolCourseScheduleDialog->setObjectName(QStringLiteral("SchoolCourseScheduleDialog"));
+
 }
 
 TACDesktopManagerWidget::~TACDesktopManagerWidget()
@@ -122,4 +124,31 @@ void TACDesktopManagerWidget::resizeEvent(QResizeEvent* event)
 }
 void TACDesktopManagerWidget::initShow()
 {
+	initSchoolCourseSchedule();
+}
+
+void TACDesktopManagerWidget::initSchoolCourseSchedule()
+{
+	initSchoolCourseScheduleData();
+}
+
+void TACDesktopManagerWidget::initSchoolCourseScheduleData()
+{
+	// 检查是否已经初始化过
+	if (m_schoolCourseScheduleInitialized) {
+		return;
+	}
+
+	// 检查 schoolId 是否准备好
+	const QString schoolId = CommonInfo::GetData().schoolId;
+	if (schoolId.trimmed().isEmpty()) {
+		// schoolId 还未准备好，稍后再试
+		return;
+	}
+
+	// schoolId 已准备好，初始化课程表数据
+	if (m_schoolCourseScheduleDialog) {
+		m_schoolCourseScheduleDialog->refresh(); // 调用接口获取学校所有班级的课程表
+		m_schoolCourseScheduleInitialized = true;
+	}
 }

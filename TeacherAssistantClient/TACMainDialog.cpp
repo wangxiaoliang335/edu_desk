@@ -122,6 +122,11 @@ void TACMainDialog::Init(QString qPhone, int user_id)
                                 // 更新 CommonInfo 中的用户信息
                                 CommonInfo::InitData(m_userInfo);
                                 
+                                // 初始化学校课程表数据（schoolId 已准备好）
+                                if (desktopManagerWidget) {
+                                    desktopManagerWidget->initSchoolCourseScheduleData();
+                                }
+                                
                                 // 更新托盘组件中的管理员按钮状态（如果已创建）
                                 if (trayWidget) {
                                     trayWidget->updateAdminButtonState();
