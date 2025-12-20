@@ -95,6 +95,71 @@ class HeatmapViewDialog;
 #include <algorithm>
 #include <exception>
 #include <functional>
+#include <QScreen>
+#include <QGraphicsDropShadowEffect>
+
+// 自定义提示窗口类 - 显示在屏幕右下角
+class ToastNotification : public QDialog
+{
+public:
+    explicit ToastNotification(const QString& message, QWidget* parent = nullptr)
+        : QDialog(parent)
+    {
+        setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog | Qt::WindowStaysOnTopHint);
+        setAttribute(Qt::WA_TranslucentBackground);
+        setAttribute(Qt::WA_DeleteOnClose);
+        
+        // 设置样式
+        setStyleSheet(
+            "QDialog { background-color: transparent; }"
+            "QLabel { "
+            "background-color: #5C5C5C; "
+            "color: white; "
+            "padding: 15px 20px; "
+            "border-radius: 8px; "
+            "font-size: 14px; "
+            "font-weight: bold; "
+            "}"
+        );
+        
+        QVBoxLayout* layout = new QVBoxLayout(this);
+        layout->setContentsMargins(0, 0, 0, 0);
+        
+        QLabel* label = new QLabel(message, this);
+        label->setAlignment(Qt::AlignCenter);
+        label->setWordWrap(true);
+        layout->addWidget(label);
+        
+        // 设置固定大小
+        adjustSize();
+        setFixedSize(sizeHint().width() + 40, sizeHint().height() + 20);
+        
+        // 移动到屏幕右下角
+        moveToBottomRight();
+        
+        // 添加阴影效果
+        QGraphicsDropShadowEffect* shadow = new QGraphicsDropShadowEffect(this);
+        shadow->setBlurRadius(15);
+        shadow->setColor(QColor(0, 0, 0, 100));
+        shadow->setOffset(0, 3);
+        label->setGraphicsEffect(shadow);
+        
+        // 3秒后自动关闭
+        QTimer::singleShot(3000, this, &QDialog::close);
+    }
+    
+private:
+    void moveToBottomRight()
+    {
+        QScreen* screen = QApplication::primaryScreen();
+        if (screen) {
+            QRect screenGeometry = screen->availableGeometry();
+            int x = screenGeometry.right() - width() - 20;
+            int y = screenGeometry.bottom() - height() - 20;
+            move(x, y);
+        }
+    }
+};
 
 //// 学生信息结构（用于排座）
 //#ifndef STUDENT_INFO_DEFINED
@@ -2590,12 +2655,7 @@ public:
 				btn->setProperty("row", row);
 				btn->setProperty("col", col);
 				
-				// 连接按钮点击事件
-				connect(btn, &QPushButton::clicked, this, [=]() {
-					qDebug() << "座位按钮被点击: 行" << row << "列" << col;
-				});
-				
-				// 安装事件过滤器以处理双击事件
+				// 安装事件过滤器以处理双击事件和拖拽事件
 				btn->installEventFilter(this);
 				btn->setProperty("seatRow", row);
 				btn->setProperty("seatCol", col);
@@ -3042,6 +3102,10 @@ public:
 	// 设置座位按钮的文本和图标：有文本时不显示图标，无文本时显示图标
 	void setSeatButtonTextAndIcon(QPushButton* btn, const QString& text);
 	void fetchSeatArrangementFromServer(); // 从服务器获取座位表
+	void swapSeats(QPushButton* seat1, QPushButton* seat2); // 交换两个座位的内容
+	void resetDragState(); // 重置拖拽状态
+	void highlightSeat(QPushButton* btn, bool highlight); // 高亮或取消高亮座位
+	QPushButton* findSeatAtPosition(const QPoint& globalPos); // 根据全局坐标查找座位按钮
 	void fetchStudentScoresFromServer(); // 从服务器获取成绩表数据
 	void fetchCourseScheduleForDailyView();
 	void downloadExcelFile(const QString& url, const QString& saveDir, const QString& filename, std::function<void()> onCompleted = nullptr); // 下载Excel文件
@@ -3259,16 +3323,71 @@ private slots:
 protected:
 	bool eventFilter(QObject* obj, QEvent* event) override
 	{
+		QPushButton* btn = qobject_cast<QPushButton*>(obj);
+		if (!btn || !btn->property("isSeat").toBool()) {
+			return QDialog::eventFilter(obj, event);
+		}
+		
 		// 处理座位按钮的双击事件
 		if (event->type() == QEvent::MouseButtonDblClick) {
-			QPushButton* btn = qobject_cast<QPushButton*>(obj);
-			if (btn && btn->property("isSeat").toBool()) {
-				int row = btn->property("seatRow").toInt();
-				int col = btn->property("seatCol").toInt();
-				showStudentAttributeDialog(row, col);
+			int row = btn->property("seatRow").toInt();
+			int col = btn->property("seatCol").toInt();
+			showStudentAttributeDialog(row, col);
+			return true;
+		}
+		
+		// 处理鼠标按下事件 - 开始拖拽
+		if (event->type() == QEvent::MouseButtonPress) {
+			QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+			if (mouseEvent->button() == Qt::LeftButton) {
+				m_dragSourceSeat = btn;
+				m_isDragging = true;
+				// 高亮显示起始座位
+				highlightSeat(btn, true);
 				return true;
 			}
 		}
+		
+		// 处理鼠标移动事件 - 跟踪拖拽目标
+		if (event->type() == QEvent::MouseMove && m_isDragging && m_dragSourceSeat) {
+			QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+			// 使用全局坐标查找鼠标下的座位按钮
+			QPoint globalPos = QCursor::pos();
+			QPushButton* targetBtn = findSeatAtPosition(globalPos);
+			
+			// 如果目标座位改变，更新高亮
+			if (targetBtn != m_dragTargetSeat) {
+				// 取消之前目标的高亮
+				if (m_dragTargetSeat && m_dragTargetSeat != m_dragSourceSeat) {
+					highlightSeat(m_dragTargetSeat, false);
+				}
+				// 高亮新目标
+				m_dragTargetSeat = targetBtn;
+				if (m_dragTargetSeat && m_dragTargetSeat != m_dragSourceSeat) {
+					highlightSeat(m_dragTargetSeat, true);
+				}
+			}
+		}
+		
+		// 处理鼠标释放事件 - 完成交换
+		if (event->type() == QEvent::MouseButtonRelease) {
+			QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+			if (mouseEvent->button() == Qt::LeftButton && m_isDragging && m_dragSourceSeat) {
+				// 使用全局坐标查找释放位置的座位按钮
+				QPoint globalPos = QCursor::pos();
+				QPushButton* releaseBtn = findSeatAtPosition(globalPos);
+				
+				// 如果释放在不同的座位上，执行交换
+				if (releaseBtn && releaseBtn != m_dragSourceSeat && releaseBtn->property("isSeat").toBool()) {
+					swapSeats(m_dragSourceSeat, releaseBtn);
+				}
+				
+				// 重置拖拽状态
+				resetDragState();
+				return true;
+			}
+		}
+		
 		return QDialog::eventFilter(obj, event);
 	}
 	
@@ -3426,6 +3545,9 @@ private:
 	QTableWidget* seatTable = nullptr; // 座位表格
 	ArrangeSeatDialog* arrangeSeatDlg = nullptr; // 排座对话框
 	QList<StudentInfo> m_students; // 学生数据
+	QPushButton* m_dragSourceSeat = nullptr; // 拖拽起始座位
+	QPushButton* m_dragTargetSeat = nullptr; // 拖拽目标座位
+	bool m_isDragging = false; // 是否正在拖拽
 	// 分别缓存两套来源的数据，避免 /student-scores 与 /group-scores 相互覆盖
 	QList<StudentInfo> m_studentsStudentScores; // /student-scores
 	QList<StudentInfo> m_studentsGroupScores;   // /group-scores
@@ -5098,8 +5220,10 @@ inline void ScheduleDialog::uploadSeatTableToServer()
 					seatTable->repaint();
 					qDebug() << "座位表界面已刷新";
 				}
-				QMessageBox::information(this, QString::fromUtf8(u8"上传成功"), 
-					QString::fromUtf8(u8"座位表已成功上传到服务器并刷新界面！"));
+				// 显示自定义提示窗口（屏幕右下角）
+				ToastNotification* toast = new ToastNotification(
+					QString::fromUtf8(u8"座位表已成功上传到服务器并刷新界面！"), this);
+				toast->show();
 			} else {
 				QString errorMsg = obj.value("message").toString();
 				QMessageBox::warning(this, QString::fromUtf8(u8"上传失败"), 
@@ -5112,8 +5236,10 @@ inline void ScheduleDialog::uploadSeatTableToServer()
 				seatTable->repaint();
 				qDebug() << "座位表界面已刷新";
 			}
-			QMessageBox::information(this, QString::fromUtf8(u8"上传成功"), 
-				QString::fromUtf8(u8"座位表已成功上传到服务器并刷新界面！"));
+			// 显示自定义提示窗口（屏幕右下角）
+			ToastNotification* toast = new ToastNotification(
+				QString::fromUtf8(u8"座位表已成功上传到服务器并刷新界面！"), this);
+			toast->show();
 		}
 	});
 	
@@ -6484,4 +6610,143 @@ inline void ScheduleDialog::writeLogToFile(const QString& message)
 		file.close();
 	}
 }
+
+// 高亮或取消高亮座位
+inline void ScheduleDialog::highlightSeat(QPushButton* btn, bool highlight)
+{
+	if (!btn) return;
+	
+	if (highlight) {
+		// 高亮样式
+		btn->setStyleSheet(
+			"QPushButton { "
+			"background-color: #007bff; "  // 蓝色高亮
+			"color: white; "
+			"border: 3px solid #0056b3; "  // 加粗边框
+			"border-radius: 4px; "
+			"padding: 5px; "
+			"font-size: 12px; "
+			"text-align: center; "
+			"}"
+			"QPushButton:hover { "
+			"background-color: #0056b3; "
+			"}"
+		);
+	} else {
+		// 恢复原始样式
+		QString originalStyle = 
+			"QPushButton { "
+			"background-color: #dc3545; "
+			"color: white; "
+			"border: 1px solid #ccc; "
+			"border-radius: 4px; "
+			"padding: 5px; "
+			"font-size: 12px; "
+			"text-align: center; "
+			"}"
+			"QPushButton:hover { "
+			"background-color: #c82333; "
+			"}"
+			"QPushButton:pressed { "
+			"background-color: #bd2130; "
+			"}";
+		btn->setStyleSheet(originalStyle);
+	}
+}
+
+// 根据全局坐标查找座位按钮
+inline QPushButton* ScheduleDialog::findSeatAtPosition(const QPoint& globalPos)
+{
+	if (!seatTable) return nullptr;
+	
+	// 遍历所有座位按钮，检查鼠标是否在其范围内
+	for (int row = 0; row < seatTable->rowCount(); ++row) {
+		for (int col = 0; col < seatTable->columnCount(); ++col) {
+			QPushButton* btn = qobject_cast<QPushButton*>(seatTable->cellWidget(row, col));
+			if (btn && btn->property("isSeat").toBool()) {
+				// 将按钮的局部坐标转换为全局坐标
+				QPoint btnTopLeft = btn->mapToGlobal(QPoint(0, 0));
+				QRect btnRect(btnTopLeft, btn->size());
+				
+				// 检查全局坐标是否在按钮范围内
+				if (btnRect.contains(globalPos)) {
+					return btn;
+				}
+			}
+		}
+	}
+	
+	return nullptr;
+}
+
+// 重置拖拽状态
+inline void ScheduleDialog::resetDragState()
+{
+	// 取消所有高亮
+	if (m_dragSourceSeat) {
+		highlightSeat(m_dragSourceSeat, false);
+		m_dragSourceSeat = nullptr;
+	}
+	if (m_dragTargetSeat && m_dragTargetSeat != m_dragSourceSeat) {
+		highlightSeat(m_dragTargetSeat, false);
+		m_dragTargetSeat = nullptr;
+	}
+	m_isDragging = false;
+}
+
+// 交换两个座位的内容
+inline void ScheduleDialog::swapSeats(QPushButton* seat1, QPushButton* seat2)
+{
+	if (!seat1 || !seat2 || seat1 == seat2) {
+		return;
+	}
+	
+	// 获取第一个座位的信息
+	QString text1 = seat1->text();
+	QString studentId1 = seat1->property("studentId").toString();
+	QString studentName1 = seat1->property("studentName").toString();
+	QIcon icon1 = seat1->icon();
+	
+	// 获取第二个座位的信息
+	QString text2 = seat2->text();
+	QString studentId2 = seat2->property("studentId").toString();
+	QString studentName2 = seat2->property("studentName").toString();
+	QIcon icon2 = seat2->icon();
+	
+	// 交换文本
+	seat1->setText(text2);
+	seat2->setText(text1);
+	
+	// 交换属性
+	seat1->setProperty("studentId", studentId2);
+	seat1->setProperty("studentName", studentName2);
+	seat2->setProperty("studentId", studentId1);
+	seat2->setProperty("studentName", studentName1);
+	
+	// 交换图标
+	seat1->setIcon(icon2);
+	seat2->setIcon(icon1);
+	
+	// 更新座位信息列表（如果存在）
+	// 获取座位位置
+	int row1 = seat1->property("seatRow").toInt();
+	int col1 = seat1->property("seatCol").toInt();
+	int row2 = seat2->property("seatRow").toInt();
+	int col2 = seat2->property("seatCol").toInt();
+	
+	// 更新 m_seatInfoList
+	for (SeatInfo& seatInfo : m_seatInfoList) {
+		if (seatInfo.row == row1 && seatInfo.col == col1) {
+			seatInfo.studentName = text2.isEmpty() ? studentName2 : text2;
+			seatInfo.studentId = studentId2;
+		} else if (seatInfo.row == row2 && seatInfo.col == col2) {
+			seatInfo.studentName = text1.isEmpty() ? studentName1 : text1;
+			seatInfo.studentId = studentId1;
+		}
+	}
+	
+	// 自动上传到服务器
+	uploadSeatTableToServer();
+}
+
 
