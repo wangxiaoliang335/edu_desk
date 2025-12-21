@@ -111,6 +111,7 @@ private:
     QPushButton* closeButton = NULL;
     QLabel* pLabel = NULL;
     TAHttpHandler* m_httpHandler = NULL;
+    QNetworkAccessManager* m_networkManager = NULL;
     QVBoxLayout* fLayout = NULL;
     QVBoxLayout* gLayout = NULL;
     TaQTWebSocket* m_pWs = NULL;
@@ -149,4 +150,6 @@ private:
     void openScheduleForGroup(const QString& groupName, const QString& unique_group_id, const QString& classid, bool iGroupOwner, bool isClassGroup);
     void processPrepareClassHistoryMessage(const QJsonObject& rootObj);
     void fetchClassesByPrefix(const QString& schoolId);
+    // 下载群组头像并保存到本地
+    void downloadGroupAvatar(const QString& faceUrl, const QString& groupId);
 };

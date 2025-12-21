@@ -447,6 +447,7 @@ FriendGroupDialog::FriendGroupDialog(QWidget* parent, TaQTWebSocket* pWs)
     //fLayout->addLayout(makePairBtn("老师头像", "老师昵称", "green", "white"));
     //fLayout->addLayout(makePairBtn("老师头像", "老师昵称", "green", "white"));
     m_httpHandler = new TAHttpHandler(this);
+    m_networkManager = new QNetworkAccessManager(this);
     if (m_httpHandler)
     {
         connect(m_httpHandler, &TAHttpHandler::success, this, [=](const QString& responseString) {
@@ -479,6 +480,9 @@ FriendGroupDialog::FriendGroupDialog(QWidget* parent, TaQTWebSocket* pWs)
                             QString avatarPath = "";
                             QString faceUrl = groupObj["face_url"].toString();
                             if (!faceUrl.isEmpty()) {
+                                // 如果face_url包含阿里云地址，下载头像
+                                downloadGroupAvatar(faceUrl, groupId);
+                                
                                 // 从 face_url 中提取文件名
                                 QString fileName = faceUrl.section('/', -1);
                                 QString saveDir = QCoreApplication::applicationDirPath() + "/group_images/" + groupId;
@@ -543,6 +547,9 @@ FriendGroupDialog::FriendGroupDialog(QWidget* parent, TaQTWebSocket* pWs)
                             QString avatarPath = "";
                             QString faceUrl = groupObj["face_url"].toString();
                             if (!faceUrl.isEmpty()) {
+                                // 如果face_url包含阿里云地址，下载头像
+                                downloadGroupAvatar(faceUrl, groupId);
+                                
                                 // 从 face_url 中提取文件名
                                 QString fileName = faceUrl.section('/', -1);
                                 QString saveDir = QCoreApplication::applicationDirPath() + "/group_images/" + groupId;
@@ -1267,7 +1274,19 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
             groupObj["group_id"] = groupid;
             groupObj["group_name"] = groupName;
             groupObj["group_type"] = groupType;
-            groupObj["face_url"] = group[kTIMGroupBaseInfoFaceUrl].toString();
+            
+            // 优先使用详细信息中的FaceUrl，如果没有则使用基础信息中的FaceUrl
+            QString detailFaceUrl = group[kTIMGroupDetialInfoFaceUrl].toString();
+            QString baseFaceUrl = group[kTIMGroupBaseInfoFaceUrl].toString();
+            QString faceUrl = !detailFaceUrl.isEmpty() ? detailFaceUrl : baseFaceUrl;
+            groupObj["face_url"] = faceUrl;
+            groupObj["detail_face_url"] = detailFaceUrl;
+            
+            // 如果face_url不为空，下载头像并显示到班级群界面
+            if (!faceUrl.isEmpty()) {
+                ths->downloadGroupAvatar(faceUrl, groupid);
+            }
+            
             groupObj["info_seq"] = group[kTIMGroupBaseInfoInfoSeq].toInt();
             groupObj["latest_seq"] = group[kTIMGroupBaseInfoLastestSeq].toInt();
             groupObj["is_shutup_all"] = group[kTIMGroupBaseInfoIsShutupAll].toBool();
@@ -1276,7 +1295,6 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
             groupObj["detail_group_id"] = group[kTIMGroupDetialInfoGroupId].toString();
             groupObj["detail_group_name"] = group[kTIMGroupDetialInfoGroupName].toString();
             groupObj["detail_group_type"] = normalizeGroupType(group.value(kTIMGroupDetialInfoGroupType));
-            groupObj["detail_face_url"] = group[kTIMGroupDetialInfoFaceUrl].toString();
             groupObj["create_time"] = group[kTIMGroupDetialInfoCreateTime].toInt();
             groupObj["detail_info_seq"] = group[kTIMGroupDetialInfoInfoSeq].toInt();
             groupObj["introduction"] = group[kTIMGroupDetialInfoIntroduction].toString();
@@ -1689,5 +1707,83 @@ void FriendGroupDialog::fetchClassesByPrefix(const QString& schoolId)
         }
         reply->deleteLater();
         manager->deleteLater();
+    });
+}
+
+void FriendGroupDialog::downloadGroupAvatar(const QString& faceUrl, const QString& groupId)
+{
+    if (faceUrl.isEmpty() || groupId.isEmpty()) {
+        return;
+    }
+    
+    // 检查是否是阿里云OSS地址
+    if (!faceUrl.contains("oss-cn-beijing.aliyuncs.com") && 
+        !faceUrl.contains("aliyuncs.com")) {
+        // 不是阿里云地址，跳过
+        return;
+    }
+    
+    // 检查是否已经下载过（文件已存在）
+    QString fileName = faceUrl.section('/', -1);
+    QString saveDir = QCoreApplication::applicationDirPath() + "/group_images/" + groupId;
+    QDir().mkpath(saveDir);
+    QString localPath = saveDir + "/" + fileName;
+    
+    // 如果文件已存在，直接更新界面显示
+    if (QFile::exists(localPath)) {
+        // 如果ScheduleDialog已打开，更新其头像显示
+        if (m_scheduleDlg.contains(groupId)) {
+            ScheduleDialog* dlg = m_scheduleDlg[groupId];
+            if (dlg) {
+                dlg->updateAvatarDisplay(localPath);
+            }
+        }
+        return;
+    }
+    
+    // 下载图片
+    if (!m_networkManager) {
+        m_networkManager = new QNetworkAccessManager(this);
+    }
+    
+    QUrl url(faceUrl);
+    QNetworkRequest request(url);
+    QNetworkReply* reply = m_networkManager->get(request);
+    
+    connect(reply, &QNetworkReply::finished, this, [this, reply, groupId, localPath, faceUrl]() {
+        if (reply->error() != QNetworkReply::NoError) {
+            qWarning() << "下载群组头像失败:" << reply->errorString() << "URL:" << faceUrl;
+            reply->deleteLater();
+            return;
+        }
+        
+        // 读取图片数据
+        QByteArray imageData = reply->readAll();
+        reply->deleteLater();
+        
+        if (imageData.isEmpty()) {
+            qWarning() << "下载的群组头像数据为空，URL:" << faceUrl;
+            return;
+        }
+        
+        // 保存到本地文件
+        QFile file(localPath);
+        if (!file.open(QIODevice::WriteOnly)) {
+            qWarning() << "无法创建群组头像文件:" << localPath;
+            return;
+        }
+        
+        file.write(imageData);
+        file.close();
+        
+        qDebug() << "群组头像下载成功，保存到:" << localPath;
+        
+        // 如果ScheduleDialog已打开，更新其头像显示
+        if (m_scheduleDlg.contains(groupId)) {
+            ScheduleDialog* dlg = m_scheduleDlg[groupId];
+            if (dlg) {
+                dlg->updateAvatarDisplay(localPath);
+            }
+        }
     });
 }

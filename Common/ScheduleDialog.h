@@ -11,6 +11,7 @@
 #include <QVariant>
 #include <QFrame>
 #include <qfiledialog.h>
+#include <QInputDialog>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -98,6 +99,69 @@ class HeatmapViewDialog;
 #include <QScreen>
 #include <QGraphicsDropShadowEffect>
 
+// 自定义编辑昵称对话框类 - 无标题栏
+class EditNicknameDialog : public QDialog
+{
+	Q_OBJECT
+public:
+	explicit EditNicknameDialog(const QString& currentNickname, QWidget* parent = nullptr)
+		: QDialog(parent)
+	{
+		setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+		setModal(true);
+		setStyleSheet(
+			"QDialog { background-color: #282A2B; color: white; border: 1px solid #5C5C5C; } "
+			"QLabel { color: white; font-size: 14px; background-color: transparent; } "
+			"QLineEdit { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; padding: 5px; font-size: 14px; } "
+			"QPushButton { color: white; background-color: #5C5C5C; border: 1px solid #5C5C5C; padding: 5px 15px; font-size: 14px; } "
+			"QPushButton:hover { background-color: #6C6C6C; } "
+			"QPushButton:pressed { background-color: #4C4C4C; }"
+		);
+		
+		QVBoxLayout* mainLayout = new QVBoxLayout(this);
+		mainLayout->setContentsMargins(20, 20, 20, 20);
+		mainLayout->setSpacing(15);
+		
+		// 标题
+		QLabel* titleLabel = new QLabel("编辑群昵称", this);
+		titleLabel->setStyleSheet("font-size: 16px; font-weight: bold; margin-bottom: 10px;");
+		mainLayout->addWidget(titleLabel);
+		
+		// 输入框
+		m_lineEdit = new QLineEdit(this);
+		m_lineEdit->setText(currentNickname);
+		m_lineEdit->selectAll(); // 选中所有文本以便快速编辑
+		m_lineEdit->setMinimumWidth(300);
+		mainLayout->addWidget(m_lineEdit);
+		
+		// 按钮布局
+		QHBoxLayout* buttonLayout = new QHBoxLayout();
+		buttonLayout->addStretch();
+		
+		QPushButton* cancelBtn = new QPushButton("取消", this);
+		connect(cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
+		buttonLayout->addWidget(cancelBtn);
+		
+		QPushButton* okBtn = new QPushButton("确定", this);
+		okBtn->setStyleSheet("background-color: #4169E1;");
+		connect(okBtn, &QPushButton::clicked, this, &QDialog::accept);
+		connect(m_lineEdit, &QLineEdit::returnPressed, this, &QDialog::accept);
+		buttonLayout->addWidget(okBtn);
+		
+		mainLayout->addLayout(buttonLayout);
+		
+		// 设置默认焦点到输入框
+		m_lineEdit->setFocus();
+	}
+	
+	QString getNickname() const {
+		return m_lineEdit->text().trimmed();
+	}
+	
+private:
+	QLineEdit* m_lineEdit;
+};
+
 // 自定义提示窗口类 - 显示在屏幕右下角
 class ToastNotification : public QDialog
 {
@@ -109,16 +173,17 @@ public:
         setAttribute(Qt::WA_TranslucentBackground);
         setAttribute(Qt::WA_DeleteOnClose);
         
-        // 设置样式
+        // 设置样式（使用与ScheduleDialog相同的背景色）
         setStyleSheet(
             "QDialog { background-color: transparent; }"
             "QLabel { "
-            "background-color: #5C5C5C; "
+            "background-color: #282A2B; "
             "color: white; "
             "padding: 15px 20px; "
             "border-radius: 8px; "
             "font-size: 14px; "
             "font-weight: bold; "
+            "border: 1px solid #5C5C5C; "
             "}"
         );
         
@@ -2315,18 +2380,53 @@ public:
 
 		// 顶部：头像 + 班级信息 + 功能按钮 + 更多
 		QHBoxLayout* topLayout = new QHBoxLayout(this);
-		m_lblAvatar = new QLabel(this); // 改为普通QLabel，用于显示班级文字
+		m_lblAvatar = new ClickableLabel(this); // 使用ClickableLabel，支持点击编辑
 		m_lblAvatar->setFixedSize(50, 50);
 		m_lblAvatar->setAlignment(Qt::AlignCenter); // 文字居中
 		m_lblAvatar->setStyleSheet("background-color: #4169E1; color: white; border:1px solid #4169E1; text-align:center; font-size:14px; font-weight:bold; border-radius: 8px;");
+		m_lblAvatar->setCursor(Qt::PointingHandCursor); // 设置鼠标样式为手型
 		QFont font = m_lblAvatar->font();
 		font.setBold(true);
 		font.setWeight(QFont::Bold);
 		m_lblAvatar->setFont(font);
 
-		m_lblClass = new QLabel("", this);
-		QPushButton* btnEdit = new QPushButton("✎", this);
-		btnEdit->setFixedSize(24, 24);
+		m_lblClass = new ClickableLabel(this);
+		m_lblClass->setText(""); // 设置初始文本
+		m_lblClass->setCursor(Qt::PointingHandCursor); // 设置鼠标样式为手型
+		
+		// 在m_lblClass右上角添加编辑图标
+		QLabel* editIcon = new QLabel("✎", m_lblClass);
+		editIcon->setStyleSheet("color: #888888; font-size: 12px; background: transparent;");
+		editIcon->setAlignment(Qt::AlignCenter);
+		editIcon->setFixedSize(16, 16);
+		editIcon->setAttribute(Qt::WA_TransparentForMouseEvents, true); // 让图标不拦截鼠标事件
+		
+		// 定位编辑图标到右上角的函数
+		auto updateEditIconPos = [editIcon]() {
+			QWidget* parent = editIcon->parentWidget();
+			if (parent && parent->width() > 0) {
+				int iconSize = 16;
+				int margin = 2; // 距离边缘的间距
+				editIcon->move(parent->width() - iconSize - margin, margin);
+			}
+		};
+		
+		// 使用事件过滤器来监听m_lblClass的resize和show事件
+		class ResizeEventFilter : public QObject {
+		public:
+			std::function<void()> updateFunc;
+			ResizeEventFilter(std::function<void()> func, QObject* parent) : QObject(parent), updateFunc(func) {}
+			bool eventFilter(QObject* obj, QEvent* event) override {
+				if ((event->type() == QEvent::Resize || event->type() == QEvent::Show) && updateFunc) {
+					updateFunc();
+				}
+				return QObject::eventFilter(obj, event);
+			}
+		};
+		m_lblClass->installEventFilter(new ResizeEventFilter(updateEditIconPos, m_lblClass));
+		
+		// 初始定位（延迟执行以确保m_lblClass已初始化）
+		QTimer::singleShot(100, this, updateEditIconPos);
 
 		// 班级群功能按钮（普通群不显示）
 		QPushButton* btnSeat = new QPushButton("座次表", this);
@@ -2391,9 +2491,31 @@ public:
 			}
 		});
 
+		// 为头像添加点击事件（编辑头像）
+		connect(m_lblAvatar, &ClickableLabel::clicked, this, [=]() {
+			// 弹出文件选择对话框选择图片
+			QString fileName = QFileDialog::getOpenFileName(this, "选择头像图片", "", "图片文件 (*.png *.jpg *.jpeg *.bmp)");
+			if (!fileName.isEmpty()) {
+				uploadAvatar(fileName);
+			}
+		});
+
+		// 为昵称标签添加点击事件（编辑昵称）
+		connect(m_lblClass, &ClickableLabel::clicked, this, [=]() {
+			// 弹出自定义编辑对话框
+			QString currentNickname = m_lblClass ? m_lblClass->text() : m_groupName;
+			EditNicknameDialog* editDlg = new EditNicknameDialog(currentNickname, this);
+			if (editDlg->exec() == QDialog::Accepted) {
+				QString newNickname = editDlg->getNickname();
+				if (!newNickname.isEmpty() && newNickname != currentNickname) {
+					updateGroupNickname(newNickname);
+				}
+			}
+			editDlg->deleteLater();
+		});
+
 		topLayout->addWidget(m_lblAvatar);
 		topLayout->addWidget(m_lblClass);
-		topLayout->addWidget(btnEdit);
 		topLayout->addSpacing(10);
 		topLayout->addWidget(btnSeat);
 		topLayout->addWidget(btnCam);
@@ -3044,10 +3166,17 @@ public:
 
 	void uploadAvatar(QString filePath)
 	{
+		if (m_unique_group_id.isEmpty()) {
+			qWarning() << "群组ID为空，无法上传头像";
+			QMessageBox::warning(this, "错误", "群组ID为空，无法上传头像");
+			return;
+		}
+
 		// ===== 1. 读取头像图片 =====
 		QFile file(filePath);  // 本地头像路径
 		if (!file.open(QIODevice::ReadOnly)) {
 			qDebug() << "Failed to open image file.";
+			QMessageBox::warning(this, "错误", "无法打开图片文件");
 			return;
 		}
 		QByteArray imageData = file.readAll(); // 二进制数据
@@ -3055,15 +3184,179 @@ public:
 
 		// ===== 2. 图片转 Base64 =====
 		QString imageBase64 = QString::fromLatin1(imageData.toBase64());
+		// 添加 data:image 前缀（如果需要）
+		if (!imageBase64.startsWith("data:image")) {
+			// 根据文件扩展名判断图片类型
+			QString suffix = QFileInfo(filePath).suffix().toLower();
+			QString mimeType = "image/png";
+			if (suffix == "jpg" || suffix == "jpeg") {
+				mimeType = "image/jpeg";
+			} else if (suffix == "gif") {
+				mimeType = "image/gif";
+			} else if (suffix == "bmp") {
+				mimeType = "image/bmp";
+			}
+			imageBase64 = QString("data:%1;base64,%2").arg(mimeType).arg(imageBase64);
+		}
 
 		// ===== 3. 构造 JSON 数据 =====
 		QMap<QString, QString> params;
 		params["avatar"] = imageBase64;
 		params["unique_group_id"] = m_unique_group_id;
-		if (m_taHttpHandler)
+		
+		if (m_httpHandler)
 		{
-			m_taHttpHandler->post(QString("http://47.100.126.194:5000/updateGroupInfo"), params);
+			// 创建临时HTTP处理器用于接收响应
+			TAHttpHandler* avatarHandler = new TAHttpHandler(this);
+			connect(avatarHandler, &TAHttpHandler::success, this, [=](const QString& responseString) {
+				qDebug() << "上传头像响应:" << responseString;
+				QJsonDocument jsonDoc = QJsonDocument::fromJson(responseString.toUtf8());
+				if (jsonDoc.isObject()) {
+					QJsonObject obj = jsonDoc.object();
+					if (obj.contains("data") && obj["data"].isObject()) {
+						QJsonObject dataObj = obj["data"].toObject();
+						int code = dataObj["code"].toInt();
+						QString message = dataObj["message"].toString();
+						
+						if (code == 200) {
+							QString faceUrl = dataObj["face_url"].toString();
+							if (!faceUrl.isEmpty()) {
+								// 更新头像显示
+								updateAvatarDisplay(faceUrl);
+								QMessageBox::information(this, "成功", "头像更新成功");
+							} else {
+								QMessageBox::information(this, "成功", message);
+							}
+						} else {
+							QMessageBox::warning(this, "错误", QString("上传头像失败: %1").arg(message));
+						}
+					}
+				}
+				avatarHandler->deleteLater();
+			});
+			connect(avatarHandler, &TAHttpHandler::failed, this, [=](const QString& errorString) {
+				qWarning() << "上传头像失败:" << errorString;
+				QMessageBox::warning(this, "错误", QString("上传头像失败: %1").arg(errorString));
+				avatarHandler->deleteLater();
+			});
+			
+			avatarHandler->post(QString("http://47.100.126.194:5000/groups/update-avatar"), params);
 		}
+	}
+
+	void updateGroupNickname(const QString& nickname)
+	{
+		if (m_unique_group_id.isEmpty()) {
+			qWarning() << "群组ID为空，无法更新昵称";
+			QMessageBox::warning(this, "错误", "群组ID为空，无法更新昵称");
+			return;
+		}
+
+		// 构造 JSON 数据
+		QMap<QString, QString> params;
+		params["unique_group_id"] = m_unique_group_id;
+		params["nickname"] = nickname.trimmed(); // 去除首尾空格
+		
+		if (m_httpHandler)
+		{
+			// 创建临时HTTP处理器用于接收响应
+			TAHttpHandler* nicknameHandler = new TAHttpHandler(this);
+			connect(nicknameHandler, &TAHttpHandler::success, this, [=](const QString& responseString) {
+				qDebug() << "更新昵称响应:" << responseString;
+				QJsonDocument jsonDoc = QJsonDocument::fromJson(responseString.toUtf8());
+				if (jsonDoc.isObject()) {
+					QJsonObject obj = jsonDoc.object();
+					if (obj.contains("data") && obj["data"].isObject()) {
+						QJsonObject dataObj = obj["data"].toObject();
+						int code = dataObj["code"].toInt();
+						QString message = dataObj["message"].toString();
+						
+						if (code == 200) {
+							// 更新界面显示
+							if (m_lblClass) {
+								m_lblClass->setText(nickname.trimmed());
+								m_groupName = nickname.trimmed();
+							}
+							// 显示Toast提示（屏幕右下角）
+							ToastNotification* toast = new ToastNotification("昵称更新成功", this);
+							toast->show();
+						} else {
+							QMessageBox::warning(this, "错误", QString("更新昵称失败: %1").arg(message));
+						}
+					}
+				}
+				nicknameHandler->deleteLater();
+			});
+			connect(nicknameHandler, &TAHttpHandler::failed, this, [=](const QString& errorString) {
+				qWarning() << "更新昵称失败:" << errorString;
+				QMessageBox::warning(this, "错误", QString("更新昵称失败: %1").arg(errorString));
+				nicknameHandler->deleteLater();
+			});
+			
+			nicknameHandler->post(QString("http://47.100.126.194:5000/groups/update-nickname"), params);
+		}
+	}
+
+	void updateAvatarDisplay(const QString& avatarUrl)
+	{
+		if (!m_lblAvatar) return;
+		
+		// 如果有头像URL，尝试加载并显示图片
+		if (!avatarUrl.isEmpty()) {
+			QPixmap pixmap;
+			bool loaded = false;
+			
+			// 1. 尝试作为本地文件路径加载
+			if (QFile::exists(avatarUrl)) {
+				loaded = pixmap.load(avatarUrl);
+			}
+			// 2. 尝试作为HTTP/HTTPS URL下载
+			else if (avatarUrl.startsWith("http://") || avatarUrl.startsWith("https://")) {
+				if (m_networkManager) {
+					QUrl url(avatarUrl);
+					QNetworkRequest request(url);
+					QNetworkReply* reply = m_networkManager->get(request);
+					// 注意：这里使用同步方式可能阻塞，实际应该使用异步
+					// 为了简化，先使用异步下载，但暂时不等待结果
+					// 后续可以通过信号槽更新
+					connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+						if (reply->error() == QNetworkReply::NoError) {
+							QByteArray imageData = reply->readAll();
+							QPixmap pixmap;
+							if (pixmap.loadFromData(imageData)) {
+								pixmap = pixmap.scaled(m_lblAvatar->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+								m_lblAvatar->setPixmap(pixmap);
+								m_lblAvatar->setText(""); // 清空文字
+							}
+						}
+						reply->deleteLater();
+					});
+					return; // 异步下载，先返回
+				}
+			}
+			// 3. 尝试作为base64数据加载
+			else {
+				// 检查是否是base64数据（可能包含data:image前缀）
+				QString base64Data = avatarUrl;
+				if (base64Data.contains("base64,")) {
+					base64Data = base64Data.section("base64,", 1);
+				}
+				QByteArray imageData = QByteArray::fromBase64(base64Data.toLatin1());
+				if (!imageData.isEmpty()) {
+					loaded = pixmap.loadFromData(imageData);
+				}
+			}
+			
+			// 如果加载成功，显示图片
+			if (loaded && !pixmap.isNull()) {
+				// 缩放图片以适应标签大小，保持宽高比
+				pixmap = pixmap.scaled(m_lblAvatar->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+				m_lblAvatar->setPixmap(pixmap);
+				m_lblAvatar->setText(""); // 清空文字
+			}
+			// 如果加载失败，保持原有的文字显示方式
+		}
+		// 如果URL为空，保持原有的文字显示方式
 	}
 
 	void InitWebSocket()
@@ -3177,6 +3470,23 @@ public:
 			}
 			m_lblAvatar->setText(classText);
 		}
+		
+		// 检查是否已经有下载的头像文件，如果有则显示
+		// 头像文件保存在 group_images/{groupId}/ 目录下
+		QString avatarDir = QCoreApplication::applicationDirPath() + "/group_images/" + unique_group_id;
+		QDir dir(avatarDir);
+		if (dir.exists()) {
+			// 查找目录下的图片文件（png, jpg, jpeg等）
+			QStringList filters;
+			filters << "*.png" << "*.jpg" << "*.jpeg" << "*.bmp";
+			QFileInfoList fileList = dir.entryInfoList(filters, QDir::Files);
+			if (!fileList.isEmpty()) {
+				// 使用第一个找到的图片文件
+				QString avatarPath = fileList.first().absoluteFilePath();
+				updateAvatarDisplay(avatarPath);
+			}
+		}
+		
 		// ChatDialog 同时被班级群/普通群复用：这里是班级群场景，必须设置上下文
 		m_chatDlg->setGroupContext(m_classid, isClassGroup);
 		m_chatDlg->InitData(m_unique_group_id, iGroupOwner);
@@ -3496,8 +3806,8 @@ private:
         setMask(QRegion(path.toFillPolygon().toPolygon()));
     }
 	CustomListDialog* customListDlg = NULL;
-	QLabel* m_lblClass = NULL;
-	QLabel* m_lblAvatar = NULL; // 显示班级文字（如"五班"）
+	ClickableLabel* m_lblClass = NULL; // 显示群昵称（可点击编辑）
+	ClickableLabel* m_lblAvatar = NULL; // 显示头像（可点击编辑）
 	QString m_groupName;
 	QString m_unique_group_id;
 	TAHttpHandler* m_taHttpHandler = NULL;
