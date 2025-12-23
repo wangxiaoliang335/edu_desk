@@ -77,6 +77,7 @@
 #include "HomeworkViewDialog.h"
 #include "ScoreHeaderIdStorage.h"
 #include "CommentStorage.h"
+#include "NotificationMessageDialog.h"
 #include "QXlsx/header/xlsxdocument.h"
 #include "QXlsx/header/xlsxworksheet.h"
 #include "QXlsx/header/xlsxcell.h"
@@ -2528,6 +2529,24 @@ public:
 		
 		// 连接作业按钮（教师端编辑作业）
 		connectHomeworkButton(btnTask);
+		
+		// 连接通知按钮
+		connect(btnMsg, &QPushButton::clicked, this, [this]() {
+			// 获取班级名称
+			QString className = m_lblClass ? m_lblClass->text() : m_groupName;
+			if (className.isEmpty()) {
+				className = QString::fromUtf8(u8"未知班级");
+			}
+			
+			// 获取群组信息
+			QString groupId = m_unique_group_id;
+			QString groupName = m_groupName;
+			
+			// 创建并显示通知消息对话框
+			NotificationMessageDialog* dialog = new NotificationMessageDialog(
+				className, m_classid, groupId, groupName, this);
+			dialog->show();
+		});
 
 		// 时间 + 科目行
 		QHBoxLayout* timeLayout = new QHBoxLayout(this);

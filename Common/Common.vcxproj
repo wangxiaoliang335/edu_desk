@@ -157,6 +157,7 @@
     <QtMoc Include="ClassTeacherDialog.h" />
     <QtMoc Include="NormalGroupDialog.h" />
     <QtMoc Include="ScheduleDialog.h" />
+    <QtMoc Include="NotificationMessageDialog.h" />
     <QtMoc Include="FriendNotifyDialog.h" />
     <QtMoc Include="GroupNotifyDialog.h" />
     <QtMoc Include="CustomListDialog.h" />
@@ -224,6 +225,7 @@
     <ClCompile Include="ScheduleDialog_RandomCall.cpp" />
     <ClCompile Include="RandomCallDialog.cpp" />
     <ClCompile Include="StudentAttributeDialog.cpp" />
+    <ClCompile Include="NotificationMessageDialog.cpp" />
     <ClCompile Include="ScheduleDialog_Homework.cpp" />
     <ClCompile Include="HomeworkEditDialog.cpp" />
     <ClCompile Include="HomeworkViewDialog.cpp" />
