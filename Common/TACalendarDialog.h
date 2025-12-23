@@ -17,6 +17,19 @@
 #include <QResizeEvent>
 #include <QMap>
 #include <QStringList>
+#include <QFileDialog>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QPushButton>
+#include <QHBoxLayout>
+#include "QXlsx/header/xlsxdocument.h"
+#include "QXlsx/header/xlsxworksheet.h"
+#include "QXlsx/header/xlsxcell.h"
+#include "TAHttpHandler.h"
+#include <QTimer>
+#include <QPropertyAnimation>
+#include <QEasingCurve>
 
 class TACalendarWidget : public QWidget
 {
@@ -75,7 +88,42 @@ private:
     QPoint m_dragStartPos;
 };
 
-// 学校学期校历（周次 × 星期 + 备注），用于展示“一个学校一个学期”的校历表
+// 自定义提示窗口（无标题栏，显示在屏幕右下角）
+class TACalendarToastWidget : public QWidget
+{
+    Q_OBJECT
+    Q_PROPERTY(qreal opacity READ opacity WRITE setOpacity)
+
+public:
+    enum ToastType {
+        Success,
+        Warning,
+        Error,
+        Info
+    };
+
+    explicit TACalendarToastWidget(QWidget* parent = nullptr);
+    static void showToast(QWidget* parent, const QString& message, ToastType type = Info, int duration = 3000);
+
+    qreal opacity() const { return m_opacity; }
+    void setOpacity(qreal opacity);
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
+
+private:
+    void positionAtBottomRight();
+    void startFadeOut();
+
+private:
+    qreal m_opacity = 1.0;
+    QString m_message;
+    ToastType m_type;
+    QTimer* m_timer = nullptr;
+    QPropertyAnimation* m_fadeAnimation = nullptr;
+};
+
+// 学校学期校历（周次 × 星期 + 备注），用于展示"一个学校一个学期"的校历表
 class TASchoolCalendarWidget : public QWidget
 {
     Q_OBJECT
@@ -98,6 +146,18 @@ public:
 
     // 新：按日期设置备注（会在表格里按周汇总显示）
     void setRemarksByDate(const QMap<QDate, QStringList>& remarksByDate);
+    
+    // 导入校历数据（从JSON文件）
+    void importFromJson(const QString& jsonFilePath);
+    
+    // 导入校历数据（从Excel文件）
+    void importFromExcel(const QString& excelFilePath);
+    
+    // 上传校历到服务器
+    void uploadCalendarToServer();
+    
+    // 从服务器加载校历
+    void loadCalendarFromServer(const QString& termTitle = QString(), const QString& startDate = QString());
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -113,6 +173,8 @@ private:
     QString weekName(int idx) const;
     QString formatDateCell(const QDate& date) const;
     void applyCellStyle(QTableWidgetItem* item, const QDate& date) const;
+    void parseCalendarResponse(const QString& response);
+    void parseSingleCalendar(const QJsonObject& calendarObj);
 
 private:
     QColor m_backgroundColor;
@@ -139,4 +201,10 @@ private:
     QMap<QDate, QStringList> m_remarksByDate;
     QSet<QDate> m_holidayDates;
     QSet<QDate> m_makeupWorkDates;
+    
+    // HTTP处理器，用于上传校历
+    TAHttpHandler* m_httpHandler = nullptr;
+    
+    // HTTP处理器，用于获取校历
+    TAHttpHandler* m_httpHandlerForGet = nullptr;
 };
