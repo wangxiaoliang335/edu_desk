@@ -99,6 +99,8 @@ class HeatmapViewDialog;
 #include <functional>
 #include <QScreen>
 #include <QGraphicsDropShadowEffect>
+#include <QPropertyAnimation>
+#include <QGraphicsOpacityEffect>
 
 // 自定义编辑昵称对话框类 - 无标题栏
 class EditNicknameDialog : public QDialog
@@ -387,38 +389,66 @@ public:
 							QString sex = userDetails.value("sex").toString();
 
 							/********************************************/
-							QString avatar = userDetails.value("avatar").toString();
+							// 从 user_details 获取头像和身份证号
+							QString avatarUrl = userDetails.value("avatar").toString();  // 阿里云 OSS 地址
 							QString strIdNumber = userDetails.value("id_number").toString();
-							QString avatarBase64 = userDetails.value("avatar_base64").toString();
-
-							// 没有文件名就用手机号或ID代替
-							if (avatar.isEmpty())
-								avatar = userDetails.value("id_number").toString() + "_" + ".png";
-
-							// 从最后一个 "/" 之后开始截取
-							QString fileName = avatar.section('/', -1);  // "320506197910016493_.png"
-							QString saveDir = QCoreApplication::applicationDirPath() + "/avatars/" + strIdNumber; // 保存图片目录
+							QString teacherUniqueId = teacherInfo.value("teacher_unique_id").toString();
+							
+							// 保存 teacher_unique_id -> id_number 的映射关系（用于后续查找头像）
+							if (!teacherUniqueId.isEmpty() && !strIdNumber.isEmpty()) {
+								CommonInfo::setTeacherIdNumberMapping(teacherUniqueId, strIdNumber);
+								qDebug() << "保存映射关系: teacher_unique_id=" << teacherUniqueId << " -> id_number=" << strIdNumber;
+							}
+							
+							// 构建本地保存路径：avatars/{id_number}/{id_number}_.png
+							QString fileName = strIdNumber + "_.png";
+							QString saveDir = QCoreApplication::applicationDirPath() + "/avatars/" + strIdNumber;
 							QDir().mkpath(saveDir);
 							QString filePath = saveDir + "/" + fileName;
-
-							if (avatarBase64.isEmpty()) {
-								qWarning() << "No avatar data for" << filePath;
-								//continue;
+							
+							// 如果头像URL不为空，下载头像（异步下载）
+							if (!avatarUrl.isEmpty()) {
+								// 检查文件是否已存在
+								if (!QFile::exists(filePath)) {
+									// 下载头像
+									if (!m_networkManager) {
+										m_networkManager = new QNetworkAccessManager(this);
+									}
+									
+									QUrl url(avatarUrl);
+									QNetworkRequest request(url);
+									QNetworkReply* reply = m_networkManager->get(request);
+									
+									connect(reply, &QNetworkReply::finished, this, [reply, filePath, avatarUrl, teacherUniqueId, strIdNumber]() {
+										if (reply->error() != QNetworkReply::NoError) {
+											qWarning() << "下载好友头像失败:" << reply->errorString() << "URL:" << avatarUrl;
+											reply->deleteLater();
+											return;
+										}
+										
+										QByteArray imageData = reply->readAll();
+										reply->deleteLater();
+										
+										if (imageData.isEmpty()) {
+											qWarning() << "下载的好友头像数据为空，URL:" << avatarUrl;
+											return;
+										}
+										
+										QFile file(filePath);
+										if (!file.open(QIODevice::WriteOnly)) {
+											qWarning() << "无法创建好友头像文件:" << filePath;
+											return;
+										}
+										
+										file.write(imageData);
+										file.close();
+										
+										qDebug() << "好友头像下载成功，保存到:" << filePath;
+										qDebug() << "teacher_unique_id:" << teacherUniqueId << "-> id_number:" << strIdNumber;
+									});
+								}
 							}
-							//m_userInfo.strHeadImagePath = filePath;
-
-							// Base64 解码成图片二进制数据
-							QByteArray imageData = QByteArray::fromBase64(avatarBase64.toUtf8());
-
-							// 写入文件（覆盖旧的）
-							QFile file(filePath);
-							if (!file.open(QIODevice::WriteOnly)) {
-								qWarning() << "Cannot open file for writing:" << filePath;
-								//continue;
-							}
-							file.write(imageData);
-							file.close();
-
+							
 							/*if (fLayout)
 							{
 								fLayout->addLayout(makePairBtn(filePath, name, "green", "white", "", false));
@@ -2078,12 +2108,23 @@ public:
 									}
 								}
 								
+								// 尝试获取身份证号（用于查找头像）
+								QString id_number;
+								if (memberObj.contains("id_number")) {
+									id_number = memberObj["id_number"].toString();
+								} else if (memberObj.contains("user_details")) {
+									// 如果包含 user_details 对象，从中获取 id_number
+									QJsonObject userDetails = memberObj["user_details"].toObject();
+									id_number = userDetails.value("id_number").toString();
+								}
+								
 								GroupMemberInfo groupMemInfo;
 								groupMemInfo.member_id = member_id;
 								groupMemInfo.member_name = member_name;
 								groupMemInfo.member_role = member_role;
 								groupMemInfo.is_voice_enabled = is_voice_enabled;
 								groupMemInfo.teach_subjects = teachSubjects;
+								groupMemInfo.id_number = id_number;
 								m_groupMemberInfo.append(groupMemInfo);
 							}
 
@@ -6180,28 +6221,153 @@ inline void ScheduleDialog::openIntercomWebPage()
 	UserInfo userInfo = CommonInfo::GetData();
 	QString currentUserId = m_userId.isEmpty() ? userInfo.teacher_unique_id : m_userId;
 	QString currentUserName = m_userName.isEmpty() ? userInfo.strName : m_userName;
-	QString currentUserIcon = userInfo.strHeadImagePath.isEmpty() ? 
-		(userInfo.avatar.isEmpty() ? "" : userInfo.avatar) : userInfo.strHeadImagePath;
 	
-	// 如果没有头像路径，使用默认头像URL
+	// 获取当前用户的头像路径
+	QString currentUserIcon;
+	QString currentUserIdNumber = userInfo.strIdNumber;  // 当前用户的身份证号
+	
+	// 方法1：尝试从 userInfo 中获取已有的头像路径
+	if (!userInfo.strHeadImagePath.isEmpty()) {
+		currentUserIcon = userInfo.strHeadImagePath;
+	} else if (!userInfo.avatar.isEmpty()) {
+		currentUserIcon = userInfo.avatar;
+	}
+	
+	// 方法2：如果有身份证号，尝试从本地文件查找头像
+	if (currentUserIcon.isEmpty() && !currentUserIdNumber.isEmpty()) {
+		QString avatarDir = QCoreApplication::applicationDirPath() + "/avatars/" + currentUserIdNumber;
+		QString fileName = currentUserIdNumber + "_.png";
+		QString filePath = avatarDir + "/" + fileName;
+		
+		if (QFile::exists(filePath)) {
+			currentUserIcon = QUrl::fromLocalFile(filePath).toString();
+			qDebug() << "找到当前用户头像: id_number=" << currentUserIdNumber << ", path=" << filePath;
+		} else {
+			qDebug() << "当前用户头像文件不存在: id_number=" << currentUserIdNumber << ", path=" << filePath;
+		}
+	}
+	
+	// 方法3：如果还没有，尝试从全局映射中获取 id_number，然后查找头像
+	if (currentUserIcon.isEmpty() && !currentUserId.isEmpty()) {
+		QString idNumber = CommonInfo::getIdNumberByTeacherUniqueId(currentUserId);
+		if (!idNumber.isEmpty()) {
+			QString avatarDir = QCoreApplication::applicationDirPath() + "/avatars/" + idNumber;
+			QString fileName = idNumber + "_.png";
+			QString filePath = avatarDir + "/" + fileName;
+			
+			if (QFile::exists(filePath)) {
+				currentUserIcon = QUrl::fromLocalFile(filePath).toString();
+				qDebug() << "从全局映射找到当前用户头像: teacher_unique_id=" << currentUserId 
+				         << ", id_number=" << idNumber << ", path=" << filePath;
+			}
+		}
+	}
+	
+	// 如果头像路径是本地路径，转换为file://协议
+	if (!currentUserIcon.isEmpty() && QFile::exists(currentUserIcon)) {
+		currentUserIcon = QUrl::fromLocalFile(currentUserIcon).toString();
+	}
+	
+	// 如果还是没有头像路径，使用默认头像URL
 	if (currentUserIcon.isEmpty()) {
 		currentUserIcon = "https://via.placeholder.com/100";  // 默认头像
+		qDebug() << "当前用户没有头像，使用默认头像";
 	} else {
-		// 如果头像路径是本地路径，转换为file://协议
-		if (QFile::exists(currentUserIcon)) {
-			currentUserIcon = QUrl::fromLocalFile(currentUserIcon).toString();
-		}
+		qDebug() << "当前用户头像路径:" << currentUserIcon;
 	}
 	
 	// 准备成员数据（JSON格式）
 	QJsonArray membersArray;
+	QString avatarsBaseDir = QCoreApplication::applicationDirPath() + "/avatars";
+	QDir avatarsDir(avatarsBaseDir);
+	
 	for (const GroupMemberInfo& member : m_groupMemberInfo) {
 		QJsonObject memberObj;
-		memberObj["id"] = member.member_id;  // 唯一编号
+		memberObj["id"] = member.member_id;  // 唯一编号（teacher_unique_id）
 		memberObj["name"] = member.member_name;  // 名字
 		memberObj["role"] = member.member_role;  // 角色（可选）
 		memberObj["is_voice_enabled"] = member.is_voice_enabled;  // 是否开启语音
+		
+		// 尝试查找成员的头像文件
+		QString avatarPath;
+		
+		// 方法1：如果成员有身份证号，直接使用身份证号查找头像
+		QString idNumber = member.id_number;
+		
+		// 方法2：如果成员没有身份证号，尝试从全局映射中获取（通过 teacher_unique_id）
+		if (idNumber.isEmpty() && !member.member_id.isEmpty()) {
+			idNumber = CommonInfo::getIdNumberByTeacherUniqueId(member.member_id);
+			if (!idNumber.isEmpty()) {
+				qDebug() << "从全局映射获取 id_number: teacher_unique_id=" << member.member_id << " -> id_number=" << idNumber;
+			}
+		}
+		
+		// 如果找到了身份证号，查找头像文件
+		if (!idNumber.isEmpty()) {
+			QString avatarDir = avatarsBaseDir + "/" + idNumber;
+			QString fileName = idNumber + "_.png";
+			QString filePath = avatarDir + "/" + fileName;
+			
+			if (QFile::exists(filePath)) {
+				avatarPath = QUrl::fromLocalFile(filePath).toString();
+				qDebug() << "找到成员头像: member_id=" << member.member_id << ", id_number=" << idNumber << ", path=" << filePath;
+			} else {
+				qDebug() << "头像文件不存在: member_id=" << member.member_id << ", id_number=" << idNumber << ", path=" << filePath;
+			}
+		} else {
+			qDebug() << "无法获取成员身份证号: member_id=" << member.member_id << ", member_name=" << member.member_name;
+		}
+		
+		// 如果找到了头像路径，添加到成员数据中
+		if (!avatarPath.isEmpty()) {
+			memberObj["avatar"] = avatarPath;
+			qDebug() << "✅ 成员头像已添加: member_id=" << member.member_id << ", avatar=" << avatarPath;
+		} else {
+			qDebug() << "⚠️ 成员没有头像: member_id=" << member.member_id << ", member_name=" << member.member_name;
+		}
+		
 		membersArray.append(memberObj);
+	}
+	
+	// 确保当前用户也在成员列表中（如果不在的话）
+	bool currentUserInList = false;
+	for (const QJsonValue& value : membersArray) {
+		QJsonObject m = value.toObject();
+		if (m["id"].toString() == currentUserId) {
+			currentUserInList = true;
+			// 如果当前用户在列表中但没有头像，更新头像
+			if (m["avatar"].toString().isEmpty() && !currentUserIcon.isEmpty()) {
+				// 注意：这里不能直接修改，需要在循环外处理
+			}
+			break;
+		}
+	}
+	
+	// 如果当前用户不在成员列表中，添加到列表开头
+	if (!currentUserInList && !currentUserId.isEmpty()) {
+		QJsonObject currentUserObj;
+		currentUserObj["id"] = currentUserId;
+		currentUserObj["name"] = currentUserName;
+		currentUserObj["role"] = "当前用户";
+		currentUserObj["is_voice_enabled"] = true;
+		if (!currentUserIcon.isEmpty()) {
+			currentUserObj["avatar"] = currentUserIcon;
+		}
+		membersArray.prepend(currentUserObj);  // 添加到列表开头
+		qDebug() << "当前用户不在成员列表中，已添加到列表开头";
+	} else if (currentUserInList) {
+		// 如果当前用户在列表中，更新其头像（如果列表中的头像为空）
+		for (int i = 0; i < membersArray.size(); ++i) {
+			QJsonObject m = membersArray[i].toObject();
+			if (m["id"].toString() == currentUserId) {
+				if (m["avatar"].toString().isEmpty() && !currentUserIcon.isEmpty()) {
+					m["avatar"] = currentUserIcon;
+					membersArray[i] = m;
+					qDebug() << "更新当前用户在列表中的头像:" << currentUserIcon;
+				}
+				break;
+			}
+		}
 	}
 	
 	// 准备传递给HTML的数据，包含成员列表和当前用户信息
@@ -6242,6 +6408,22 @@ inline void ScheduleDialog::openIntercomWebPage()
 	
 	QJsonDocument doc(dataObj);
 	QString dataJson = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+	
+	// 调试：输出成员数据，检查头像路径
+	qDebug() << "========== 准备传递给HTML的成员数据 ==========";
+	qDebug() << "成员总数:" << membersArray.size();
+	for (int i = 0; i < membersArray.size(); ++i) {
+		QJsonObject m = membersArray[i].toObject();
+		QString avatar = m["avatar"].toString();
+		qDebug() << QString("成员 %1: id=%2, name=%3, 有头像=%4, avatar=%5")
+			.arg(i + 1)
+			.arg(m["id"].toString())
+			.arg(m["name"].toString())
+			.arg(avatar.isEmpty() ? "否" : "是")
+			.arg(avatar.isEmpty() ? "(无)" : avatar);
+	}
+	qDebug() << "完整JSON数据长度:" << dataJson.length();
+	qDebug() << "==========================================";
 	
 	// 对JSON字符串进行转义，以便安全地插入到JavaScript的单引号字符串中
 	QString escapedJson = dataJson;
@@ -6617,29 +6799,86 @@ inline void ScheduleDialog::showPrepareClassDialog(const QString& subject, const
 	// 创建对话框
 	QDialog* dlg = new QDialog(this);
 	dlg->setWindowTitle(QString::fromUtf8(u8"课前准备"));
+	dlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog); // 去掉标题栏
+	dlg->setAttribute(Qt::WA_TranslucentBackground); // 设置透明背景用于圆角效果
 	dlg->setFixedSize(500, 400);
-	dlg->setStyleSheet(
-		"QDialog { background-color: #2b2b2b; }"
-		"QLabel { color: white; font-size: 14px; }"
-		"QTextEdit { background-color: #3b3b3b; color: white; border: 1px solid #555; border-radius: 4px; padding: 8px; }"
-		"QPushButton { background-color: #4a4a4a; color: white; border: 1px solid #666; border-radius: 4px; padding: 8px 16px; font-size: 14px; }"
-		"QPushButton:hover { background-color: #5a5a5a; }"
-		"QPushButton:pressed { background-color: #3a3a3a; }"
+	
+	// 创建主容器
+	QWidget* container = new QWidget(dlg);
+	container->setStyleSheet(
+		"QWidget { background-color: #2b2b2b; border-radius: 8px; }"
 	);
 	
-	QVBoxLayout* mainLayout = new QVBoxLayout(dlg);
+	QVBoxLayout* containerLayout = new QVBoxLayout(dlg);
+	containerLayout->setContentsMargins(0, 0, 0, 0);
+	containerLayout->setSpacing(0);
+	containerLayout->addWidget(container);
+	
+	// 标题栏
+	QWidget* titleBar = new QWidget(container);
+	titleBar->setFixedHeight(50);
+	titleBar->setStyleSheet("background-color: #2b2b2b; border-top-left-radius: 8px; border-top-right-radius: 8px;");
+	
+	QHBoxLayout* titleLayout = new QHBoxLayout(titleBar);
+	titleLayout->setContentsMargins(15, 0, 15, 0);
+	titleLayout->setSpacing(10);
+	
+	// 关闭按钮
+	QPushButton* btnClose = new QPushButton("×", titleBar);
+	btnClose->setFixedSize(24, 24);
+	btnClose->setStyleSheet(
+		"QPushButton {"
+		"border: none;"
+		"color: #ffffff;"
+		"background: rgba(255,255,255,0.12);"
+		"border-radius: 12px;"
+		"font-weight: bold;"
+		"font-size: 16px;"
+		"}"
+		"QPushButton:hover {"
+		"background: rgba(255,0,0,0.35);"
+		"}"
+	);
+	connect(btnClose, &QPushButton::clicked, dlg, &QDialog::reject);
+	
+	// 标题文本
+	QLabel* titleLabel = new QLabel(QString::fromUtf8(u8"课前准备"), titleBar);
+	titleLabel->setStyleSheet("color: #ffffff; font-size: 14px; font-weight: bold; background: transparent; border: none;");
+	titleLabel->setAlignment(Qt::AlignCenter);
+	
+	titleLayout->addWidget(titleLabel, 1);
+	titleLayout->addWidget(btnClose);
+	
+	// 内容区域
+	QWidget* contentWidget = new QWidget(container);
+	contentWidget->setStyleSheet("background-color: #2b2b2b; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;");
+	
+	QVBoxLayout* mainLayout = new QVBoxLayout(contentWidget);
 	mainLayout->setSpacing(15);
 	mainLayout->setContentsMargins(20, 20, 20, 20);
 	
 	// 提示文字
-	QLabel* lblPrompt = new QLabel(QString::fromUtf8(u8"请输入课前准备内容"), dlg);
+	QLabel* lblPrompt = new QLabel(QString::fromUtf8(u8"请输入课前准备内容"), contentWidget);
 	lblPrompt->setStyleSheet("color: white; font-size: 14px;");
 	mainLayout->addWidget(lblPrompt);
 	
 	// 文本输入框
-	QTextEdit* textEdit = new QTextEdit(dlg);
+	QTextEdit* textEdit = new QTextEdit(contentWidget);
 	textEdit->setPlaceholderText(QString::fromUtf8(u8"请输入课前准备内容..."));
 	textEdit->setMinimumHeight(200);
+	textEdit->setStyleSheet(
+		"QTextEdit {"
+		"background-color: #1e1e1e;"
+		"border: 1px solid #404040;"
+		"border-radius: 6px;"
+		"color: #ffffff;"
+		"font-size: 13px;"
+		"padding: 10px;"
+		"}"
+		"QTextEdit:focus {"
+		"border: 1px solid #4169E1;"
+		"}"
+	);
 	const QString cacheKey = prepareClassCacheKey(subject, time);
 	if (m_prepareClassCache.contains(cacheKey)) {
 		textEdit->setPlainText(m_prepareClassCache.value(cacheKey));
@@ -6647,26 +6886,98 @@ inline void ScheduleDialog::showPrepareClassDialog(const QString& subject, const
 	mainLayout->addWidget(textEdit, 1);
 	
 	// 按钮布局
-	QHBoxLayout* btnLayout = new QHBoxLayout(dlg);
+	QHBoxLayout* btnLayout = new QHBoxLayout();
 	btnLayout->addStretch();
 	
-	QPushButton* btnCancel = new QPushButton(QString::fromUtf8(u8"取消"), dlg);
+	QPushButton* btnCancel = new QPushButton(QString::fromUtf8(u8"取消"), contentWidget);
 	btnCancel->setFixedSize(80, 35);
 	btnCancel->setStyleSheet(
-		"QPushButton { background-color: #4a4a4a; color: white; }"
-		"QPushButton:hover { background-color: #5a5a5a; }"
+		"QPushButton {"
+		"background-color: #2D2E2D;"
+		"color: #ffffff;"
+		"border: none;"
+		"border-radius: 6px;"
+		"font-size: 13px;"
+		"}"
+		"QPushButton:hover {"
+		"background-color: #3D3E3D;"
+		"}"
+		"QPushButton:pressed {"
+		"background-color: #1D1E1D;"
+		"}"
 	);
 	
-	QPushButton* btnConfirm = new QPushButton(QString::fromUtf8(u8"确定"), dlg);
+	QPushButton* btnConfirm = new QPushButton(QString::fromUtf8(u8"确定"), contentWidget);
 	btnConfirm->setFixedSize(80, 35);
 	btnConfirm->setStyleSheet(
-		"QPushButton { background-color: #0078d4; color: white; }"
-		"QPushButton:hover { background-color: #0063b1; }"
+		"QPushButton {"
+		"background-color: #4169E1;"
+		"color: #ffffff;"
+		"border: none;"
+		"border-radius: 6px;"
+		"font-size: 13px;"
+		"font-weight: bold;"
+		"}"
+		"QPushButton:hover {"
+		"background-color: #5B7FD8;"
+		"}"
+		"QPushButton:pressed {"
+		"background-color: #3357C7;"
+		"}"
 	);
 	
 	btnLayout->addWidget(btnCancel);
 	btnLayout->addWidget(btnConfirm);
 	mainLayout->addLayout(btnLayout);
+	
+	// 主布局
+	QVBoxLayout* containerMainLayout = new QVBoxLayout(container);
+	containerMainLayout->setContentsMargins(0, 0, 0, 0);
+	containerMainLayout->setSpacing(0);
+	containerMainLayout->addWidget(titleBar);
+	containerMainLayout->addWidget(contentWidget, 1);
+	
+	// 拖拽功能 - 使用事件过滤器实现
+	class DragEventFilter : public QObject {
+	public:
+		DragEventFilter(QDialog* dlg, QWidget* titleBar)
+			: QObject(dlg), m_dlg(dlg), m_titleBar(titleBar), m_dragging(false) {}
+		
+		bool eventFilter(QObject* obj, QEvent* event) override {
+			if (event->type() == QEvent::MouseButtonPress) {
+				QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+				if (mouseEvent->button() == Qt::LeftButton) {
+					QPoint pos = m_dlg->mapFromGlobal(mouseEvent->globalPos());
+					if (m_titleBar->geometry().contains(pos)) {
+						m_dragging = true;
+						m_dragStartPos = mouseEvent->globalPos() - m_dlg->frameGeometry().topLeft();
+						return true;
+					}
+				}
+			} else if (event->type() == QEvent::MouseMove) {
+				QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+				if (m_dragging && (mouseEvent->buttons() & Qt::LeftButton)) {
+					m_dlg->move(mouseEvent->globalPos() - m_dragStartPos);
+					return true;
+				}
+			} else if (event->type() == QEvent::MouseButtonRelease) {
+				QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+				if (mouseEvent->button() == Qt::LeftButton) {
+					m_dragging = false;
+				}
+			}
+			return QObject::eventFilter(obj, event);
+		}
+		
+	private:
+		QDialog* m_dlg;
+		QWidget* m_titleBar;
+		QPoint m_dragStartPos;
+		bool m_dragging;
+	};
+	
+	DragEventFilter* filter = new DragEventFilter(dlg, titleBar);
+	dlg->installEventFilter(filter);
 	
 	// 连接按钮事件
 	connect(btnCancel, &QPushButton::clicked, dlg, &QDialog::reject);
@@ -6681,6 +6992,15 @@ inline void ScheduleDialog::showPrepareClassDialog(const QString& subject, const
 		sendPrepareClassContent(subject, content, time);
 		dlg->accept();
 	});
+	
+	// 居中显示
+	QScreen* screen = QApplication::primaryScreen();
+	if (screen) {
+		QRect screenGeometry = screen->geometry();
+		int x = (screenGeometry.width() - dlg->width()) / 2;
+		int y = (screenGeometry.height() - dlg->height()) / 2;
+		dlg->move(x, y);
+	}
 	
 	// 显示对话框
 	dlg->exec();
@@ -6728,7 +7048,92 @@ inline void ScheduleDialog::sendPrepareClassContent(const QString& subject, cons
 	qDebug() << "正在通过WebSocket发送课前准备内容到群组:" << m_unique_group_id;
 	qDebug() << "消息内容:" << jsonString;
 	
-	QMessageBox::information(this, QString::fromUtf8(u8"成功"), QString::fromUtf8(u8"课前准备内容已发送到群组！"));
+	// 创建自定义通知对话框
+	QDialog* notifyDlg = new QDialog(this);
+	notifyDlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog | Qt::WindowStaysOnTopHint);
+	notifyDlg->setAttribute(Qt::WA_TranslucentBackground);
+	
+	// 创建内容容器
+	QWidget* container = new QWidget(notifyDlg);
+	container->setStyleSheet(
+		"QWidget { background-color: #282A2B; border: 1px solid #5C5C5C; border-radius: 8px; }"
+	);
+	container->setFixedSize(320, 80);
+	
+	// 添加阴影效果到容器
+	QGraphicsDropShadowEffect* shadowEffect = new QGraphicsDropShadowEffect(container);
+	shadowEffect->setBlurRadius(15);
+	shadowEffect->setColor(QColor(0, 0, 0, 150));
+	shadowEffect->setOffset(0, 3);
+	container->setGraphicsEffect(shadowEffect);
+	
+	// 对话框布局
+	QVBoxLayout* dlgLayout = new QVBoxLayout(notifyDlg);
+	dlgLayout->setContentsMargins(0, 0, 0, 0);
+	dlgLayout->addWidget(container);
+	
+	// 创建主布局
+	QHBoxLayout* mainLayout = new QHBoxLayout(container);
+	mainLayout->setContentsMargins(20, 15, 20, 15);
+	mainLayout->setSpacing(12);
+	
+	// 成功图标
+	QLabel* iconLabel = new QLabel("✓", container);
+	iconLabel->setStyleSheet("color: #4CAF50; font-size: 20px; font-weight: bold; background: transparent;");
+	iconLabel->setAlignment(Qt::AlignCenter);
+	iconLabel->setFixedWidth(24);
+	
+	// 消息文本
+	QLabel* messageLabel = new QLabel(QString::fromUtf8(u8"课前准备内容已发送到群组！"), container);
+	messageLabel->setStyleSheet("color: white; font-size: 14px; background: transparent;");
+	messageLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+	messageLabel->setWordWrap(true);
+	
+	mainLayout->addWidget(iconLabel);
+	mainLayout->addWidget(messageLabel, 1);
+	
+	// 设置对话框大小
+	notifyDlg->setFixedSize(320, 80);
+	
+	// 定位到屏幕右下角
+	QScreen* screen = QApplication::primaryScreen();
+	if (screen) {
+		QRect screenGeometry = screen->geometry();
+		int x = screenGeometry.width() - notifyDlg->width() - 30;
+		int y = screenGeometry.height() - notifyDlg->height() - 30;
+		notifyDlg->move(x, y);
+	}
+	
+	// 设置初始透明度为0（用于淡入动画）
+	QGraphicsOpacityEffect* opacityEffect = new QGraphicsOpacityEffect(notifyDlg);
+	notifyDlg->setGraphicsEffect(opacityEffect);
+	opacityEffect->setOpacity(0.0);
+	
+	// 显示对话框（非模态）
+	notifyDlg->show();
+	
+	// 淡入动画
+	QPropertyAnimation* fadeIn = new QPropertyAnimation(opacityEffect, "opacity", notifyDlg);
+	fadeIn->setDuration(300);
+	fadeIn->setStartValue(0.0);
+	fadeIn->setEndValue(1.0);
+	fadeIn->start();
+	
+	// 点击关闭功能
+	connect(notifyDlg, &QDialog::finished, notifyDlg, &QDialog::deleteLater);
+	
+	// 3秒后自动关闭（带淡出动画）
+	QTimer::singleShot(3000, notifyDlg, [notifyDlg, opacityEffect]() {
+		QPropertyAnimation* fadeOut = new QPropertyAnimation(opacityEffect, "opacity", notifyDlg);
+		fadeOut->setDuration(300);
+		fadeOut->setStartValue(1.0);
+		fadeOut->setEndValue(0.0);
+		connect(fadeOut, &QPropertyAnimation::finished, notifyDlg, [notifyDlg]() {
+			notifyDlg->close();
+			notifyDlg->deleteLater();
+		});
+		fadeOut->start();
+	});
 }
 
 inline QString ScheduleDialog::prepareClassCacheKey(const QString& subject, const QString& time) const

@@ -19,7 +19,7 @@
 #include <QNetworkReply>
 #include <cstring>
 
-// 定义 TempRoomStorage 的静态成员变量
+// 定义 TempRoomStorage 的静态成员变量（必须在所有包含之后，类定义之前）
 QMap<QString, TempRoomInfo> TempRoomStorage::s_tempRooms;
 
 // RowItem 类实现
@@ -625,44 +625,43 @@ FriendGroupDialog::FriendGroupDialog(QWidget* parent, TaQTWebSocket* pWs)
                         QString sex = userDetails.value("sex").toString();
 
                         /********************************************/
-                        QString avatar = userDetails.value("avatar").toString();
+                        // 获取教师唯一标识
+                        QString teacherUniqueId = teacherInfo.value("teacher_unique_id").toString();
+                        
+                        // 从 user_details 获取头像和身份证号
+                        QString avatarUrl = userDetails.value("avatar").toString();  // 阿里云 OSS 地址
                         QString strIdNumber = userDetails.value("id_number").toString();
-                        QString avatarBase64 = userDetails.value("avatar_base64").toString();
-
-                        // 没有文件名就用手机号或ID代替
-                        if (avatar.isEmpty())
-                            avatar = userDetails.value("id_number").toString() + "_" + ".png";
-
-                        // 从最后一个 "/" 之后开始截取
-                        QString fileName = avatar.section('/', -1);  // "320506197910016493_.png"
-                        QString saveDir = QCoreApplication::applicationDirPath() + "/avatars/" + strIdNumber; // 保存图片目录
+                        
+                        // 保存 teacher_unique_id -> id_number 的映射关系（用于后续查找头像）
+                        if (!teacherUniqueId.isEmpty() && !strIdNumber.isEmpty()) {
+                            CommonInfo::setTeacherIdNumberMapping(teacherUniqueId, strIdNumber);
+                            qDebug() << "保存映射关系: teacher_unique_id=" << teacherUniqueId << " -> id_number=" << strIdNumber;
+                        }
+                        
+                        // 构建本地保存路径：avatars/{id_number}/{id_number}_.png
+                        QString fileName = strIdNumber + "_.png";
+                        QString saveDir = QCoreApplication::applicationDirPath() + "/avatars/" + strIdNumber;
                         QDir().mkpath(saveDir);
                         QString filePath = saveDir + "/" + fileName;
-
-                        if (avatarBase64.isEmpty()) {
-                            qWarning() << "No avatar data for" << filePath;
-                            //continue;
+                        
+                        // 如果头像URL不为空，下载头像
+                        if (!avatarUrl.isEmpty()) {
+                            // 下载好友头像（异步下载，不阻塞界面）
+                            downloadFriendAvatar(avatarUrl, strIdNumber, teacherUniqueId);
                         }
-                        //m_userInfo.strHeadImagePath = filePath;
-
-                        // Base64 解码成图片二进制数据
-                        QByteArray imageData = QByteArray::fromBase64(avatarBase64.toUtf8());
-
-                        // 写入文件（覆盖旧的）
-                        QFile file(filePath);
-                        if (!file.open(QIODevice::WriteOnly)) {
-                            qWarning() << "Cannot open file for writing:" << filePath;
-                            //continue;
+                        
+                        // 如果本地文件已存在，直接使用（可能是之前下载的）
+                        QString avatarPath = filePath;
+                        if (!QFile::exists(filePath)) {
+                            // 如果文件不存在，暂时使用空路径（下载完成后会自动更新）
+                            avatarPath = "";
                         }
-                        file.write(imageData);
-                        file.close();
-
+                        
                         QString displayName = name.isEmpty() ? uname : name;
                         QString subjectLabel = subject.isEmpty() ? QString() : QStringLiteral("%1老师").arg(subject);
                         QString primaryText = subjectLabel.isEmpty() ? displayName : subjectLabel + displayName;
-                        QString teacherUniqueId = teacherInfo.value("teacher_unique_id").toString();
                         QString subtitle = phone.isEmpty() ? QString() : phone;
-                        addTeacherNode(primaryText, subtitle, filePath, teacherUniqueId);
+                        addTeacherNode(primaryText, subtitle, avatarPath, teacherUniqueId);
                         /********************************************/
                     }
 
@@ -1783,6 +1782,77 @@ void FriendGroupDialog::downloadGroupAvatar(const QString& faceUrl, const QStrin
             ScheduleDialog* dlg = m_scheduleDlg[groupId];
             if (dlg) {
                 dlg->updateAvatarDisplay(localPath);
+            }
+        }
+    });
+}
+
+// 下载好友头像并保存到本地
+void FriendGroupDialog::downloadFriendAvatar(const QString& avatarUrl, const QString& idNumber, const QString& teacherUniqueId)
+{
+    if (avatarUrl.isEmpty() || idNumber.isEmpty()) {
+        return;
+    }
+    
+    // 构建本地保存路径：avatars/{id_number}/{id_number}_.png
+    QString fileName = idNumber + "_.png";
+    QString saveDir = QCoreApplication::applicationDirPath() + "/avatars/" + idNumber;
+    QDir().mkpath(saveDir);
+    QString localPath = saveDir + "/" + fileName;
+    
+    // 如果文件已存在，检查是否需要更新（可以根据需要添加时间戳比较）
+    // 这里为了简化，如果文件已存在就直接返回
+    if (QFile::exists(localPath)) {
+        qDebug() << "好友头像已存在，跳过下载:" << localPath;
+        // 更新界面显示（如果树节点已创建）
+        // 这里可以添加更新树节点头像的逻辑
+        return;
+    }
+    
+    // 下载图片
+    if (!m_networkManager) {
+        m_networkManager = new QNetworkAccessManager(this);
+    }
+    
+    QUrl url(avatarUrl);
+    QNetworkRequest request(url);
+    QNetworkReply* reply = m_networkManager->get(request);
+    
+    connect(reply, &QNetworkReply::finished, this, [this, reply, idNumber, teacherUniqueId, localPath, avatarUrl]() {
+        if (reply->error() != QNetworkReply::NoError) {
+            qWarning() << "下载好友头像失败:" << reply->errorString() << "URL:" << avatarUrl;
+            reply->deleteLater();
+            return;
+        }
+        
+        // 读取图片数据
+        QByteArray imageData = reply->readAll();
+        reply->deleteLater();
+        
+        if (imageData.isEmpty()) {
+            qWarning() << "下载的好友头像数据为空，URL:" << avatarUrl;
+            return;
+        }
+        
+        // 保存到本地文件
+        QFile file(localPath);
+        if (!file.open(QIODevice::WriteOnly)) {
+            qWarning() << "无法创建好友头像文件:" << localPath;
+            return;
+        }
+        
+        file.write(imageData);
+        file.close();
+        
+        qDebug() << "好友头像下载成功，保存到:" << localPath;
+        qDebug() << "teacher_unique_id:" << teacherUniqueId << "-> id_number:" << idNumber;
+        
+        // 更新树节点头像显示（如果树节点已创建）
+        // 由于树节点可能已经创建，我们需要找到对应的节点并更新其图标
+        if (m_teacherItemMap.contains(teacherUniqueId)) {
+            QTreeWidgetItem* item = m_teacherItemMap[teacherUniqueId];
+            if (item && QFile::exists(localPath)) {
+                item->setIcon(0, QIcon(localPath));
             }
         }
     });

@@ -152,4 +152,6 @@ private:
     void fetchClassesByPrefix(const QString& schoolId);
     // 下载群组头像并保存到本地
     void downloadGroupAvatar(const QString& faceUrl, const QString& groupId);
+    // 下载好友头像并保存到本地
+    void downloadFriendAvatar(const QString& avatarUrl, const QString& idNumber, const QString& teacherUniqueId);
 };

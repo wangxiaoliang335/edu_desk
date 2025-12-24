@@ -345,8 +345,190 @@ bool QGroupInfo::validateSubjectFormat(bool showMessage) const
 
     if (tagCount <= 0) {
         if (showMessage) {
-            QMessageBox::warning(const_cast<QGroupInfo*>(this), QString::fromUtf8(u8"提示"),
-                                 QString::fromUtf8(u8"请至少输入一个任教科目。"));
+            // 创建自定义警告对话框（无标题栏，有关闭按钮）
+            QDialog* warnDlg = new QDialog(const_cast<QGroupInfo*>(this));
+            warnDlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog | Qt::WindowStaysOnTopHint);
+            warnDlg->setAttribute(Qt::WA_TranslucentBackground);
+            warnDlg->setFixedSize(350, 120);
+            
+            // 创建主容器
+            QWidget* container = new QWidget(warnDlg);
+            container->setStyleSheet(
+                "QWidget { background-color: #282A2B; border: 1px solid #282A2B; border-radius: 8px; }"
+            );
+            
+            QVBoxLayout* containerLayout = new QVBoxLayout(warnDlg);
+            containerLayout->setContentsMargins(0, 0, 0, 0);
+            containerLayout->setSpacing(0);
+            containerLayout->addWidget(container);
+            
+            // 标题栏
+            QWidget* titleBar = new QWidget(container);
+            titleBar->setFixedHeight(40);
+            titleBar->setStyleSheet("background-color: #282A2B; border-top-left-radius: 8px; border-top-right-radius: 8px;");
+            
+            QHBoxLayout* titleLayout = new QHBoxLayout(titleBar);
+            titleLayout->setContentsMargins(15, 0, 15, 0);
+            titleLayout->setSpacing(10);
+            
+            // 关闭按钮（初始隐藏）
+            QPushButton* btnClose = new QPushButton("×", titleBar);
+            btnClose->setFixedSize(24, 24);
+            btnClose->setStyleSheet(
+                "QPushButton {"
+                "border: none;"
+                "color: #ffffff;"
+                "background: rgba(255,255,255,0.12);"
+                "border-radius: 12px;"
+                "font-weight: bold;"
+                "font-size: 16px;"
+                "}"
+                "QPushButton:hover {"
+                "background: rgba(255,0,0,0.35);"
+                "}"
+            );
+            btnClose->setVisible(false); // 初始隐藏
+            connect(btnClose, &QPushButton::clicked, warnDlg, &QDialog::reject);
+            
+            // 标题文本
+            QLabel* titleLabel = new QLabel(QString::fromUtf8(u8"提示"), titleBar);
+            titleLabel->setStyleSheet("color: #ffffff; font-size: 14px; font-weight: bold; background: transparent; border: none;");
+            titleLabel->setAlignment(Qt::AlignCenter);
+            
+            titleLayout->addWidget(titleLabel, 1);
+            titleLayout->addWidget(btnClose);
+            
+            // 内容区域
+            QWidget* contentWidget = new QWidget(container);
+            contentWidget->setStyleSheet("background-color: #282A2B; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;");
+            
+            QVBoxLayout* mainLayout = new QVBoxLayout(contentWidget);
+            mainLayout->setContentsMargins(20, 15, 20, 15);
+            mainLayout->setSpacing(10);
+            
+            // 消息文本
+            QLabel* messageLabel = new QLabel(QString::fromUtf8(u8"请至少输入一个任教科目。"), contentWidget);
+            messageLabel->setStyleSheet("color: white; font-size: 14px; background: transparent;");
+            messageLabel->setAlignment(Qt::AlignCenter);
+            messageLabel->setWordWrap(true);
+            
+            mainLayout->addWidget(messageLabel);
+            
+            // 确定按钮
+            QPushButton* btnOk = new QPushButton(QString::fromUtf8(u8"确定"), contentWidget);
+            btnOk->setFixedSize(80, 35);
+            btnOk->setStyleSheet(
+                "QPushButton {"
+                "background-color: #4169E1;"
+                "color: #ffffff;"
+                "border: none;"
+                "border-radius: 6px;"
+                "font-size: 13px;"
+                "font-weight: bold;"
+                "}"
+                "QPushButton:hover {"
+                "background-color: #5B7FD8;"
+                "}"
+                "QPushButton:pressed {"
+                "background-color: #3357C7;"
+                "}"
+            );
+            connect(btnOk, &QPushButton::clicked, warnDlg, &QDialog::accept);
+            
+            QHBoxLayout* btnLayout = new QHBoxLayout();
+            btnLayout->addStretch();
+            btnLayout->addWidget(btnOk);
+            btnLayout->addStretch();
+            mainLayout->addLayout(btnLayout);
+            
+            // 主布局
+            QVBoxLayout* containerMainLayout = new QVBoxLayout(container);
+            containerMainLayout->setContentsMargins(0, 0, 0, 0);
+            containerMainLayout->setSpacing(0);
+            containerMainLayout->addWidget(titleBar);
+            containerMainLayout->addWidget(contentWidget, 1);
+            
+            // 鼠标移入显示关闭按钮，移出隐藏
+            class CloseButtonEventFilter : public QObject {
+            public:
+                CloseButtonEventFilter(QDialog* dlg, QPushButton* closeBtn)
+                    : QObject(dlg), m_dlg(dlg), m_closeBtn(closeBtn) {}
+                
+                bool eventFilter(QObject* obj, QEvent* event) override {
+                    if (obj == m_dlg) {
+                        if (event->type() == QEvent::Enter) {
+                            m_closeBtn->setVisible(true);
+                            return true;
+                        } else if (event->type() == QEvent::Leave) {
+                            m_closeBtn->setVisible(false);
+                            return true;
+                        }
+                    }
+                    return QObject::eventFilter(obj, event);
+                }
+            private:
+                QDialog* m_dlg;
+                QPushButton* m_closeBtn;
+            };
+            
+            CloseButtonEventFilter* filter = new CloseButtonEventFilter(warnDlg, btnClose);
+            warnDlg->installEventFilter(filter);
+            
+            // 拖拽功能
+            class DragEventFilter : public QObject {
+            public:
+                DragEventFilter(QDialog* dlg, QWidget* titleBar)
+                    : QObject(dlg), m_dlg(dlg), m_titleBar(titleBar), m_dragging(false) {}
+                
+                bool eventFilter(QObject* obj, QEvent* event) override {
+                    if (obj == m_dlg) {
+                        if (event->type() == QEvent::MouseButtonPress) {
+                            QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+                            if (mouseEvent->button() == Qt::LeftButton) {
+                                QPoint pos = m_dlg->mapFromGlobal(mouseEvent->globalPos());
+                                if (m_titleBar->geometry().contains(pos)) {
+                                    m_dragging = true;
+                                    m_dragStartPos = mouseEvent->globalPos() - m_dlg->frameGeometry().topLeft();
+                                    return true;
+                                }
+                            }
+                        } else if (event->type() == QEvent::MouseMove) {
+                            QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+                            if (m_dragging && (mouseEvent->buttons() & Qt::LeftButton)) {
+                                m_dlg->move(mouseEvent->globalPos() - m_dragStartPos);
+                                return true;
+                            }
+                        } else if (event->type() == QEvent::MouseButtonRelease) {
+                            QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+                            if (mouseEvent->button() == Qt::LeftButton) {
+                                m_dragging = false;
+                            }
+                        }
+                    }
+                    return QObject::eventFilter(obj, event);
+                }
+            private:
+                QDialog* m_dlg;
+                QWidget* m_titleBar;
+                QPoint m_dragStartPos;
+                bool m_dragging;
+            };
+            
+            DragEventFilter* dragFilter = new DragEventFilter(warnDlg, titleBar);
+            warnDlg->installEventFilter(dragFilter);
+            
+            // 居中显示
+            QScreen* screen = QApplication::primaryScreen();
+            if (screen) {
+                QRect screenGeometry = screen->geometry();
+                int x = (screenGeometry.width() - warnDlg->width()) / 2;
+                int y = (screenGeometry.height() - warnDlg->height()) / 2;
+                warnDlg->move(x, y);
+            }
+            
+            warnDlg->exec();
+            warnDlg->deleteLater();
+            
             if (m_addSubjectBtn) m_addSubjectBtn->setFocus();
         }
         return false;
@@ -1017,11 +1199,232 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, bool iGroupO
     };
 
     connect(m_addSubjectBtn, &QPushButton::clicked, this, [=]() {
-        bool ok = false;
-        QString text = QInputDialog::getText(this, QString::fromUtf8(u8"添加任教科目"),
-                                            QString::fromUtf8(u8"请输入科目名称："),
-                                            QLineEdit::Normal, QString(), &ok);
-        if (!ok) return;
+        // 创建自定义输入对话框（无标题栏，有关闭按钮）
+        QDialog* inputDlg = new QDialog(this);
+        inputDlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog | Qt::WindowStaysOnTopHint);
+        inputDlg->setAttribute(Qt::WA_TranslucentBackground);
+        inputDlg->setFixedSize(400, 180);
+        
+        // 创建主容器
+        QWidget* container = new QWidget(inputDlg);
+        container->setStyleSheet(
+            "QWidget { background-color: #282A2B; border: 1px solid #282A2B; border-radius: 8px; }"
+        );
+        
+        QVBoxLayout* containerLayout = new QVBoxLayout(inputDlg);
+        containerLayout->setContentsMargins(0, 0, 0, 0);
+        containerLayout->setSpacing(0);
+        containerLayout->addWidget(container);
+        
+        // 标题栏
+        QWidget* titleBar = new QWidget(container);
+        titleBar->setFixedHeight(40);
+        titleBar->setStyleSheet("background-color: #282A2B; border-top-left-radius: 8px; border-top-right-radius: 8px;");
+        
+        QHBoxLayout* titleLayout = new QHBoxLayout(titleBar);
+        titleLayout->setContentsMargins(15, 0, 15, 0);
+        titleLayout->setSpacing(10);
+        
+        // 关闭按钮（初始隐藏）
+        QPushButton* btnClose = new QPushButton("×", titleBar);
+        btnClose->setFixedSize(24, 24);
+        btnClose->setStyleSheet(
+            "QPushButton {"
+            "border: none;"
+            "color: #ffffff;"
+            "background: rgba(255,255,255,0.12);"
+            "border-radius: 12px;"
+            "font-weight: bold;"
+            "font-size: 16px;"
+            "}"
+            "QPushButton:hover {"
+            "background: rgba(255,0,0,0.35);"
+            "}"
+        );
+        btnClose->setVisible(false); // 初始隐藏
+        connect(btnClose, &QPushButton::clicked, inputDlg, &QDialog::reject);
+        
+        // 标题文本
+        QLabel* titleLabel = new QLabel(QString::fromUtf8(u8"添加任教科目"), titleBar);
+        titleLabel->setStyleSheet("color: #ffffff; font-size: 14px; font-weight: bold; background: transparent; border: none;");
+        titleLabel->setAlignment(Qt::AlignCenter);
+        
+        titleLayout->addWidget(titleLabel, 1);
+        titleLayout->addWidget(btnClose);
+        
+        // 内容区域
+        QWidget* contentWidget = new QWidget(container);
+        contentWidget->setStyleSheet("background-color: #282A2B; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;");
+        
+        QVBoxLayout* mainLayout = new QVBoxLayout(contentWidget);
+        mainLayout->setContentsMargins(20, 15, 20, 15);
+        mainLayout->setSpacing(15);
+        
+        // 提示文本
+        QLabel* promptLabel = new QLabel(QString::fromUtf8(u8"请输入科目名称："), contentWidget);
+        promptLabel->setStyleSheet("color: white; font-size: 14px; background: transparent;");
+        
+        // 输入框
+        QLineEdit* lineEdit = new QLineEdit(contentWidget);
+        lineEdit->setStyleSheet(
+            "QLineEdit {"
+            "background-color: #1e1e1e;"
+            "border: 1px solid #404040;"
+            "border-radius: 6px;"
+            "color: #ffffff;"
+            "font-size: 13px;"
+            "padding: 8px;"
+            "}"
+            "QLineEdit:focus {"
+            "border: 1px solid #4169E1;"
+            "}"
+        );
+        lineEdit->setPlaceholderText(QString::fromUtf8(u8"请输入科目名称"));
+        
+        mainLayout->addWidget(promptLabel);
+        mainLayout->addWidget(lineEdit);
+        
+        // 按钮布局
+        QHBoxLayout* btnLayout = new QHBoxLayout();
+        btnLayout->addStretch();
+        
+        QPushButton* btnCancel = new QPushButton(QString::fromUtf8(u8"取消"), contentWidget);
+        btnCancel->setFixedSize(80, 35);
+        btnCancel->setStyleSheet(
+            "QPushButton {"
+            "background-color: #2D2E2D;"
+            "color: #ffffff;"
+            "border: none;"
+            "border-radius: 6px;"
+            "font-size: 13px;"
+            "}"
+            "QPushButton:hover {"
+            "background-color: #3D3E3D;"
+            "}"
+            "QPushButton:pressed {"
+            "background-color: #1D1E1D;"
+            "}"
+        );
+        connect(btnCancel, &QPushButton::clicked, inputDlg, &QDialog::reject);
+        
+        QPushButton* btnOk = new QPushButton(QString::fromUtf8(u8"确定"), contentWidget);
+        btnOk->setFixedSize(80, 35);
+        btnOk->setStyleSheet(
+            "QPushButton {"
+            "background-color: #4169E1;"
+            "color: #ffffff;"
+            "border: none;"
+            "border-radius: 6px;"
+            "font-size: 13px;"
+            "font-weight: bold;"
+            "}"
+            "QPushButton:hover {"
+            "background-color: #5B7FD8;"
+            "}"
+            "QPushButton:pressed {"
+            "background-color: #3357C7;"
+            "}"
+        );
+        connect(btnOk, &QPushButton::clicked, inputDlg, &QDialog::accept);
+        connect(lineEdit, &QLineEdit::returnPressed, inputDlg, &QDialog::accept);
+        
+        btnLayout->addWidget(btnCancel);
+        btnLayout->addWidget(btnOk);
+        mainLayout->addLayout(btnLayout);
+        
+        // 主布局
+        QVBoxLayout* containerMainLayout = new QVBoxLayout(container);
+        containerMainLayout->setContentsMargins(0, 0, 0, 0);
+        containerMainLayout->setSpacing(0);
+        containerMainLayout->addWidget(titleBar);
+        containerMainLayout->addWidget(contentWidget, 1);
+        
+        // 鼠标移入显示关闭按钮，移出隐藏
+        class CloseButtonEventFilter : public QObject {
+        public:
+            CloseButtonEventFilter(QDialog* dlg, QPushButton* closeBtn)
+                : QObject(dlg), m_dlg(dlg), m_closeBtn(closeBtn) {}
+            
+            bool eventFilter(QObject* obj, QEvent* event) override {
+                if (obj == m_dlg) {
+                    if (event->type() == QEvent::Enter) {
+                        m_closeBtn->setVisible(true);
+                        return true;
+                    } else if (event->type() == QEvent::Leave) {
+                        m_closeBtn->setVisible(false);
+                        return true;
+                    }
+                }
+                return QObject::eventFilter(obj, event);
+            }
+        private:
+            QDialog* m_dlg;
+            QPushButton* m_closeBtn;
+        };
+        
+        CloseButtonEventFilter* filter = new CloseButtonEventFilter(inputDlg, btnClose);
+        inputDlg->installEventFilter(filter);
+        
+        // 拖拽功能
+        class DragEventFilter : public QObject {
+        public:
+            DragEventFilter(QDialog* dlg, QWidget* titleBar)
+                : QObject(dlg), m_dlg(dlg), m_titleBar(titleBar), m_dragging(false) {}
+            
+            bool eventFilter(QObject* obj, QEvent* event) override {
+                if (obj == m_dlg) {
+                    if (event->type() == QEvent::MouseButtonPress) {
+                        QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+                        if (mouseEvent->button() == Qt::LeftButton) {
+                            QPoint pos = m_dlg->mapFromGlobal(mouseEvent->globalPos());
+                            if (m_titleBar->geometry().contains(pos)) {
+                                m_dragging = true;
+                                m_dragStartPos = mouseEvent->globalPos() - m_dlg->frameGeometry().topLeft();
+                                return true;
+                            }
+                        }
+                    } else if (event->type() == QEvent::MouseMove) {
+                        QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+                        if (m_dragging && (mouseEvent->buttons() & Qt::LeftButton)) {
+                            m_dlg->move(mouseEvent->globalPos() - m_dragStartPos);
+                            return true;
+                        }
+                    } else if (event->type() == QEvent::MouseButtonRelease) {
+                        QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+                        if (mouseEvent->button() == Qt::LeftButton) {
+                            m_dragging = false;
+                        }
+                    }
+                }
+                return QObject::eventFilter(obj, event);
+            }
+        private:
+            QDialog* m_dlg;
+            QWidget* m_titleBar;
+            QPoint m_dragStartPos;
+            bool m_dragging;
+        };
+        
+        DragEventFilter* dragFilter = new DragEventFilter(inputDlg, titleBar);
+        inputDlg->installEventFilter(dragFilter);
+        
+        // 居中显示
+        QScreen* screen = QApplication::primaryScreen();
+        if (screen) {
+            QRect screenGeometry = screen->geometry();
+            int x = (screenGeometry.width() - inputDlg->width()) / 2;
+            int y = (screenGeometry.height() - inputDlg->height()) / 2;
+            inputDlg->move(x, y);
+        }
+        
+        // 设置焦点到输入框
+        lineEdit->setFocus();
+        
+        bool ok = (inputDlg->exec() == QDialog::Accepted);
+        QString text = ok ? lineEdit->text().trimmed() : QString();
+        inputDlg->deleteLater();
+        
+        if (!ok || text.isEmpty()) return;
         addTagIfNonEmpty(text);
     });
 
@@ -1347,73 +1750,8 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
         }
     }
     
-    // 第二步：添加班级按钮（文本较长，字体小一点，分成两行显示）
-    if (!m_groupName.isEmpty())
-    {
-        FriendButton* classBtn = new FriendButton("", buttonParent);
-        // 班级按钮保持50x50的尺寸，文本分成两行显示
-        classBtn->setFixedSize(50, 50);
-        classBtn->setMinimumSize(50, 50);
-        // 班级按钮使用蓝色样式，但字体较小，支持多行文本
-        // 使用样式表设置文本对齐和换行
-        QString classStyle = "background-color:blue; border-radius:25px; color:white; font-weight:bold; font-size:9px; text-align:center;";
-        classBtn->setStyleSheet(classStyle);
-        
-        // 从班级名称中提取班级部分（去掉"的班级群"后缀）
-        QString classText = m_groupName;
-        // 如果包含"的班级群"，则只取前面的部分
-        int suffixIndex = classText.indexOf(QString::fromUtf8(u8"的班级群"));
-        if (suffixIndex >= 0) {
-            classText = classText.left(suffixIndex); // 只取"的班级群"之前的部分
-        }
-        
-        // 将班级名称分成两行显示
-        // 尝试在合适的位置插入换行符
-        // 如果包含"年级"，在"年级"后换行
-        int nianjiIndex = classText.indexOf(QString::fromUtf8(u8"年级"));
-        if (nianjiIndex >= 0 && nianjiIndex < classText.length() - 2) {
-            // 在"年级"后插入换行符
-            classText.insert(nianjiIndex + 2, "\n");
-        } else {
-            // 如果没有"年级"，尝试在中间位置换行
-            int midPos = classText.length() / 2;
-            // 查找合适的分割点（避免在字符中间分割）
-            for (int i = midPos; i < classText.length() - 1; ++i) {
-                if (classText[i] == QChar::fromLatin1(' ') || 
-                    classText[i] == QChar::fromLatin1('的') ||
-                    classText[i] == QChar::fromLatin1('班')) {
-                    classText.insert(i + 1, "\n");
-                    break;
-                }
-            }
-            // 如果没找到合适的分割点，就在中间位置强制换行
-            if (!classText.contains("\n") && classText.length() > 4) {
-                midPos = classText.length() / 2;
-                classText.insert(midPos, "\n");
-            }
-        }
-        
-        // 设置班级文本（分成两行）
-        classBtn->setText(classText);
-        classBtn->setProperty("is_class_button", true); // 标记为班级按钮
-        
-        // 禁用右键菜单
-        classBtn->setContextMenuEnabled(false);
-        
-        // 确保按钮可见并显示
-        classBtn->setVisible(true);
-        classBtn->show();
-        
-        // 在群主之后插入班级按钮
-        circlesLayout->insertWidget(insertIndex, classBtn);
-        insertIndex++; // 更新插入位置
-        
-        qDebug() << "添加班级按钮:" << m_groupName 
-                 << "，插入位置:" << (insertIndex - 1) << "，按钮尺寸:" << classBtn->size() 
-                 << "，是否可见:" << classBtn->isVisible() << "，父窗口:" << classBtn->parent();
-    }
-    
-    // 第三步：添加其他成员（非群主）
+    // 第二步：添加其他成员（非群主）
+    // 注意：不再特意插入班级按钮，因为从服务器获取的成员列表里已经包含班级了
     for (auto iter : m_groupMemberInfo)
     {
         if (iter.member_role != "群主")

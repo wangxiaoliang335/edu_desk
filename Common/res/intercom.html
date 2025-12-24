@@ -118,6 +118,7 @@
 			flex-shrink: 0;
 			text-align: center;
 			cursor: pointer;
+			position: relative;
 		}
 		
 		.participant-avatar {
@@ -133,10 +134,55 @@
 			margin-bottom: 8px;
 			border: 3px solid transparent;
 			transition: border 0.2s;
+			background-size: cover;
+			background-position: center;
+			background-repeat: no-repeat;
+			position: relative;
+			overflow: hidden;
+		}
+		
+		.participant-avatar img {
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+			border-radius: 8px;
+			display: block;
+		}
+		
+		/* 当有图片时，移除背景渐变 */
+		.participant-avatar:has(img) {
+			background: transparent !important;
 		}
 		
 		.participant.active .participant-avatar {
 			border-color: #007AFF;
+		}
+		
+		.participant.speaking .participant-avatar {
+			border-color: #4CAF50;
+			border-width: 4px;
+			animation: speakingPulse 1.5s infinite;
+		}
+		
+		@keyframes speakingPulse {
+			0%, 100% {
+				box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7);
+			}
+			50% {
+				box-shadow: 0 0 0 10px rgba(76, 175, 80, 0);
+			}
+		}
+		
+		.speaking-indicator {
+			position: absolute;
+			top: -5px;
+			right: -5px;
+			width: 16px;
+			height: 16px;
+			background: #4CAF50;
+			border-radius: 50%;
+			border: 2px solid #3C3C3C;
+			animation: speakingPulse 1.5s infinite;
 		}
 		
 		.participant-name {
@@ -368,20 +414,115 @@
 			statusLog.scrollTop = statusLog.scrollHeight;
 		}
 		
+		// 当前说话的用户ID
+		let currentSpeakingUserId = null;
+		
 		// 渲染参与者列表
 		function renderParticipants() {
 			const list = document.getElementById('participantsList');
 			list.innerHTML = '';
 			
-			if (membersData && Array.isArray(membersData)) {
-				membersData.forEach((member, index) => {
+			console.log('========== 开始渲染参与者列表 ==========');
+			console.log('成员数据:', membersData);
+			console.log('成员数量:', membersData ? membersData.length : 0);
+			console.log('当前用户:', currentUser);
+			console.log('当前用户头像:', currentUser.icon);
+			
+			// 确保当前用户也在参与者列表中（如果不在的话）
+			let allMembers = [...(membersData || [])];
+			const currentUserInList = allMembers.find(m => m.id === currentUser.id);
+			if (!currentUserInList && currentUser.id) {
+				console.log('当前用户不在成员列表中，添加当前用户');
+				allMembers.unshift({
+					id: currentUser.id,
+					name: currentUser.name || '我',
+					avatar: currentUser.icon || '',
+					role: '当前用户',
+					is_voice_enabled: true
+				});
+			} else if (currentUserInList && currentUser.icon) {
+				// 如果当前用户在列表中但没有头像，更新头像
+				if (!currentUserInList.avatar && currentUser.icon) {
+					currentUserInList.avatar = currentUser.icon;
+					console.log('更新当前用户在列表中的头像:', currentUser.icon);
+				}
+			}
+			
+			if (allMembers && Array.isArray(allMembers)) {
+				allMembers.forEach((member, index) => {
+					console.log(`成员 ${index + 1}:`, {
+						id: member.id,
+						name: member.name,
+						avatar: member.avatar,
+						有头像: !!member.avatar,
+						是当前用户: member.id === currentUser.id
+					});
+					
 					const participant = document.createElement('div');
 					participant.className = 'participant' + (index === 0 ? ' active' : '');
+					participant.setAttribute('data-user-id', member.id || '');
 					
 					const avatar = document.createElement('div');
 					avatar.className = 'participant-avatar';
-					// 使用名字的首字符作为头像
-					avatar.textContent = member.name ? member.name.charAt(0) : '?';
+					
+					// 如果成员有头像路径，显示头像图片
+					if (member.avatar && member.avatar.trim() !== '') {
+						console.log(`为成员 ${member.name} 设置头像:`, member.avatar);
+						console.log('头像路径类型:', typeof member.avatar);
+						console.log('头像路径长度:', member.avatar.length);
+						
+						// 先清空文字内容和背景
+						avatar.textContent = '';
+						
+						const img = document.createElement('img');
+						// 设置图片源
+						img.src = member.avatar;
+						img.alt = member.name || member.id;
+						
+						// 设置图片样式
+						img.style.display = 'block';
+						img.style.width = '100%';
+						img.style.height = '100%';
+						img.style.objectFit = 'cover';
+						img.style.borderRadius = '8px';
+						img.style.position = 'absolute';
+						img.style.top = '0';
+						img.style.left = '0';
+						
+						// 头像加载成功时，移除背景渐变
+						img.onload = function() {
+							console.log(`✅ 头像加载成功: ${member.name}`);
+							console.log('   - 头像路径:', member.avatar);
+							console.log('   - 图片尺寸:', this.naturalWidth, 'x', this.naturalHeight);
+							console.log('   - 图片完整:', this.complete);
+							avatar.style.background = 'transparent';  // 移除背景渐变
+							avatar.style.backgroundImage = 'none';  // 确保没有背景图片
+						};
+						
+						// 如果头像加载失败，显示名字首字符
+						img.onerror = function() {
+							console.error(`❌ 头像加载失败: ${member.name}`);
+							console.error('   - 头像路径:', member.avatar);
+							console.error('   - 实际src:', this.src);
+							console.error('   - 错误详情:', {
+								src: this.src,
+								naturalWidth: this.naturalWidth,
+								naturalHeight: this.naturalHeight,
+								complete: this.complete,
+								错误: '可能是路径不正确或文件不存在，或者浏览器安全策略阻止了file://协议'
+							});
+							this.style.display = 'none';
+							avatar.textContent = member.name ? member.name.charAt(0) : '?';
+							avatar.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';  // 恢复背景
+							avatar.style.backgroundImage = 'none';
+						};
+						
+						avatar.appendChild(img);
+					} else {
+						console.log(`成员 ${member.name} 没有头像路径 (avatar: ${member.avatar})`);
+						// 如果没有头像路径，使用名字的首字符作为头像
+						avatar.textContent = member.name ? member.name.charAt(0) : '?';
+					}
 					
 					const name = document.createElement('div');
 					name.className = 'participant-name';
@@ -400,6 +541,43 @@
 					
 					list.appendChild(participant);
 				});
+				
+				// 如果有说话人，更新高亮状态
+				updateSpeakingIndicator();
+			} else {
+				console.warn('成员数据不是数组或为空');
+			}
+		}
+		
+		// 更新说话人指示器
+		function updateSpeakingIndicator() {
+			// 移除所有说话状态
+			document.querySelectorAll('.participant').forEach(p => {
+				p.classList.remove('speaking');
+				// 移除说话指示器
+				const indicator = p.querySelector('.speaking-indicator');
+				if (indicator) {
+					indicator.remove();
+				}
+			});
+			
+			// 如果有说话人，高亮显示
+			if (currentSpeakingUserId) {
+				const speakingParticipant = document.querySelector(`.participant[data-user-id="${currentSpeakingUserId}"]`);
+				if (speakingParticipant) {
+					speakingParticipant.classList.add('speaking');
+					
+					// 添加说话指示器
+					const indicator = document.createElement('div');
+					indicator.className = 'speaking-indicator';
+					speakingParticipant.appendChild(indicator);
+					
+					// 在状态日志中显示
+					const member = membersData.find(m => m.id === currentSpeakingUserId);
+					if (member) {
+						appendStatusMessage(`🎤 ${member.name || member.id} 正在说话`, 'info');
+					}
+				}
 			}
 		}
 		
@@ -1141,6 +1319,27 @@
 						// 在页面上显示通知
 						appendStatusMessage(`⚠️ ${message.message || '房间已解散'}`, 'warn');
 						break;
+					case "voice_speaking":
+						// 处理说话人识别消息
+						console.log('🎤 收到说话人识别消息:', message);
+						const userId = message.user_id || '';
+						const userName = message.user_name || '';
+						const isSpeaking = message.is_speaking || false;
+						
+						if (isSpeaking) {
+							// 开始说话
+							currentSpeakingUserId = userId;
+							console.log('🎤 检测到说话人:', userName, '(', userId, ')');
+							updateSpeakingIndicator();
+						} else {
+							// 停止说话
+							if (currentSpeakingUserId === userId) {
+								console.log('🛑 说话人停止说话:', userName);
+								currentSpeakingUserId = null;
+								updateSpeakingIndicator();
+							}
+						}
+						break;
 					default:
 						console.log('📨 收到其他类型消息:');
 						console.log('类型值:', message.type);
@@ -1339,8 +1538,24 @@
 		
 		// 页面加载完成后初始化
 		window.addEventListener('DOMContentLoaded', () => {
+			console.log('========== 页面加载完成，开始初始化 ==========');
 			console.log('应用数据:', appData);
 			console.log('当前用户:', currentUser);
+			console.log('成员数据:', membersData);
+			console.log('成员数量:', membersData ? membersData.length : 0);
+			
+			// 检查每个成员是否有头像
+			if (membersData && Array.isArray(membersData)) {
+				membersData.forEach((member, index) => {
+					console.log(`成员 ${index + 1}:`, {
+						id: member.id,
+						name: member.name,
+						avatar: member.avatar,
+						有头像: !!member.avatar,
+						头像类型: typeof member.avatar
+					});
+				});
+			}
 			
 			// 检查是否有房间信息，如果有则尝试开始拉流（延迟执行，确保WebSocket连接后再拉流）
 			if (appData.temp_room && appData.temp_room.whep_url) {

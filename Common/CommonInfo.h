@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "TABaseDialog.h"
 #include <QStringList>
+#include <QMap>
 
 struct Notification {
     int id;
@@ -24,6 +25,7 @@ struct GroupMemberInfo {
     QString member_role;
     bool is_voice_enabled;  // 是否开启语音
     QStringList teach_subjects; // 任教科目（来自 /groups/members 的 teach_subjects 字段）
+    QString id_number;  // 身份证号，用于查找头像文件
 };
 
 // StudentInfo 结构体在 ScheduleDialog.h 中定义，这里使用条件编译避免重复定义
@@ -161,9 +163,22 @@ public:
     {
         return m_userInfo;
     }
+    
+    // 保存 teacher_unique_id -> id_number 的映射关系（用于查找头像）
+    static void setTeacherIdNumberMapping(const QString& teacherUniqueId, const QString& idNumber)
+    {
+        m_teacherIdNumberMap[teacherUniqueId] = idNumber;
+    }
+    
+    // 根据 teacher_unique_id 获取 id_number
+    static QString getIdNumberByTeacherUniqueId(const QString& teacherUniqueId)
+    {
+        return m_teacherIdNumberMap.value(teacherUniqueId, QString());
+    }
 
 private:
     static UserInfo m_userInfo;
+    static QMap<QString, QString> m_teacherIdNumberMap;  // teacher_unique_id -> id_number 映射
 };
 
 // 这里必须定义静态成员变量一次，否则会链接错误
