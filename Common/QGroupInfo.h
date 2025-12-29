@@ -39,6 +39,7 @@ class MemberKickDialog; // 前向声明
 #include <QFontMetrics>
 #include "CommonInfo.h"
 #include "CourseDialog.h"
+#include "WallpaperDialog.h"
 #include "ImSDK/includes/TIMCloud.h"
 #include "ImSDK/includes/TIMCloudDef.h"
 #include "ImSDK/includes/TIMCloudCallback.h"
@@ -163,6 +164,7 @@ public:
     void InitGroupMember(QString group_id, QVector<GroupMemberInfo> groupMemberInfo);
     void InitGroupMember();
     QVector<GroupMemberInfo> getGroupMemberInfo() const { return m_groupMemberInfo; } // 获取当前成员列表
+    void setGroupFaceUrl(const QString& faceUrl);  // 设置群头像URL
     
     /**
      * @brief 使用REST API获取群成员列表
@@ -214,6 +216,8 @@ protected:
     QString m_groupName;
     QString m_groupNumberId;
     QString m_classId;
+    QString m_groupFaceUrl;  // 群头像URL
+    QLabel* m_groupAvatarLabel = nullptr;  // 群头像标签
     bool m_isNormalGroup = false; // classid为空时，按“普通群群管理”模式展示
     bool m_iGroupOwner = false;   // 当前用户是否为群主（外部传入）
     QVector<GroupMemberInfo> m_groupMemberInfo;
@@ -224,6 +228,7 @@ protected:
     MemberKickDialog* m_memberKickDlg = NULL; // 踢出成员对话框
     //ClassTeacherDelDialog* m_classTeacherDelDlg = NULL;
     CourseDialog* m_courseDlg;
+    class WallpaperDialog* m_wallpaperDlg = nullptr; // 壁纸对话框
     QPushButton* m_btnDismiss = nullptr; // 解散群聊按钮
     QPushButton* m_btnExit = nullptr; // 退出群聊按钮
     QPushButton* m_closeButton = nullptr; // 关闭按钮

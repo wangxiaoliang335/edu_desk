@@ -2150,6 +2150,15 @@ public:
 							if (m_groupInfo)
 							{
 								m_groupInfo->InitGroupMember(group_id, m_groupMemberInfo);
+								
+								// 设置群头像
+								if (dataObj.contains("group_info") && dataObj["group_info"].isObject()) {
+									QJsonObject groupInfo = dataObj["group_info"].toObject();
+									QString faceUrl = groupInfo.value("face_url").toString();
+									if (!faceUrl.isEmpty()) {
+										m_groupInfo->setGroupFaceUrl(faceUrl);
+									}
+								}
 							}
 							
 							// 根据当前用户的 is_voice_enabled 更新对讲按钮状态

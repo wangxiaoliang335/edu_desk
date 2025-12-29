@@ -188,6 +188,7 @@
     <QtMoc Include="QGroupInfo.h" />
     <QtMoc Include="CourseTableWidget.h" />
     <QtMoc Include="CourseDialog.h" />
+    <QtMoc Include="WallpaperDialog.h" />
     <QtMoc Include="FriendSelectDialog.h" />
     <QtMoc Include="MemberKickDialog.h" />
     <QtMoc Include="TIMRestAPI.h" />
@@ -234,6 +235,7 @@
     <ClCompile Include="PwdLoginModalDialog.cpp" />
     <ClCompile Include="QClassMgr.cpp" />
     <ClCompile Include="QGroupInfo.cpp" />
+    <ClCompile Include="WallpaperDialog.cpp" />
     <ClCompile Include="FriendSelectDialog.cpp" />
     <ClCompile Include="MemberKickDialog.cpp" />
     <ClCompile Include="TIMRestAPI.cpp" />

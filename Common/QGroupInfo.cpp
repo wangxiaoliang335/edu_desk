@@ -870,8 +870,14 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, bool iGroupO
         // 设置群组ID和班级ID
         m_courseDlg->setGroupId(groupNumberId);
         m_courseDlg->setClassId(classid);
+        
+        // 创建壁纸对话框
+        m_wallpaperDlg = new WallpaperDialog(this);
+        m_wallpaperDlg->setGroupId(groupNumberId);
+        m_wallpaperDlg->setClassId(classid);
     } else {
         m_courseDlg = nullptr;
+        m_wallpaperDlg = nullptr;
     }
 
     // 设置一些课程
@@ -898,7 +904,11 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, bool iGroupO
         } else {
             QLabel* lblAvatar = new QLabel(this);
             lblAvatar->setFixedSize(50, 50);
-            lblAvatar->setStyleSheet("background-color: lightgray;");
+            lblAvatar->setStyleSheet("background-color: lightgray; border-radius: 25px;");
+            lblAvatar->setScaledContents(true);
+            // 保存头像标签的指针，以便后续更新头像
+            m_groupAvatarLabel = lblAvatar;
+            
             QLabel* lblInfo = new QLabel(groupName + "\n" + groupNumberId, this);
             QPushButton* btnMore = new QPushButton("...", this);
             btnMore->setFixedSize(30, 30);
@@ -920,36 +930,72 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, bool iGroupO
         mainLayout->addWidget(editClassNum);
 
         QHBoxLayout* pHBoxLayut = new QHBoxLayout;
+        pHBoxLayut->setSpacing(12);  // 增加按钮之间的间隔
+        
         // 班级课程表按钮
         QPushButton* btnSchedule = new QPushButton("班级课程表", this);
-        btnSchedule->setStyleSheet("background-color:green; color:white; font-weight:bold;");
+        btnSchedule->setMinimumHeight(40);  // 增加按钮高度
+        btnSchedule->setStyleSheet("background-color:green; color:white; font-weight:bold; font-size:14px; padding:8px 16px;");
+        
+        // 值日表按钮
+        QPushButton* btnDuty = new QPushButton("值日表", this);
+        btnDuty->setMinimumHeight(40);  // 增加按钮高度
+        btnDuty->setStyleSheet("background-color:green; color:white; font-weight:bold; font-size:14px; padding:8px 16px;");
+        
+        // 壁纸按钮
+        QPushButton* btnWallpaper = new QPushButton("壁纸", this);
+        btnWallpaper->setMinimumHeight(40);  // 增加按钮高度
+        btnWallpaper->setStyleSheet("background-color:red; color:white; font-weight:bold; font-size:14px; padding:8px 16px;");
 
         pHBoxLayut->addWidget(btnSchedule);
+        pHBoxLayut->addWidget(btnDuty);
+        pHBoxLayut->addWidget(btnWallpaper);
         pHBoxLayut->addStretch(2);
+        pHBoxLayut->setContentsMargins(10, 15, 10, 25);
         mainLayout->addLayout(pHBoxLayut);
 
         connect(btnSchedule, &QPushButton::clicked, this, [=]() {
-            qDebug() << "红框区域被点击！";
+            qDebug() << "班级课程表按钮被点击！";
             if (m_courseDlg)
             {
                 m_courseDlg->show();
             }
         });
+        
+        connect(btnDuty, &QPushButton::clicked, this, [=]() {
+            qDebug() << "值日表按钮被点击！";
+            // TODO: 实现值日表功能
+            QMessageBox::information(this, "提示", "值日表功能待实现");
+        });
+        
+        connect(btnWallpaper, &QPushButton::clicked, this, [=]() {
+            qDebug() << "壁纸按钮被点击！";
+            if (m_wallpaperDlg)
+            {
+                m_wallpaperDlg->setGroupId(m_groupNumberId);
+                m_wallpaperDlg->setClassId(m_classId);
+                m_wallpaperDlg->show();
+            }
+        });
     }
     
+    // 减少间距，使三排内容更靠近
+    mainLayout->addSpacing(3);
 
     // 群成员列表
     QGroupBox* groupFriends = new QGroupBox(m_isNormalGroup ? QStringLiteral("群成员") : QStringLiteral("好友列表"), this);
-    groupFriends->setMinimumHeight(m_isNormalGroup ? 140 : 80);
+    groupFriends->setMinimumHeight(m_isNormalGroup ? 30 : 20);
     QVBoxLayout* friendsLayout = new QVBoxLayout(groupFriends);
-    friendsLayout->setContentsMargins(10, 10, 10, 10);
-    friendsLayout->setSpacing(8);
+    // 减少上边距，使按钮更靠近QGroupBox标题
+    friendsLayout->setContentsMargins(10, 5, 10, 5);
+    friendsLayout->setSpacing(5);  // 减少间距
 
     // 班级群：沿用旧的圆圈布局；普通群：改为网格布局（头像上、名字下）
     circlesLayout = nullptr;
     if (m_isNormalGroup) {
-        // 普通群：提供“添加好友/删除好友”按钮（与 + / - tile 同功能）
+        // 普通群：提供"添加好友/删除好友"按钮（与 + / - tile 同功能）
         QHBoxLayout* memberActionRow = new QHBoxLayout;
+        // 减少上边距，使按钮更靠近QGroupBox标题
         memberActionRow->setContentsMargins(0, 0, 0, 0);
         memberActionRow->setSpacing(8);
         memberActionRow->addStretch();
@@ -1018,7 +1064,7 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, bool iGroupO
         friendsLayout->addWidget(m_memberScrollArea);
     } else {
         circlesLayout = new QHBoxLayout();
-        circlesLayout->setSpacing(8);
+        circlesLayout->setSpacing(2);
         circlesLayout->setContentsMargins(5, 5, 5, 5);
     }
 
@@ -1158,6 +1204,11 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, bool iGroupO
     }
 
     // 班级群：科目输入（普通群不显示）
+    // 减少间距，使好友列表和科目更靠近（只在班级群时）
+    if (!m_isNormalGroup) {
+        mainLayout->addSpacing(1);
+    }
+    
     QGroupBox* groupSubject = nullptr;
     QVBoxLayout* subjectLayout = nullptr;
     if (!m_isNormalGroup) {
@@ -1170,7 +1221,7 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, bool iGroupO
         m_subjectTagContainer = new QWidget(groupSubject);
         m_subjectTagLayout = new QHBoxLayout(m_subjectTagContainer);
     m_subjectTagLayout->setContentsMargins(0, 0, 0, 0);
-    m_subjectTagLayout->setSpacing(8);
+    m_subjectTagLayout->setSpacing(4);
 
     // “+ 添加”按钮（始终在最后）
     m_addSubjectBtn = new QPushButton(QString::fromUtf8(u8"+ 添加"), groupSubject);
@@ -1257,8 +1308,8 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, bool iGroupO
         contentWidget->setStyleSheet("background-color: #282A2B; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;");
         
         QVBoxLayout* mainLayout = new QVBoxLayout(contentWidget);
-        mainLayout->setContentsMargins(20, 15, 20, 15);
-        mainLayout->setSpacing(15);
+        mainLayout->setContentsMargins(15, 10, 15, 10);
+        mainLayout->setSpacing(7);
         
         // 提示文本
         QLabel* promptLabel = new QLabel(QString::fromUtf8(u8"请输入科目名称："), contentWidget);
@@ -1482,6 +1533,8 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, bool iGroupO
     m_btnExit = new QPushButton("退出群聊", this);
     bottomBtns->addWidget(m_btnDismiss);
     bottomBtns->addWidget(m_btnExit);
+
+    bottomBtns->setContentsMargins(10, 20, 10, 15);
     mainLayout->addLayout(bottomBtns);
     
     // 初始状态：默认都禁用，等InitGroupMember调用后再更新
@@ -1495,6 +1548,31 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, bool iGroupO
     
     // 标记为已初始化
     m_initialized = true;
+}
+
+void QGroupInfo::setGroupFaceUrl(const QString& faceUrl)
+{
+    m_groupFaceUrl = faceUrl;
+    
+    if (m_groupAvatarLabel && !faceUrl.isEmpty()) {
+        // 使用网络管理器下载头像
+        QNetworkAccessManager* manager = new QNetworkAccessManager(this);
+        QUrl imageUrl(faceUrl);
+        QNetworkRequest request(imageUrl);
+        QNetworkReply* reply = manager->get(request);
+        
+        connect(reply, &QNetworkReply::finished, [this, reply, manager]() {
+            if (reply->error() == QNetworkReply::NoError) {
+                QPixmap pixmap;
+                pixmap.loadFromData(reply->readAll());
+                if (!pixmap.isNull()) {
+                    m_groupAvatarLabel->setPixmap(pixmap.scaled(50, 50, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                }
+            }
+            reply->deleteLater();
+            manager->deleteLater();
+        });
+    }
 }
 
 void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> groupMemberInfo)
