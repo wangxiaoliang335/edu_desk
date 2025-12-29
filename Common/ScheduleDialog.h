@@ -2063,6 +2063,14 @@ public:
 						{
 							QString group_id = dataObj["group_id"].toString();
 							
+							// 获取 group_info 中的 classid（用于识别班级成员）
+							QString classid;
+							if (dataObj.contains("group_info") && dataObj["group_info"].isObject()) {
+								QJsonObject groupInfo = dataObj["group_info"].toObject();
+								classid = groupInfo.value("classid").toString();
+								qDebug() << "获取到 classid:" << classid;
+							}
+							
 							m_groupMemberInfo.clear(); // 清空之前的成员列表
 							
 							QJsonArray memberArray = dataObj["members"].toArray();
@@ -2118,6 +2126,15 @@ public:
 									id_number = userDetails.value("id_number").toString();
 								}
 								
+								// 获取 face_url（用于班级成员的头像）
+								QString face_url = memberObj.value("face_url").toString();
+								
+								// 判断是否是班级成员（user_id 等于 classid）
+								bool isClassMember = (!classid.isEmpty() && member_id == classid);
+								if (isClassMember) {
+									qDebug() << "识别到班级成员: user_id=" << member_id << ", name=" << member_name << ", face_url=" << face_url;
+								}
+								
 								GroupMemberInfo groupMemInfo;
 								groupMemInfo.member_id = member_id;
 								groupMemInfo.member_name = member_name;
@@ -2125,6 +2142,7 @@ public:
 								groupMemInfo.is_voice_enabled = is_voice_enabled;
 								groupMemInfo.teach_subjects = teachSubjects;
 								groupMemInfo.id_number = id_number;
+								groupMemInfo.face_url = face_url;  // 保存 face_url（班级成员会有这个字段）
 								m_groupMemberInfo.append(groupMemInfo);
 							}
 
@@ -6291,31 +6309,38 @@ inline void ScheduleDialog::openIntercomWebPage()
 		// 尝试查找成员的头像文件
 		QString avatarPath;
 		
-		// 方法1：如果成员有身份证号，直接使用身份证号查找头像
-		QString idNumber = member.id_number;
-		
-		// 方法2：如果成员没有身份证号，尝试从全局映射中获取（通过 teacher_unique_id）
-		if (idNumber.isEmpty() && !member.member_id.isEmpty()) {
-			idNumber = CommonInfo::getIdNumberByTeacherUniqueId(member.member_id);
-			if (!idNumber.isEmpty()) {
-				qDebug() << "从全局映射获取 id_number: teacher_unique_id=" << member.member_id << " -> id_number=" << idNumber;
-			}
+		// 方法1：如果是班级成员，优先使用 face_url（来自服务器）
+		if (!member.face_url.isEmpty()) {
+			avatarPath = member.face_url;
+			qDebug() << "使用班级成员的 face_url: member_id=" << member.member_id << ", name=" << member.member_name << ", face_url=" << member.face_url;
 		}
-		
-		// 如果找到了身份证号，查找头像文件
-		if (!idNumber.isEmpty()) {
-			QString avatarDir = avatarsBaseDir + "/" + idNumber;
-			QString fileName = idNumber + "_.png";
-			QString filePath = avatarDir + "/" + fileName;
+		// 方法2：如果成员有身份证号，使用身份证号查找本地头像文件
+		else {
+			QString idNumber = member.id_number;
 			
-			if (QFile::exists(filePath)) {
-				avatarPath = QUrl::fromLocalFile(filePath).toString();
-				qDebug() << "找到成员头像: member_id=" << member.member_id << ", id_number=" << idNumber << ", path=" << filePath;
-			} else {
-				qDebug() << "头像文件不存在: member_id=" << member.member_id << ", id_number=" << idNumber << ", path=" << filePath;
+			// 方法3：如果成员没有身份证号，尝试从全局映射中获取（通过 teacher_unique_id）
+			if (idNumber.isEmpty() && !member.member_id.isEmpty()) {
+				idNumber = CommonInfo::getIdNumberByTeacherUniqueId(member.member_id);
+				if (!idNumber.isEmpty()) {
+					qDebug() << "从全局映射获取 id_number: teacher_unique_id=" << member.member_id << " -> id_number=" << idNumber;
+				}
 			}
-		} else {
-			qDebug() << "无法获取成员身份证号: member_id=" << member.member_id << ", member_name=" << member.member_name;
+			
+			// 如果找到了身份证号，查找头像文件
+			if (!idNumber.isEmpty()) {
+				QString avatarDir = avatarsBaseDir + "/" + idNumber;
+				QString fileName = idNumber + "_.png";
+				QString filePath = avatarDir + "/" + fileName;
+				
+				if (QFile::exists(filePath)) {
+					avatarPath = QUrl::fromLocalFile(filePath).toString();
+					qDebug() << "找到成员头像: member_id=" << member.member_id << ", id_number=" << idNumber << ", path=" << filePath;
+				} else {
+					qDebug() << "头像文件不存在: member_id=" << member.member_id << ", id_number=" << idNumber << ", path=" << filePath;
+				}
+			} else {
+				qDebug() << "无法获取成员身份证号: member_id=" << member.member_id << ", member_name=" << member.member_name;
+			}
 		}
 		
 		// 如果找到了头像路径，添加到成员数据中
@@ -6370,6 +6395,12 @@ inline void ScheduleDialog::openIntercomWebPage()
 		}
 	}
 	
+	// 获取班级名称
+	QString className = m_lblClass ? m_lblClass->text() : m_groupName;
+	if (className.isEmpty()) {
+		className = QString::fromUtf8(u8"未知班级");
+	}
+	
 	// 准备传递给HTML的数据，包含成员列表和当前用户信息
 	QJsonObject dataObj;
 	dataObj["members"] = membersArray;
@@ -6380,6 +6411,8 @@ inline void ScheduleDialog::openIntercomWebPage()
 	};
 	// 添加班级群的唯一编号
 	dataObj["group_id"] = m_unique_group_id;
+	// 添加班级名称
+	dataObj["class_name"] = className;
 	// 添加临时房间信息（如果已创建）
 	if (!m_roomId.isEmpty()) {
 		QJsonObject tempRoomObj;

@@ -26,6 +26,7 @@ struct GroupMemberInfo {
     bool is_voice_enabled;  // 是否开启语音
     QStringList teach_subjects; // 任教科目（来自 /groups/members 的 teach_subjects 字段）
     QString id_number;  // 身份证号，用于查找头像文件
+    QString face_url;  // 头像URL（用于班级成员，来自 face_url 字段）
 };
 
 // StudentInfo 结构体在 ScheduleDialog.h 中定义，这里使用条件编译避免重复定义

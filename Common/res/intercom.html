@@ -105,6 +105,15 @@
 			color: white;
 			font-size: 14px;
 			margin-bottom: 15px;
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+		}
+		.class-name-display {
+			font-size: 12px;
+			font-weight: normal;
+			color: rgba(255, 255, 255, 0.7);
+			margin-left: 10px;
 		}
 		
 		.participants-list {
@@ -340,7 +349,10 @@
 		</div>
 		
 		<div class="participants-section">
-			<div class="participants-title">参与者</div>
+			<div class="participants-title">
+				<span>参与者</span>
+				<span id="classNameDisplay" class="class-name-display"></span>
+			</div>
 			<div class="participants-list" id="participantsList">
 				<!-- 参与者列表将通过JavaScript动态生成 -->
 			</div>
@@ -367,6 +379,14 @@
 		const membersData = appData.members || [];
 		const currentUser = appData.current_user || {};
 		const groupId = appData.group_id || '';  // 班级群的唯一编号
+		const className = appData.class_name || '';  // 班级名称
+		
+		// 显示班级名称
+		const classNameDisplay = document.getElementById('classNameDisplay');
+		if (classNameDisplay && className) {
+			classNameDisplay.textContent = className;
+			console.log('班级名称:', className);
+		}
 		
 		// 从 temp_room 对象中读取临时房间信息（新格式）
 		let roomId = null;

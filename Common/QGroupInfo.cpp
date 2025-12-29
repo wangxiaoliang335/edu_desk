@@ -1750,11 +1750,53 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
         }
     }
     
-    // 第二步：添加其他成员（非群主）
-    // 注意：不再特意插入班级按钮，因为从服务器获取的成员列表里已经包含班级了
+    // 第二步：添加班级成员（user_id == classid，且不是群主）
+    // 班级成员应该显示在第二位（第一位是群主）
+    if (!m_classId.isEmpty()) {
+        for (auto iter : m_groupMemberInfo)
+        {
+            // 判断是否是班级成员：user_id 等于 classid，且不是群主
+            if (iter.member_id == m_classId && iter.member_role != "群主")
+            {
+                FriendButton* circleBtn = new FriendButton("", buttonParent);
+                // FriendButton 构造函数已设置 setFixedSize(50, 50)，这里确保尺寸正确
+                circleBtn->setFixedSize(50, 50);
+                circleBtn->setMinimumSize(50, 50);
+                circleBtn->setStyleSheet(blueStyle); // 班级成员用蓝色圆圈
+                
+                // 设置成员角色
+                circleBtn->setMemberRole(iter.member_role);
+                
+                // 班级成员不启用右键菜单
+                circleBtn->setContextMenuEnabled(false);
+                
+                // 设置按钮文本（完整成员名字）
+                circleBtn->setText(iter.member_name);
+                circleBtn->setProperty("member_id", iter.member_id);
+                
+                // 确保按钮可见并显示
+                circleBtn->setVisible(true);
+                circleBtn->show();
+                
+                // 在 + 按钮之前插入成员圆圈（在群主之后）
+                circlesLayout->insertWidget(insertIndex, circleBtn);
+                insertIndex++; // 更新插入位置
+                
+                qDebug() << "添加班级成员按钮:" << iter.member_name << "，user_id:" << iter.member_id 
+                         << "，classid:" << m_classId << "，插入位置:" << (insertIndex - 1);
+                break; // 只添加第一个班级成员
+            }
+        }
+    }
+    
+    // 第三步：添加其他成员（非群主且非班级成员）
     for (auto iter : m_groupMemberInfo)
     {
-        if (iter.member_role != "群主")
+        // 排除群主和班级成员
+        bool isOwner = (iter.member_role == "群主");
+        bool isClassMember = (!m_classId.isEmpty() && iter.member_id == m_classId);
+        
+        if (!isOwner && !isClassMember)
         {
             FriendButton* circleBtn = new FriendButton("", buttonParent);
             // FriendButton 构造函数已设置 setFixedSize(50, 50)，这里确保尺寸正确
