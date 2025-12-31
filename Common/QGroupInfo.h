@@ -40,6 +40,7 @@ class MemberKickDialog; // 前向声明
 #include "CommonInfo.h"
 #include "CourseDialog.h"
 #include "WallpaperDialog.h"
+#include "DutyRosterDialog.h"
 #include "ImSDK/includes/TIMCloud.h"
 #include "ImSDK/includes/TIMCloudDef.h"
 #include "ImSDK/includes/TIMCloudCallback.h"
@@ -229,6 +230,7 @@ protected:
     //ClassTeacherDelDialog* m_classTeacherDelDlg = NULL;
     CourseDialog* m_courseDlg;
     class WallpaperDialog* m_wallpaperDlg = nullptr; // 壁纸对话框
+    class DutyRosterDialog* m_dutyRosterDlg = nullptr; // 值日表对话框
     QPushButton* m_btnDismiss = nullptr; // 解散群聊按钮
     QPushButton* m_btnExit = nullptr; // 退出群聊按钮
     QPushButton* m_closeButton = nullptr; // 关闭按钮

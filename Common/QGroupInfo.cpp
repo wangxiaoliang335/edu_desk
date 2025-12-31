@@ -875,9 +875,15 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, bool iGroupO
         m_wallpaperDlg = new WallpaperDialog(this);
         m_wallpaperDlg->setGroupId(groupNumberId);
         m_wallpaperDlg->setClassId(classid);
+        
+        // 创建值日表对话框
+        m_dutyRosterDlg = new DutyRosterDialog(this);
+        m_dutyRosterDlg->setGroupId(groupNumberId);
+        m_dutyRosterDlg->setClassId(classid);
     } else {
         m_courseDlg = nullptr;
         m_wallpaperDlg = nullptr;
+        m_dutyRosterDlg = nullptr;
     }
 
     // 设置一些课程
@@ -964,8 +970,14 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, bool iGroupO
         
         connect(btnDuty, &QPushButton::clicked, this, [=]() {
             qDebug() << "值日表按钮被点击！";
-            // TODO: 实现值日表功能
-            QMessageBox::information(this, "提示", "值日表功能待实现");
+            if (!m_dutyRosterDlg) {
+                m_dutyRosterDlg = new DutyRosterDialog(this);
+            }
+            if (m_dutyRosterDlg) {
+                m_dutyRosterDlg->setGroupId(m_groupNumberId);
+                m_dutyRosterDlg->setClassId(m_classId);
+                m_dutyRosterDlg->show();
+            }
         });
         
         connect(btnWallpaper, &QPushButton::clicked, this, [=]() {
