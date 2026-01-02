@@ -393,7 +393,7 @@ public:
 							QString avatarUrl = userDetails.value("avatar").toString();  // 阿里云 OSS 地址
 							QString strIdNumber = userDetails.value("id_number").toString();
 							QString teacherUniqueId = teacherInfo.value("teacher_unique_id").toString();
-							
+
 							// 保存 teacher_unique_id -> id_number 的映射关系（用于后续查找头像）
 							if (!teacherUniqueId.isEmpty() && !strIdNumber.isEmpty()) {
 								CommonInfo::setTeacherIdNumberMapping(teacherUniqueId, strIdNumber);
@@ -405,7 +405,7 @@ public:
 							QString saveDir = QCoreApplication::applicationDirPath() + "/avatars/" + strIdNumber;
 							QDir().mkpath(saveDir);
 							QString filePath = saveDir + "/" + fileName;
-							
+
 							// 如果头像URL不为空，下载头像（异步下载）
 							if (!avatarUrl.isEmpty()) {
 								// 检查文件是否已存在
@@ -434,21 +434,21 @@ public:
 											return;
 										}
 										
-										QFile file(filePath);
-										if (!file.open(QIODevice::WriteOnly)) {
+							QFile file(filePath);
+							if (!file.open(QIODevice::WriteOnly)) {
 											qWarning() << "无法创建好友头像文件:" << filePath;
 											return;
-										}
+							}
 										
-										file.write(imageData);
-										file.close();
+							file.write(imageData);
+							file.close();
 										
 										qDebug() << "好友头像下载成功，保存到:" << filePath;
 										qDebug() << "teacher_unique_id:" << teacherUniqueId << "-> id_number:" << strIdNumber;
 									});
 								}
 							}
-							
+
 							/*if (fLayout)
 							{
 								fLayout->addLayout(makePairBtn(filePath, name, "green", "white", "", false));
@@ -2514,6 +2514,21 @@ public:
 		btnTalk->setIcon(QIcon(":/res/img/class_card_ic_intercom@2x.png"));
 		btnMsg->setIcon(QIcon(":/res/img/class_card_ic_notice@2x.png"));
 		btnTask->setIcon(QIcon(":/res/img/class_card_ic_school@2x.png"));
+		
+		// 连接对讲开关状态改变信号，更新"按住开始对讲"按钮状态
+		connect(m_groupInfo, &QGroupInfo::intercomEnabledChanged, this, [this](bool enabled) {
+			if (btnTalk) {
+				btnTalk->setEnabled(enabled);
+				// 如果对讲关闭，按钮灰化
+				if (!enabled) {
+					btnTalk->setStyleSheet("background-color: #454545; color: #888888; padding: 4px 8px; border: none;");
+				} else {
+					// 如果对讲开启，恢复原来的样式
+					btnTalk->setStyleSheet("background-color: #2D2E2D; color: white; padding: 4px 8px; border: none;");
+				}
+				qDebug() << "对讲开关状态改变，btnTalk按钮已" << (enabled ? "启用" : "禁用");
+			}
+		});
 		
 		// 保存按钮指针，用于根据群组类型显示/隐藏
 		m_btnSeat = btnSeat;
@@ -6269,7 +6284,7 @@ inline void ScheduleDialog::openIntercomWebPage()
 		if (QFile::exists(filePath)) {
 			currentUserIcon = QUrl::fromLocalFile(filePath).toString();
 			qDebug() << "找到当前用户头像: id_number=" << currentUserIdNumber << ", path=" << filePath;
-		} else {
+	} else {
 			qDebug() << "当前用户头像文件不存在: id_number=" << currentUserIdNumber << ", path=" << filePath;
 		}
 	}
@@ -6290,10 +6305,10 @@ inline void ScheduleDialog::openIntercomWebPage()
 		}
 	}
 	
-	// 如果头像路径是本地路径，转换为file://协议
+		// 如果头像路径是本地路径，转换为file://协议
 	if (!currentUserIcon.isEmpty() && QFile::exists(currentUserIcon)) {
-		currentUserIcon = QUrl::fromLocalFile(currentUserIcon).toString();
-	}
+			currentUserIcon = QUrl::fromLocalFile(currentUserIcon).toString();
+		}
 	
 	// 如果还是没有头像路径，使用默认头像URL
 	if (currentUserIcon.isEmpty()) {

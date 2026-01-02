@@ -1518,8 +1518,10 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, bool iGroupO
     // 班级群：开启对讲（普通群不显示）
     if (!m_isNormalGroup) {
         m_intercomWidget = new IntercomControlWidget(this);
-        connect(m_intercomWidget, &IntercomControlWidget::intercomToggled, this, [](bool enabled) {
+        connect(m_intercomWidget, &IntercomControlWidget::intercomToggled, this, [this](bool enabled) {
             qDebug() << "对讲开关状态:" << (enabled ? "开启" : "关闭");
+            // 发出信号通知父窗口（ScheduleDialog）更新对讲按钮状态
+            emit intercomEnabledChanged(enabled);
         });
         connect(m_intercomWidget, &IntercomControlWidget::buttonClicked, this, []() {
             qDebug() << "开启对讲按钮被点击";
@@ -3026,17 +3028,26 @@ void QGroupInfo::onSetLeaderRequested(const QString& memberId)
         return;
     }
     
-    // 检查成员是否已经是管理员
+    // 检查成员是否在群组中
+    bool isMemberInGroup = false;
     bool isAlreadyAdmin = false;
     QString memberName;
     for (const auto& member : m_groupMemberInfo) {
         if (member.member_id == memberId) {
+            isMemberInGroup = true;
             memberName = member.member_name;
             if (member.member_role == "管理员") {
                 isAlreadyAdmin = true;
             }
             break;
         }
+    }
+    
+    // 如果成员不在群组中，提示错误
+    if (!isMemberInGroup) {
+        QMessageBox::warning(this, "操作失败", 
+            QString("无法设置管理员：用户 %1 还不是群成员。\n\n请先邀请该用户加入群组，然后再设置管理员。").arg(memberId));
+        return;
     }
     
     if (isAlreadyAdmin) {
@@ -3096,6 +3107,11 @@ void QGroupInfo::onSetLeaderRequested(const QString& memberId)
                     // 特殊处理10004错误码（群组类型不支持设置管理员）
                     if (errorCode == 10004) {
                         errorMsg = QString("设置管理员失败\n错误码: %1\n错误描述: %2\n\n该群组类型不支持设置管理员功能。\n只有公开群（Public）、聊天室（ChatRoom）和直播群（AVChatRoom）支持设置管理员。").arg(errorCode).arg(errorDesc);
+                    } else if (errorDesc.contains("must be member", Qt::CaseInsensitive) || 
+                               errorDesc.contains("不是群成员", Qt::CaseInsensitive)) {
+                        // 处理"modify account must be member"错误：用户不是群成员
+                        errorMsg = QString("设置管理员失败\n错误码: %1\n错误描述: %2\n\n用户 %3 还不是群成员，无法设置管理员。\n请先邀请该用户加入群组，然后再设置管理员。")
+                            .arg(errorCode).arg(errorDesc).arg(memberId);
                     } else {
                         errorMsg = QString("设置管理员失败\n错误码: %1\n错误描述: %2").arg(errorCode).arg(errorDesc);
                     }

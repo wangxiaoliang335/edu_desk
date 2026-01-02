@@ -183,6 +183,7 @@ signals:
     void memberLeftGroup(const QString& groupId, const QString& leftUserId); // 成员退出群聊信号，传递退出的用户ID
     void groupDismissed(const QString& groupId); // 群聊解散信号，通知父窗口刷新群列表
     void membersRefreshed(const QString& groupId); // 成员列表需要刷新信号，通知父窗口刷新成员列表
+    void intercomEnabledChanged(bool enabled); // 对讲开关状态改变信号，通知父窗口更新对讲按钮状态
 
 private:
     // 普通群成员区（网格布局：头像在上，名字在下）

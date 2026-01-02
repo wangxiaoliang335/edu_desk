@@ -376,17 +376,8 @@ public:
         mainLayout->addLayout(bottomLayout);
 
         connect(btnCancel, &QPushButton::clicked, this, &QDialog::reject);
-        //connect(btnOk, &QPushButton::clicked, this, &QDialog::accept);
-        connect(btnOk, &QPushButton::clicked, this, [=]() {
-            QAbstractButton* checked = classGroup->checkedButton();
-            if (!checked) {
-                qWarning() << "没有选中的教师";
-                return;
-            }
-
-            // 不再发送 scheduleDialogNeeded 信号，ScheduleDialog 只在点击按钮时创建
-            accept();
-        });
+        // 确定按钮的点击事件已合并到 sendPrivateMessage 方法中
+        connect(btnOk, &QPushButton::clicked, this, &ClassTeacherDialog::sendPrivateMessage);
 
         // 限制窗口高度，避免超过屏幕高度（保留约20%边距）
         if (QGuiApplication::primaryScreen()) {
@@ -454,7 +445,7 @@ public:
         //connect(socket, &QWebSocket::connected, this, &ClassTeacherDialog::onConnected);
         //connect(socket, &QWebSocket::textMessageReceived, this, &ClassTeacherDialog::onMessageReceived);
         ////connect(btnOk, &QPushButton::clicked, this, &ClassTeacherDialog::sendBroadcast);
-        connect(btnOk, &QPushButton::clicked, this, &ClassTeacherDialog::sendPrivateMessage);
+        // 确定按钮的点击事件已合并到 sendPrivateMessage 方法中（在构造函数中已连接）
 
         //UserInfo userinfo = CommonInfo::GetData();
         //// 建立连接
@@ -814,6 +805,8 @@ private:
             // 使用腾讯SDK创建群组
             createGroupWithTIMSDK(groupName, teacher_unique_id, teacher_name, class_unique_id, userinfo);
             
+            // 不再发送 scheduleDialogNeeded 信号，ScheduleDialog 只在点击按钮时创建
+            accept();
         }
 
         //void sendPrivateMessage() {
