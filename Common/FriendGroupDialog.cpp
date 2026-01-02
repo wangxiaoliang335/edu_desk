@@ -17,6 +17,9 @@
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QNetworkReply>
+#include <QUrl>
+#include <QUrlQuery>
+#include <QMessageBox>
 #include <cstring>
 
 // 定义 TempRoomStorage 的静态成员变量（必须在所有包含之后，类定义之前）
@@ -137,8 +140,7 @@ void FriendGroupDialog::addClassNode(const QString& displayName, const QString& 
     if (!m_classRootItem || groupId.isEmpty())
         return;
     
-    // 更严格的验证：只有通过 fetchClassesByPrefix 获取的班级才应该显示
-    // 如果 classid 为空，说明这不是一个真正的班级，不应该添加到"班级"节点
+    // 验证：如果 classid 为空，说明这不是一个真正的班级，不应该添加到"班级"节点
     // 另外，如果 groupId 和 classid 不相等，说明这是群组而不是班级
     if (classid.isEmpty() || classid != groupId) {
         return; // 不是真正的班级，不添加到好友树的"班级"节点
@@ -660,7 +662,7 @@ FriendGroupDialog::FriendGroupDialog(QWidget* parent, TaQTWebSocket* pWs)
                         QString displayName = name.isEmpty() ? uname : name;
                         QString subjectLabel = subject.isEmpty() ? QString() : QStringLiteral("%1老师").arg(subject);
                         QString primaryText = subjectLabel.isEmpty() ? displayName : subjectLabel + displayName;
-                        QString subtitle = phone.isEmpty() ? QString() : phone;
+                        QString subtitle = QString(); // 不显示电话号码
                         addTeacherNode(primaryText, subtitle, avatarPath, teacherUniqueId);
                         /********************************************/
                     }
@@ -933,6 +935,16 @@ FriendGroupDialog::FriendGroupDialog(QWidget* parent, TaQTWebSocket* pWs)
         qDebug() << "收到加入群组成功信号，刷新群列表，群组ID:" << groupId;
         this->InitData();
         });
+    // 连接加入班级成功信号，刷新班级列表
+    connect(addGroupWidget, &TACAddGroupWidget1::classJoined, this, [this](const QString& classCode) {
+        qDebug() << "收到加入班级成功信号，刷新班级列表，班级编号:" << classCode;
+        this->loadTeacherClasses(); // 重新加载教师加入的班级列表
+        });
+    // 连接添加好友成功信号，刷新好友列表
+    connect(addGroupWidget, &TACAddGroupWidget1::friendAdded, this, [this](const QString& teacherUniqueId) {
+        qDebug() << "收到添加好友成功信号，刷新好友列表，教师唯一ID:" << teacherUniqueId;
+        this->InitData(); // 重新加载好友列表
+        });
     // 连接群组创建成功信号，刷新群组列表并关闭所有群聊窗口
     connect(addGroupWidget, &TACAddGroupWidget1::groupCreated, this, [this](const QString& groupId) {
         qDebug() << "收到群组创建成功信号，刷新群列表，群组ID:" << groupId;
@@ -1139,10 +1151,8 @@ void FriendGroupDialog::InitData()
         //groupUrl += userInfo.teacher_unique_id;
         //m_httpHandler->get(groupUrl);
         
-        // 获取班级列表并显示在"好友"标签页下的"班级"节点中
-        if (!userInfo.schoolId.isEmpty()) {
-            fetchClassesByPrefix(userInfo.schoolId);
-        }
+        // 加载教师加入的班级列表（使用 GET /teachers/classes 接口）
+        loadTeacherClasses();
     }
 }
 
@@ -1564,6 +1574,21 @@ void FriendGroupDialog::onWebSocketMessage(const QString& msg)
     QJsonObject rootObj = doc.object();
 
     const QString type = rootObj.value(QStringLiteral("type")).toString();
+    
+    // 处理添加好友成功消息
+    if (type == QStringLiteral("add_friend_success")) {
+        QString friendId = rootObj.value(QStringLiteral("friend_teacher_unique_id")).toString();
+        QString message = rootObj.value(QStringLiteral("message")).toString();
+        bool targetOnline = rootObj.value(QStringLiteral("target_online")).toBool();
+        
+        qDebug() << "收到添加好友成功消息，教师唯一ID:" << friendId << "目标用户在线:" << targetOnline;
+        
+        // 刷新好友列表
+        this->InitData();
+        
+        return;
+    }
+    
     if (type == QStringLiteral("prepare_class_history")) {
         processPrepareClassHistoryMessage(rootObj);
         return;
@@ -1856,4 +1881,86 @@ void FriendGroupDialog::downloadFriendAvatar(const QString& avatarUrl, const QSt
             }
         }
     });
+}
+
+// 加载教师加入的班级列表
+void FriendGroupDialog::loadTeacherClasses()
+{
+    if (!m_httpHandler)
+        return;
+    
+    UserInfo userInfo = CommonInfo::GetData();
+    if (userInfo.teacher_unique_id.isEmpty()) {
+        qDebug() << "无法加载班级列表：教师唯一ID为空";
+        return;
+    }
+    
+    QUrl url("http://47.100.126.194:5000/teachers/classes");
+    QUrlQuery query;
+    query.addQueryItem("teacher_unique_id", userInfo.teacher_unique_id);
+    url.setQuery(query);
+    
+    TAHttpHandler* loadHandler = new TAHttpHandler(this);
+    connect(loadHandler, &TAHttpHandler::success, this, [this](const QString& response) {
+        onLoadTeacherClassesResult(response);
+        sender()->deleteLater();
+    });
+    connect(loadHandler, &TAHttpHandler::failed, this, [this](const QString& error) {
+        qDebug() << "加载教师班级列表失败:" << error;
+        sender()->deleteLater();
+    });
+    
+    loadHandler->get(url.toString());
+}
+
+// 处理教师加入的班级列表结果
+void FriendGroupDialog::onLoadTeacherClassesResult(const QString& response)
+{
+    QJsonParseError parseError;
+    QJsonDocument jsonDoc = QJsonDocument::fromJson(response.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        qDebug() << "解析教师班级列表失败:" << parseError.errorString();
+        return;
+    }
+    
+    // 清空现有的班级节点（通过 GET /teachers/classes 接口加载的班级）
+    if (m_classRootItem) {
+        // 清空班级节点的所有子项
+        while (m_classRootItem->childCount() > 0) {
+            QTreeWidgetItem* child = m_classRootItem->child(0);
+            QString groupId = child->data(0, Qt::UserRole + 1).toString();
+            m_classItemMap.remove(groupId); // 从映射中移除
+            delete child; // 删除子项
+        }
+    }
+    
+    QJsonObject obj = jsonDoc.object();
+    // 根据服务器返回的数据结构解析
+    // 假设返回格式：{ "data": { "classes": [...] } } 或 { "data": [...] }
+    if (obj.contains("data")) {
+        QJsonValue dataValue = obj["data"];
+        QJsonArray classesArray;
+        
+        if (dataValue.isArray()) {
+            classesArray = dataValue.toArray();
+        } else if (dataValue.isObject()) {
+            QJsonObject dataObj = dataValue.toObject();
+            if (dataObj.contains("classes") && dataObj["classes"].isArray()) {
+                classesArray = dataObj["classes"].toArray();
+            }
+        }
+        
+        // 将班级添加到好友树的"班级"节点
+        for (int i = 0; i < classesArray.size(); i++) {
+            QJsonObject classObj = classesArray[i].toObject();
+            QString classCode = classObj["class_code"].toString();
+            QString className = classObj["class_name"].toString();
+            if (className.isEmpty()) className = classCode;
+            
+            // 添加到班级节点（isClassGroup=false，因为这是班级，不是班级群）
+            addClassNode(className, classCode, classCode, false, false);
+        }
+        
+        updateFriendCounts();
+    }
 }

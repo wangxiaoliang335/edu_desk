@@ -21,6 +21,9 @@
 #include <QSet>
 #include <QTreeWidget>
 #include <QHash>
+#include <QLineEdit>
+#include <QListWidget>
+#include <QButtonGroup>
 #include "FriendNotifyDialog.h"
 #include "TACAddGroupWidget.h"
 #include "GroupNotifyDialog.h"
@@ -154,4 +157,6 @@ private:
     void downloadGroupAvatar(const QString& faceUrl, const QString& groupId);
     // 下载好友头像并保存到本地
     void downloadFriendAvatar(const QString& avatarUrl, const QString& idNumber, const QString& teacherUniqueId);
+    void loadTeacherClasses(); // 加载教师加入的班级列表
+    void onLoadTeacherClassesResult(const QString& response);
 };

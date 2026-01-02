@@ -19,6 +19,8 @@ public:
 	QVector<QString> getNoticeMsg();
 signals:
 	void groupJoined(const QString& groupId); // 加入群组成功信号，转发SearchDialog的信号
+	void classJoined(const QString& classCode); // 加入班级成功信号，转发SearchDialog的信号
+	void friendAdded(const QString& teacherUniqueId); // 添加好友成功信号，转发SearchDialog的信号
 	void groupCreated(const QString& groupId); // 群组创建成功信号，转发ClassTeacherDialog的信号
 	void scheduleDialogNeeded(const QString& groupId, const QString& groupName); // 需要创建/初始化ScheduleDialog的信号
 	void scheduleDialogRefreshNeeded(const QString& groupId); // 需要刷新ScheduleDialog成员列表的信号

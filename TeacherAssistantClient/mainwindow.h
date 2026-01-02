@@ -61,6 +61,15 @@ protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    
+    // 允许派生类访问的方法
+    void applyDisplayPreferences();
+    void applyManualMinimalMode(bool minimal);
+    
+    // 允许派生类访问的成员
+    QWidget *mainToolbarWidget;
+    QPushButton *minimalToggleButton;
+    bool manualMinimalMode;
 
 private:
     struct CourseCellData;
@@ -87,9 +96,7 @@ private:
     QWidget *buildDisplayModePanel();
     void setupScheduleTable();
     void connectSignals();
-    void applyDisplayPreferences();
     void applyChromeVisibility(bool visible);
-    void applyManualMinimalMode(bool minimal);
     void adjustWindowToKeepTable(const QPoint &targetTopLeftGlobal, const QSize &targetSize);
     void setCaptionVisible(bool visible);
     QRect clientRectFromFrame(const QRect &frame) const;
@@ -259,8 +266,6 @@ private:
     bool hasOverlapWithOthers(int candidateIndex, QString *detailMessage = nullptr) const;
     int currentEditableBaseIndex() const;
     void updateDirtyStateAfterSave(int savedIndex);
-
-    QWidget *mainToolbarWidget;
     QPushButton *previousWeekButton;
     QPushButton *nextWeekButton;
     QPushButton *currentWeekButton;
@@ -268,7 +273,6 @@ private:
     QPushButton *addReminderButton;
     QPushButton *configButton;
     QPushButton *displayModeButton;
-    QPushButton *minimalToggleButton;
     QPushButton *statisticsButton;
     QPushButton *addMergedRowButton;
     QPushButton *addLessonRowButton;
@@ -356,7 +360,6 @@ private:
     bool showWeekendInDisplay;
     bool showChromeInDisplay;
     bool chromeHiddenInDisplay;
-    bool manualMinimalMode;
     bool savedFrameGeometryValid;
     QRect savedFrameGeometry;
     bool displayDragging;

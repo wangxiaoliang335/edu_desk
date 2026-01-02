@@ -12,9 +12,13 @@
 TACAddGroupWidget1::TACAddGroupWidget1(QWidget *parent, TaQTWebSocket* pWs)
 	: TAFloatingWidget(parent)
 {
-	m_searchDlg = new SearchDialog(this);
+	m_searchDlg = new SearchDialog(this, pWs);
 	// 连接SearchDialog的加入群组成功信号，转发给FriendGroupDialog
 	connect(m_searchDlg, &SearchDialog::groupJoined, this, &TACAddGroupWidget1::groupJoined);
+	// 连接SearchDialog的加入班级成功信号，转发给FriendGroupDialog
+	connect(m_searchDlg, &SearchDialog::classJoined, this, &TACAddGroupWidget1::classJoined);
+	// 连接SearchDialog的添加好友成功信号，转发给FriendGroupDialog
+	connect(m_searchDlg, &SearchDialog::friendAdded, this, &TACAddGroupWidget1::friendAdded);
 	m_classTeacherDlg = new ClassTeacherDialog(this, pWs);
 	// 连接ClassTeacherDialog的群组创建成功信号，转发给FriendGroupDialog
 	connect(m_classTeacherDlg, &ClassTeacherDialog::groupCreated, this, &TACAddGroupWidget1::groupCreated);

@@ -404,11 +404,13 @@ void MainWindow::setupUi()
 
     mainToolbarWidget = buildMainToolbar();
     mainLayoutRoot->addWidget(mainToolbarWidget);
+    // 默认完整模式，工具栏可见（applyDisplayPreferences()会根据manualMinimalMode调整）
     if (mainToolbarWidget)
-        mainToolbarWidget->setVisible(false);
+        mainToolbarWidget->setVisible(true);
 
     secondaryContainer = new QFrame(this);
     secondaryContainer->setFrameShape(QFrame::StyledPanel);
+    // 默认完整模式，二级容器隐藏（只有打开特定面板时才显示）
     secondaryContainer->setVisible(false);
     QVBoxLayout *secondaryLayout = new QVBoxLayout(secondaryContainer);
     secondaryLayout->setContentsMargins(12, 8, 12, 8);
@@ -469,7 +471,7 @@ QWidget *MainWindow::buildMainToolbar()
     previousWeekButton->setIcon(createCircleIcon(QColor("#2563eb"), QStringLiteral("<")));
     previousWeekButton->setIconSize(iconSize);
     previousWeekButton->setToolTip(QString::fromUtf8("上一周"));
-    weekLabel = new QPushButton(QString::fromUtf8("\xe7\xac\xac\x31\xe5\x91\xa8"), toolbar);
+    weekLabel = new QPushButton(QString::fromUtf8("第1周"), toolbar);
     weekLabel->setCursor(Qt::PointingHandCursor);
     weekLabel->setCheckable(false);
     weekLabel->setMinimumWidth(0);
@@ -486,13 +488,13 @@ QWidget *MainWindow::buildMainToolbar()
     currentWeekButton->setIconSize(iconSize);
     currentWeekButton->setToolTip(QString::fromUtf8("定位当前周"));
 
-    temporaryAdjustButton = new QPushButton(QString::fromUtf8("\xe4\xb8\xb4\xe6\x97\xb6\xe8\xb0\x83\xe8\xaf\xbe"), toolbar);
+    temporaryAdjustButton = new QPushButton(QString::fromUtf8("临时调课"), toolbar);
     temporaryAdjustButton->setToolTip(QString::fromUtf8("临时调课"));
 
-    addReminderButton = new QPushButton(QString::fromUtf8("\xe6\xb7\xbb\xe5\x8a\xa0\xe6\x8f\x90\xe9\x86\x92"), toolbar);
+    addReminderButton = new QPushButton(QString::fromUtf8("添加提醒"), toolbar);
     addReminderButton->setToolTip(QString::fromUtf8("添加提醒"));
 
-    configButton = new QPushButton(QString::fromUtf8("\xe9\x85\x8d\xe7\xbd\xae"), toolbar);
+    configButton = new QPushButton(QString::fromUtf8("配置"), toolbar);
     configButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
     configButton->setStyleSheet("QPushButton{padding:4px 8px;}");
     configButton->setToolTip(QString::fromUtf8("配置基础课表"));
@@ -502,13 +504,13 @@ QWidget *MainWindow::buildMainToolbar()
     displayModeButton->setIconSize(iconSize);
     displayModeButton->setToolTip(QString::fromUtf8("显示方式"));
 
-    minimalToggleButton = new QPushButton(QString::fromUtf8("\xe6\x9e\x81\xe7\xae\x80"), toolbar);
+    minimalToggleButton = new QPushButton(QString::fromUtf8("极简"), toolbar);
     minimalToggleButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
     minimalToggleButton->setStyleSheet("QPushButton{padding:4px 8px;}");
     minimalToggleButton->setCheckable(true);
     minimalToggleButton->setToolTip(QString::fromUtf8("极简视图：仅显示课程表"));
 
-    statisticsButton = new QPushButton(QString::fromUtf8("\xe7\xbb\x9f\xe8\xae\xa1"), toolbar);
+    statisticsButton = new QPushButton(QString::fromUtf8("统计"), toolbar);
     statisticsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
     statisticsButton->setStyleSheet("QPushButton{padding:4px 8px;}");
     statisticsButton->setToolTip(QString::fromUtf8("查看统计"));

@@ -42,7 +42,7 @@ void TaQTWebSocket::onConnected() {
 }
 
 void TaQTWebSocket::onMessageReceived(const QString& msg) {
-    if (0 != msg.compare("pong") && 0 == msg.contains("不在线"))
+    if (0 != msg.compare("pong"))
     {
         m_NoticeMsg.push_back(msg);
         emit newMessage(msg); // 发信号

@@ -48,8 +48,10 @@ public:
             // 再次确保窗口标志
             setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
             
-            // 确保工具栏可见
-            ensureToolbarVisible();
+            // 使用applyManualMinimalMode函数设置完整模式（显示工具栏）
+            // 这会正确更新所有相关状态和UI
+            applyManualMinimalMode(false);
+            
             applyToolbarStyle();
             
             // 确保窗口和中央控件都应用了样式
@@ -62,7 +64,7 @@ public:
         // 安装事件过滤器，拦截所有可能修改窗口标志的事件
         installEventFilter(this);
         
-        // 创建定时器，定期检查并确保工具栏可见（包括极简模式）
+        // 创建定时器，定期检查并确保工具栏状态正确
         m_toolbarCheckTimer = new QTimer(this);
         m_toolbarCheckTimer->setInterval(100); // 每100ms检查一次
         m_toolbarCheckTimer->setSingleShot(false);
@@ -123,7 +125,7 @@ protected:
             central->setStyleSheet("background-color: #282A2B; color: #ffffff;");
         }
         
-        // 确保工具栏始终可见
+        // 根据模式设置工具栏可见性
         ensureToolbarVisible();
         
         // 延迟应用样式，确保窗口完全显示后再设置
@@ -212,9 +214,15 @@ private:
     }
 
 private:
-    // 确保工具栏可见的辅助方法
+    // 确保工具栏状态正确的辅助方法
     void ensureToolbarVisible()
     {
+        // 根据manualMinimalMode设置工具栏可见性
+        if (mainToolbarWidget) {
+            mainToolbarWidget->setVisible(!manualMinimalMode);
+        }
+        
+        // 也检查通过布局找到的工具栏
         QWidget* central = centralWidget();
         if (central) {
             QWidget* toolbar = nullptr;
@@ -225,8 +233,9 @@ private:
                     toolbar = item->widget();
                 }
             }
-            if (toolbar && !toolbar->isVisible()) {
-                toolbar->setVisible(true);
+            // 根据模式设置工具栏可见性
+            if (toolbar) {
+                toolbar->setVisible(!manualMinimalMode);
             }
         }
     }

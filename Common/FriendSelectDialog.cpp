@@ -125,8 +125,6 @@ void FriendSelectDialog::onHttpSuccess(const QString& responseString)
     {
         QJsonObject obj = jsonDoc.object();
 
-        clearLayout(m_friendsLayout);
-
         if (obj["friends"].isArray())
         {
             QJsonArray friendsArray = obj.value("friends").toArray();
@@ -489,4 +487,5 @@ void FriendSelectDialog::clearLayout(QVBoxLayout* layout)
     // 重新添加stretch
     layout->addStretch();
 }
+
 

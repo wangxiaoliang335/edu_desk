@@ -5,6 +5,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QButtonGroup>
 #include <QScrollArea>
 #include <QWidget>
 #include <QFrame>
@@ -26,6 +27,7 @@
 #include <QResizeEvent>
 #include "TAHttpHandler.h"
 #include "CommonInfo.h"
+#include "TaQTWebSocket.h"
 #include "ImSDK/includes/TIMCloud.h"
 #include "ImSDK/includes/TIMCloudDef.h"
 
@@ -351,7 +353,7 @@ class SearchDialog : public QDialog
 {
     Q_OBJECT
 public:
-    SearchDialog(QWidget* parent = nullptr) : QDialog(parent)
+    SearchDialog(QWidget* parent = nullptr, TaQTWebSocket* pWs = nullptr) : QDialog(parent), m_pWs(pWs)
     {
         setWindowTitle("查找班级/教师/群");
         resize(500, 600);
@@ -432,7 +434,7 @@ public:
         // 搜索栏
         QHBoxLayout* searchLayout = new QHBoxLayout;
         m_editSearch = new QLineEdit;
-        m_editSearch->setPlaceholderText("输入群ID或群名称");
+        m_editSearch->setPlaceholderText("输入班级编号/教师编号/群编号");
         m_editSearch->setStyleSheet("background-color: #454545; color: #f5f5f5; padding: 6px; border-radius: 15px;");
         QPushButton* btnSearch = new QPushButton("搜索");
         btnSearch->setStyleSheet("background-color: #454545; color: #f5f5f5; padding: 6px 12px; border-radius: 15px;");
@@ -447,21 +449,51 @@ public:
 
         // 分类按钮行
         QHBoxLayout* filterLayout = new QHBoxLayout;
-        QPushButton* btnAll = new QPushButton("全部");
-        QPushButton* btnClass = new QPushButton("班级");
-        QPushButton* btnTeacher = new QPushButton("教师");
-        QPushButton* btnGroup = new QPushButton("群");
+        m_btnAll = new QPushButton("全部");
+        m_btnClass = new QPushButton("班级");
+        m_btnTeacher = new QPushButton("教师");
+        m_btnGroup = new QPushButton("群");
+
+        // 创建按钮组
+        m_categoryButtonGroup = new QButtonGroup(this);
+        m_categoryButtonGroup->setExclusive(true);
+        m_categoryButtonGroup->addButton(m_btnAll, 0);
+        m_categoryButtonGroup->addButton(m_btnClass, 1);
+        m_categoryButtonGroup->addButton(m_btnTeacher, 2);
+        m_categoryButtonGroup->addButton(m_btnGroup, 3);
 
         QString buttonStyle = "background-color: #454545; color: #f5f5f5; padding: 6px 12px; font-weight: bold; border-radius: 15px;";
-        btnAll->setStyleSheet(buttonStyle);
-        btnClass->setStyleSheet(buttonStyle);
-        btnTeacher->setStyleSheet(buttonStyle);
-        btnGroup->setStyleSheet(buttonStyle);
+        QString checkedButtonStyle = "background-color: #3569ff; color: #ffffff; padding: 6px 12px; font-weight: bold; border-radius: 15px;";
+        
+        m_btnAll->setCheckable(true);
+        m_btnClass->setCheckable(true);
+        m_btnTeacher->setCheckable(true);
+        m_btnGroup->setCheckable(true);
+        m_btnAll->setChecked(true); // 默认选中"全部"
+        m_currentSearchCategory = 0;
+        
+        // 设置初始样式，默认选中"全部"按钮
+        m_btnAll->setStyleSheet(checkedButtonStyle);
+        m_btnClass->setStyleSheet(buttonStyle);
+        m_btnTeacher->setStyleSheet(buttonStyle);
+        m_btnGroup->setStyleSheet(buttonStyle);
+        
+        // 连接分类按钮点击事件
+        connect(m_categoryButtonGroup, QOverload<int>::of(&QButtonGroup::buttonClicked), this, [this](int id) {
+            m_currentSearchCategory = id;
+            // 更新按钮样式
+            QString buttonStyle = "background-color: #454545; color: #f5f5f5; padding: 6px 12px; font-weight: bold; border-radius: 15px;";
+            QString checkedButtonStyle = "background-color: #3569ff; color: #ffffff; padding: 6px 12px; font-weight: bold; border-radius: 15px;";
+            m_btnAll->setStyleSheet(m_btnAll->isChecked() ? checkedButtonStyle : buttonStyle);
+            m_btnClass->setStyleSheet(m_btnClass->isChecked() ? checkedButtonStyle : buttonStyle);
+            m_btnTeacher->setStyleSheet(m_btnTeacher->isChecked() ? checkedButtonStyle : buttonStyle);
+            m_btnGroup->setStyleSheet(m_btnGroup->isChecked() ? checkedButtonStyle : buttonStyle);
+        });
 
-        filterLayout->addWidget(btnAll);
-        filterLayout->addWidget(btnClass);
-        filterLayout->addWidget(btnTeacher);
-        filterLayout->addWidget(btnGroup);
+        filterLayout->addWidget(m_btnAll);
+        filterLayout->addWidget(m_btnClass);
+        filterLayout->addWidget(m_btnTeacher);
+        filterLayout->addWidget(m_btnGroup);
         mainLayout->addLayout(filterLayout);
 
         // 列表区域
@@ -474,221 +506,704 @@ public:
         m_listLayout->addStretch();
         m_scrollArea->setWidget(m_listContainer);
         mainLayout->addWidget(m_scrollArea);
+        
+        // 注册接收 WebSocket 消息并连接信号
+        // 连接 WebSocket 消息信号
+        if (m_pWs) {
+            TaQTWebSocket::regRecvDlg(this);
+            connect(m_pWs, &TaQTWebSocket::newMessage, this, &SearchDialog::onWebSocketMessage);
+        }
+        // 我们需要在 onWebSocketMessage 中处理消息
     }
 
 signals:
     void groupJoined(const QString& groupId); // 加入群组成功信号
+    void classJoined(const QString& classCode); // 加入班级成功信号
+    void friendAdded(const QString& teacherUniqueId); // 添加好友成功信号
 
 private slots:
+    void onWebSocketMessage(const QString& msg)
+    {
+        // 解析 WebSocket 消息
+        QJsonParseError parseError;
+        QJsonDocument jsonDoc = QJsonDocument::fromJson(msg.toUtf8(), &parseError);
+        if (parseError.error != QJsonParseError::NoError) {
+            return; // 不是 JSON 格式，忽略
+        }
+        
+        QJsonObject obj = jsonDoc.object();
+        QString type = obj["type"].toString();
+        
+        // 处理添加好友成功消息
+        if (type == "add_friend_success") {
+            QString friendId = obj["friend_teacher_unique_id"].toString();
+            QString message = obj["message"].toString();
+            bool targetOnline = obj["target_online"].toBool();
+            
+            if (!friendId.isEmpty()) {
+                // 添加到好友列表
+                m_friendIds.insert(friendId);
+                
+                // 更新按钮状态
+                if (m_addFriendButtons.contains(friendId)) {
+                    QPushButton* btn = m_addFriendButtons[friendId];
+                    if (btn) {
+                        btn->setText("已添加");
+                        btn->setEnabled(false);
+                        btn->setStyleSheet("background-color: #454545; color: #d3d3d3; padding: 4px 12px; border-radius: 15px;");
+                        // 断开之前的连接，因为按钮已经不可点击
+                        btn->disconnect();
+                    }
+                }
+                
+                // 发出信号，通知 FriendGroupDialog 刷新好友列表
+                emit this->friendAdded(friendId);
+                
+                qDebug() << "添加好友成功:" << friendId << "目标用户在线:" << targetOnline;
+                
+                // 显示成功提示
+                SearchMessageDialog* msgDlg = new SearchMessageDialog(this);
+                msgDlg->setTitle("成功");
+                msgDlg->setMessage(message);
+                msgDlg->exec();
+            }
+        } else if (type == "error") {
+            // 处理错误消息（可能是添加好友失败）
+            QString errorMsg = obj["message"].toString();
+            // 只处理与添加好友相关的错误
+            if (errorMsg.contains("添加好友") || errorMsg.contains("teacher_unique_id") || errorMsg.contains("自己")) {
+                qDebug() << "添加好友失败:" << errorMsg;
+                
+                SearchMessageDialog* msgDlg = new SearchMessageDialog(this);
+                msgDlg->setTitle("错误");
+                msgDlg->setMessage(errorMsg);
+                msgDlg->exec();
+            }
+        }
+    }
+    
     void onSearchClicked()
     {
-        // 获取当前用户信息
-        //UserInfo userInfo = CommonInfo::GetData();
+        QString keyword = m_editSearch->text().trimmed();
+        if (keyword.isEmpty()) {
+            clearSearchResults();
+            return;
+        }
+        
         // 获取已加入的群组列表（用于判断是否已加入）
         loadJoinedGroups();
-
-        QString searchKey = m_editSearch->text().trimmed();
-        if (searchKey.isEmpty()) {
-            return;
-        }
-
-        // 获取当前用户信息
-        UserInfo userInfo = CommonInfo::GetData();
-        m_currentUserId = userInfo.teacher_unique_id;
-        if (userInfo.schoolId.isEmpty()) {
-            qDebug() << "学校ID为空，无法搜索";
-            return;
-        }
-
+        // 获取好友列表（用于判断教师是否已经是好友）
+        loadFriends();
+        
         // 清空之前的搜索结果
         clearSearchResults();
+        m_searchClassResults.clear();
+        m_searchTeacherResults.clear();
+        m_searchGroupResults.clear();
+        m_pendingSearchRequests = 0;
+        
         // 重置搜索结果计数
         m_groupCount = 0;
         m_teacherCount = 0;
-
-        // 判断搜索类型：如果搜索键是纯数字或包含@TGS，可能是group_id；否则可能是group_name
-        QString searchType = "group_name"; // 默认按名称搜索
-        if (searchKey.contains("@TGS") || (searchKey.length() <= 10 && searchKey.toInt() > 0)) {
-            searchType = "group_id";
-        }
-
-        // 构建群组搜索URL
-        QUrl groupUrl("http://47.100.126.194:5000/groups/search");
-        QUrlQuery groupQuery;
-        // 不再需要schoolid参数，现在不同的学校也可以查询
-        if (searchType == "group_id") {
-            groupQuery.addQueryItem("group_id", searchKey);
-        } else {
-            groupQuery.addQueryItem("group_name", searchKey);
-        }
-        groupUrl.setQuery(groupQuery);
-
-        // 发送群组搜索请求
-        if (m_httpHandler) {
-            m_httpHandler->get(groupUrl.toString());
-            qDebug() << "群组搜索请求:" << groupUrl.toString();
-        }
-
-        // 构建教师搜索URL
-        QUrl teacherUrl("http://47.100.126.194:5000/teachers/search");
-        QUrlQuery teacherQuery;
-        // 不再需要schoolid参数，现在不同的学校也可以查询
+        m_classCount = 0;
         
-        // 判断教师搜索类型：如果搜索键是纯数字，可能是teacher_unique_id；否则按name搜索
-        bool isNumeric = false;
-        searchKey.toInt(&isNumeric);
-        if (isNumeric && searchKey.length() <= 20) {
-            // 可能是teacher_unique_id，尝试按teacher_unique_id搜索
-            teacherQuery.addQueryItem("teacher_unique_id", searchKey);
-        } else {
-            // 按name模糊搜索
-            teacherQuery.addQueryItem("name", searchKey);
+        // 根据选择的分类执行搜索
+        if (m_currentSearchCategory == 0) {
+            // 全部：搜索所有类型（群只搜索班级群）
+            m_pendingSearchRequests = 3; // 班级、教师、班级群
+            searchClasses(keyword);
+            searchTeachers(keyword);
+            searchGroups(keyword); // 只搜索班级群
+        } else if (m_currentSearchCategory == 1) {
+            // 班级
+            m_pendingSearchRequests = 1;
+            searchClasses(keyword);
+        } else if (m_currentSearchCategory == 2) {
+            // 教师
+            m_pendingSearchRequests = 1;
+            searchTeachers(keyword);
+        } else if (m_currentSearchCategory == 3) {
+            // 群（只搜索班级群）
+            m_pendingSearchRequests = 1; // 只有班级群
+            searchGroups(keyword);
         }
-        teacherUrl.setQuery(teacherQuery);
-
-        // 使用独立的QNetworkAccessManager发送教师搜索请求，避免与群组搜索响应冲突
-        QNetworkAccessManager* teacherManager = new QNetworkAccessManager(this);
-        QNetworkRequest teacherRequest(teacherUrl);
-        QNetworkReply* teacherReply = teacherManager->get(teacherRequest);
-        
-        connect(teacherReply, &QNetworkReply::finished, this, [=]() {
-            if (teacherReply->error() == QNetworkReply::NoError) {
-                QByteArray data = teacherReply->readAll();
-                handleTeacherSearchResponse(QString::fromUtf8(data));
-            } else {
-                qDebug() << "教师搜索失败:" << teacherReply->errorString();
-            }
-            teacherReply->deleteLater();
-            teacherManager->deleteLater();
-        });
-        
-        qDebug() << "教师搜索请求:" << teacherUrl.toString();
     }
 
     void handleSearchResponse(const QString& responseString)
     {
-        QJsonParseError parseError;
-        QJsonDocument jsonDoc = QJsonDocument::fromJson(responseString.toUtf8(), &parseError);
-        if (parseError.error != QJsonParseError::NoError) {
-            qDebug() << "群组搜索JSON解析错误:" << parseError.errorString();
+        // 这个方法可能不再使用，因为searchClassGroups已经直接调用onSearchGroupResult
+        // 保留以防其他地方调用
+        onSearchGroupResult(responseString, true); // 服务器接口返回的是班级群
+    }
+    
+    // 搜索班级
+    void searchClasses(const QString& keyword)
+    {
+        if (!m_httpHandler)
             return;
-        }
-
-        if (!jsonDoc.isObject()) {
-            qDebug() << "群组搜索返回的不是JSON对象";
-            return;
-        }
-
-        QJsonObject obj = jsonDoc.object();
-        if (!obj["data"].isObject()) {
-            qDebug() << "群组搜索返回数据中没有data字段";
-            return;
-        }
-
-        QJsonObject dataObj = obj["data"].toObject();
         
-        // 更新群组搜索结果数量
-        m_groupCount = dataObj["count"].toInt();
-        updateTotalCount();
-
-        // 处理群组列表
-        if (dataObj["groups"].isArray()) {
-            QJsonArray groupsArray = dataObj["groups"].toArray();
-            for (int i = 0; i < groupsArray.size(); i++) {
-                QJsonObject groupObj = groupsArray[i].toObject();
-                QString groupId = groupObj["group_id"].toString();
-                QString groupName = groupObj["group_name"].toString();
-                QString classid = groupObj["classid"].toString();
-                QString schoolid = groupObj["schoolid"].toString();
-                QString introduction = groupObj["introduction"].toString();
-                QString notification = groupObj["notification"].toString();
-                int memberNum = groupObj["member_num"].toInt();
-
-                // 构建描述信息
-                QString desc = introduction.isEmpty() ? notification : introduction;
-                if (desc.isEmpty()) {
-                    desc = "群组ID: " + groupId;
-                }
-
-                // 判断当前用户是否已经是该群的成员
-                bool isMember = m_joinedGroupIds.contains(groupId);
-
-                // 添加搜索结果项
-                addListItem(m_listLayout, "", groupName, QString::number(memberNum), 
-                           classid.isEmpty() ? "群组" : "班级群", desc, groupId, isMember);
+        UserInfo userInfo = CommonInfo::GetData();
+        QUrl url("http://47.100.126.194:5000/classes/search");
+        QUrlQuery query;
+        
+        // 添加班级编号（必填）
+        query.addQueryItem("class_code", keyword.trimmed());
+        
+        // 添加学校ID（可选，如果存在）
+        if (!userInfo.schoolId.isEmpty()) {
+            query.addQueryItem("schoolid", userInfo.schoolId);
+        }
+        
+        url.setQuery(query);
+        
+        // 创建临时TAHttpHandler用于搜索请求
+        TAHttpHandler* searchHandler = new TAHttpHandler(this);
+        connect(searchHandler, &TAHttpHandler::success, this, [this](const QString& response) {
+            onSearchClassResult(response);
+            sender()->deleteLater();
+        });
+        connect(searchHandler, &TAHttpHandler::failed, this, [this](const QString& error) {
+            qDebug() << "搜索班级失败:" << error;
+            m_pendingSearchRequests--;
+            if (m_pendingSearchRequests <= 0) {
+                displaySearchResults();
+            }
+            sender()->deleteLater();
+        });
+        
+        searchHandler->get(url.toString());
+    }
+    
+    // 搜索教师
+    void searchTeachers(const QString& keyword)
+    {
+        if (!m_httpHandler)
+            return;
+        
+        UserInfo userInfo = CommonInfo::GetData();
+        QUrl url("http://47.100.126.194:5000/teachers/search");
+        QUrlQuery query;
+        
+        // 判断输入的是teacher_unique_id还是姓名
+        QString trimmedKeyword = keyword.trimmed();
+        
+        // 判断是否为ID格式
+        bool containsChinese = false;
+        for (const QChar& ch : trimmedKeyword) {
+            if (ch.unicode() >= 0x4E00 && ch.unicode() <= 0x9FFF) {
+                containsChinese = true;
+                break;
             }
         }
+        
+        bool looksLikeId = !containsChinese && 
+                           trimmedKeyword.length() <= 50 &&
+                           (trimmedKeyword.contains("-") || 
+                            trimmedKeyword.contains("_") ||
+                            (trimmedKeyword.length() <= 30 && !trimmedKeyword.contains(" ")));
+        
+        if (looksLikeId) {
+            query.addQueryItem("teacher_unique_id", trimmedKeyword);
+        } else {
+            query.addQueryItem("name", trimmedKeyword);
+        }
+        
+        url.setQuery(query);
+        
+        TAHttpHandler* searchHandler = new TAHttpHandler(this);
+        connect(searchHandler, &TAHttpHandler::success, this, [this](const QString& response) {
+            onSearchTeacherResult(response);
+            sender()->deleteLater();
+        });
+        connect(searchHandler, &TAHttpHandler::failed, this, [this](const QString& error) {
+            qDebug() << "搜索教师失败:" << error;
+            m_pendingSearchRequests--;
+            if (m_pendingSearchRequests <= 0) {
+                displaySearchResults();
+            }
+            sender()->deleteLater();
+        });
+        
+        searchHandler->get(url.toString());
     }
-
-    void handleTeacherSearchResponse(const QString& responseString)
+    
+    // 搜索群
+    void searchGroups(const QString& keyword)
+    {
+        QString trimmedKeyword = keyword.trimmed();
+        if (trimmedKeyword.isEmpty()) {
+            return;
+        }
+        
+        // 只搜索班级群：使用服务器接口
+        searchClassGroups(keyword);
+    }
+    
+    // 搜索班级群（使用服务器接口）
+    void searchClassGroups(const QString& keyword)
+    {
+        if (!m_httpHandler)
+            return;
+        
+        UserInfo userInfo = CommonInfo::GetData();
+        QUrl url("http://47.100.126.194:5000/groups/search");
+        QUrlQuery query;
+        
+        // 判断输入的是group_id还是群名称
+        QString trimmedKeyword = keyword.trimmed();
+        
+        // 判断是否为ID格式
+        bool containsChinese = false;
+        for (const QChar& ch : trimmedKeyword) {
+            if (ch.unicode() >= 0x4E00 && ch.unicode() <= 0x9FFF) {
+                containsChinese = true;
+                break;
+            }
+        }
+        
+        bool looksLikeId = !containsChinese && 
+                           trimmedKeyword.length() <= 50 &&
+                           (trimmedKeyword.contains("-") || 
+                            trimmedKeyword.contains("_") ||
+                            (trimmedKeyword.length() <= 30 && !trimmedKeyword.contains(" ")));
+        
+        if (looksLikeId) {
+            query.addQueryItem("group_id", trimmedKeyword);
+        } else {
+            query.addQueryItem("group_name", trimmedKeyword);
+        }
+        
+        url.setQuery(query);
+        
+        TAHttpHandler* searchHandler = new TAHttpHandler(this);
+        connect(searchHandler, &TAHttpHandler::success, this, [this](const QString& response) {
+            onSearchGroupResult(response, true); // true表示是班级群
+            sender()->deleteLater();
+        });
+        connect(searchHandler, &TAHttpHandler::failed, this, [this](const QString& error) {
+            qDebug() << "搜索班级群失败:" << error;
+            m_pendingSearchRequests--;
+            if (m_pendingSearchRequests <= 0) {
+                displaySearchResults();
+            }
+            sender()->deleteLater();
+        });
+        
+        searchHandler->get(url.toString());
+    }
+    
+    
+    // 处理班级搜索结果
+    void onSearchClassResult(const QString& response)
     {
         QJsonParseError parseError;
-        QJsonDocument jsonDoc = QJsonDocument::fromJson(responseString.toUtf8(), &parseError);
+        QJsonDocument jsonDoc = QJsonDocument::fromJson(response.toUtf8(), &parseError);
         if (parseError.error != QJsonParseError::NoError) {
-            qDebug() << "教师搜索JSON解析错误:" << parseError.errorString();
+            qDebug() << "解析班级搜索结果失败:" << parseError.errorString();
+            m_pendingSearchRequests--;
+            if (m_pendingSearchRequests <= 0) {
+                displaySearchResults();
+            }
             return;
         }
-
-        if (!jsonDoc.isObject()) {
-            qDebug() << "教师搜索返回的不是JSON对象";
-            return;
-        }
-
-        QJsonObject obj = jsonDoc.object();
-        if (!obj["data"].isObject()) {
-            qDebug() << "教师搜索返回数据中没有data字段";
-            return;
-        }
-
-        QJsonObject dataObj = obj["data"].toObject();
         
-        // 更新教师搜索结果数量
-        m_teacherCount = dataObj["count"].toInt();
-        updateTotalCount();
-
-        // 处理教师列表
-        if (dataObj["teachers"].isArray()) {
-            QJsonArray teachersArray = dataObj["teachers"].toArray();
-            for (int i = 0; i < teachersArray.size(); i++) {
-                QJsonObject teacherObj = teachersArray[i].toObject();
-                QString teacherId = teacherObj["id"].toString();
-                QString teacherName = teacherObj["name"].toString();
-                QString teacherUniqueId = teacherObj["teacher_unique_id"].toString();
-                QString schoolId = teacherObj["schoolId"].toString();
-
-                // 构建描述信息
-                QString desc = "教师唯一ID: " + teacherUniqueId;
-                if (teacherId.toInt() > 0) {
-                    desc += " | ID: " + teacherId;
+        QJsonObject obj = jsonDoc.object();
+        if (obj.contains("data") && obj["data"].isObject()) {
+            QJsonObject dataObj = obj["data"].toObject();
+            if (dataObj.contains("classes") && dataObj["classes"].isArray()) {
+                QJsonArray classesArray = dataObj["classes"].toArray();
+                for (int i = 0; i < classesArray.size(); i++) {
+                    m_searchClassResults.append(classesArray[i].toObject());
                 }
-
-                // 添加教师搜索结果项（教师不需要加入按钮，所以groupId为空，isMember为false）
-                addListItem(m_listLayout, "", teacherName, "1", "教师", desc, "", false);
+                m_classCount = classesArray.size();
             }
         }
+        
+        m_pendingSearchRequests--;
+        if (m_pendingSearchRequests <= 0) {
+            displaySearchResults();
+        }
     }
+    
+    // 处理教师搜索结果
+    void onSearchTeacherResult(const QString& response)
+    {
+        QJsonParseError parseError;
+        QJsonDocument jsonDoc = QJsonDocument::fromJson(response.toUtf8(), &parseError);
+        if (parseError.error != QJsonParseError::NoError) {
+            qDebug() << "解析教师搜索结果失败:" << parseError.errorString();
+            m_pendingSearchRequests--;
+            if (m_pendingSearchRequests <= 0) {
+                displaySearchResults();
+            }
+            return;
+        }
+        
+        QJsonObject obj = jsonDoc.object();
+        // 服务器返回格式：{ "data": { "teachers": [...] } } 或 { "data": [...] }
+        if (obj.contains("data")) {
+            QJsonValue dataValue = obj["data"];
+            QJsonArray teachersArray;
+            
+            if (dataValue.isArray()) {
+                // 如果 data 是数组，直接使用
+                teachersArray = dataValue.toArray();
+            } else if (dataValue.isObject()) {
+                // 如果 data 是对象，尝试获取 teachers 数组
+                QJsonObject dataObj = dataValue.toObject();
+                if (dataObj.contains("teachers") && dataObj["teachers"].isArray()) {
+                    teachersArray = dataObj["teachers"].toArray();
+                }
+            }
+            
+            // 处理教师列表
+            for (int i = 0; i < teachersArray.size(); i++) {
+                m_searchTeacherResults.append(teachersArray[i].toObject());
+            }
+            m_teacherCount = teachersArray.size();
+        }
+        
+        m_pendingSearchRequests--;
+        if (m_pendingSearchRequests <= 0) {
+            displaySearchResults();
+        }
+    }
+    
+    // 处理群搜索结果（服务器接口返回的班级群）
+    void onSearchGroupResult(const QString& response, bool isClassGroup = false)
+    {
+        QJsonParseError parseError;
+        QJsonDocument jsonDoc = QJsonDocument::fromJson(response.toUtf8(), &parseError);
+        if (parseError.error != QJsonParseError::NoError) {
+            qDebug() << "解析群搜索结果失败:" << parseError.errorString();
+            m_pendingSearchRequests--;
+            if (m_pendingSearchRequests <= 0) {
+                displaySearchResults();
+            }
+            return;
+        }
+        
+        QJsonObject obj = jsonDoc.object();
+        if (obj.contains("data") && obj["data"].isObject()) {
+            QJsonObject dataObj = obj["data"].toObject();
+            if (dataObj.contains("groups") && dataObj["groups"].isArray()) {
+                QJsonArray groupsArray = dataObj["groups"].toArray();
+                for (int i = 0; i < groupsArray.size(); i++) {
+                    m_searchGroupResults.append(groupsArray[i].toObject());
+                }
+                m_groupCount += groupsArray.size(); // 累加计数（因为还有普通群的结果）
+            }
+        }
+        
+        m_pendingSearchRequests--;
+        if (m_pendingSearchRequests <= 0) {
+            displaySearchResults();
+        }
+    }
+    
+    // 显示搜索结果
+    void displaySearchResults()
+    {
+        clearSearchResults();
+        
+        UserInfo userInfo = CommonInfo::GetData();
+        QString currentUserId = userInfo.teacher_unique_id;
+        
+        // 如果选择了特定分类，只显示对应结果
+        if (m_currentSearchCategory == 1) {
+            // 只显示班级结果
+            for (const QJsonObject& item : m_searchClassResults) {
+                QString name = item["class_name"].toString();
+                QString code = item["class_code"].toString();
+                if (name.isEmpty()) name = code;
+                addListItem(m_listLayout, "", name, "1", "班级", "班级编号: " + code, code, false, "class");
+            }
+        } else if (m_currentSearchCategory == 2) {
+            // 只显示教师结果（过滤掉自己）
+            int displayedCount = 0;
+            for (const QJsonObject& item : m_searchTeacherResults) {
+                QString id = item["teacher_unique_id"].toString();
+                // 过滤掉自己
+                if (id == currentUserId) {
+                    continue;
+                }
+                
+                QString name = item["name"].toString();
+                if (name.isEmpty()) name = id;
+                bool isFriend = m_friendIds.contains(id);
+                addListItem(m_listLayout, "", name, "1", "教师", "教师唯一ID: " + id, id, isFriend, "teacher");
+                displayedCount++;
+            }
+            // 更新教师计数（排除自己）
+            m_teacherCount = displayedCount;
+        } else if (m_currentSearchCategory == 3) {
+            // 只显示群结果
+            for (const QJsonObject& item : m_searchGroupResults) {
+                QString name = item["group_name"].toString();
+                QString id = item["group_id"].toString();
+                QString classid = item["classid"].toString();
+                QString introduction = item["introduction"].toString();
+                QString notification = item["notification"].toString();
+                int memberNum = item["member_num"].toInt();
+                bool isMember = m_joinedGroupIds.contains(id);
+                
+                QString desc = introduction.isEmpty() ? notification : introduction;
+                if (desc.isEmpty()) {
+                    desc = "群组ID: " + id;
+                }
+                
+                addListItem(m_listLayout, "", name, QString::number(memberNum), 
+                           classid.isEmpty() ? "群组" : "班级群", desc, id, isMember, "group");
+            }
+        } else {
+            // 显示全部结果
+            for (const QJsonObject& item : m_searchClassResults) {
+                QString name = item["class_name"].toString();
+                QString code = item["class_code"].toString();
+                if (name.isEmpty()) name = code;
+                addListItem(m_listLayout, "", name, "1", "班级", "班级编号: " + code, code, false, "class");
+            }
+            
+            // 显示教师结果（过滤掉自己）
+            int displayedTeacherCount = 0;
+            for (const QJsonObject& item : m_searchTeacherResults) {
+                QString id = item["teacher_unique_id"].toString();
+                // 过滤掉自己
+                if (id == currentUserId) {
+                    continue;
+                }
+                
+                QString name = item["name"].toString();
+                if (name.isEmpty()) name = id;
+                bool isFriend = m_friendIds.contains(id);
+                addListItem(m_listLayout, "", name, "1", "教师", "教师唯一ID: " + id, id, isFriend, "teacher");
+                displayedTeacherCount++;
+            }
+            // 更新教师计数（排除自己）
+            m_teacherCount = displayedTeacherCount;
+            for (const QJsonObject& item : m_searchGroupResults) {
+                QString name = item["group_name"].toString();
+                QString id = item["group_id"].toString();
+                QString classid = item["classid"].toString();
+                QString introduction = item["introduction"].toString();
+                QString notification = item["notification"].toString();
+                int memberNum = item["member_num"].toInt();
+                bool isMember = m_joinedGroupIds.contains(id);
+                
+                QString desc = introduction.isEmpty() ? notification : introduction;
+                if (desc.isEmpty()) {
+                    desc = "群组ID: " + id;
+                }
+                
+                addListItem(m_listLayout, "", name, QString::number(memberNum), 
+                           classid.isEmpty() ? "群组" : "班级群", desc, id, isMember, "group");
+            }
+        }
+        
+        updateTotalCount();
+    }
+    
+    // 加入班级
+    void onJoinClassClicked(const QString& classCode)
+    {
+        if (!m_httpHandler || classCode.isEmpty())
+            return;
+        
+        UserInfo userInfo = CommonInfo::GetData();
+        if (userInfo.teacher_unique_id.isEmpty()) {
+            qDebug() << "无法加入班级：教师唯一ID为空";
+            return;
+        }
+        
+        QJsonObject requestData;
+        requestData["teacher_unique_id"] = userInfo.teacher_unique_id;
+        requestData["class_code"] = classCode;
+        requestData["role"] = "teacher";
+        
+        QJsonDocument doc(requestData);
+        QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+        
+        QString url = "http://47.100.126.194:5000/teachers/classes/add";
+        
+        TAHttpHandler* addHandler = new TAHttpHandler(this);
+        connect(addHandler, &TAHttpHandler::success, this, [this, classCode](const QString& response) {
+            qDebug() << "加入班级成功:" << classCode;
+            SearchMessageDialog* msgDlg = new SearchMessageDialog(this);
+            msgDlg->setTitle("成功");
+            msgDlg->setMessage("已成功加入班级");
+            msgDlg->exec();
+            // 发出加入班级成功信号
+            emit this->classJoined(classCode);
+            sender()->deleteLater();
+        });
+        connect(addHandler, &TAHttpHandler::failed, this, [this](const QString& error) {
+            qDebug() << "加入班级失败:" << error;
+            SearchMessageDialog* msgDlg = new SearchMessageDialog(this);
+            msgDlg->setTitle("失败");
+            msgDlg->setMessage("加入班级失败：" + error);
+            msgDlg->exec();
+            sender()->deleteLater();
+        });
+        
+        addHandler->post(url, jsonData);
+    }
+    
+    // 添加好友
+    void onAddFriendClicked(const QString& teacherUniqueId)
+    {
+        if (teacherUniqueId.isEmpty())
+            return;
+        
+        UserInfo userInfo = CommonInfo::GetData();
+        QString currentUserId = userInfo.teacher_unique_id;
+        
+        // 不能添加自己为好友
+        if (teacherUniqueId == currentUserId) {
+            SearchMessageDialog* msgDlg = new SearchMessageDialog(this);
+            msgDlg->setTitle("提示");
+            msgDlg->setMessage("不能添加自己为好友");
+            msgDlg->exec();
+            return;
+        }
+        
+        // 如果已经是好友，提示
+        if (m_friendIds.contains(teacherUniqueId)) {
+            SearchMessageDialog* msgDlg = new SearchMessageDialog(this);
+            msgDlg->setTitle("提示");
+            msgDlg->setMessage("该用户已经是您的好友");
+            msgDlg->exec();
+            return;
+        }
+        
+        // 构造 JSON 消息体
+        QJsonObject jsonMsg;
+        jsonMsg["type"] = "1";
+        jsonMsg["teacher_unique_id"] = teacherUniqueId;
+        jsonMsg["text"] = "我想添加您为好友";
+        
+        QJsonDocument doc(jsonMsg);
+        QString jsonString = doc.toJson(QJsonDocument::Compact);
+        
+        // 构造完整消息：to:<target_id>:<JSON消息>
+        // target_id 是接收加好友请求的用户（被添加方的 teacher_unique_id）
+        QString message = QString("to:%1:%2").arg(teacherUniqueId, jsonString);
+        
+        // 通过 WebSocket 发送消息
+        TaQTWebSocket::sendPrivateMessage(message);
+        
+        qDebug() << "发送加好友请求:" << message;
+    }
+
 
     void updateTotalCount()
     {
         // 更新总搜索结果数量
-        int totalCount = m_groupCount + m_teacherCount;
+        int totalCount = m_groupCount + m_teacherCount + m_classCount;
         m_lblNum->setText(QString::number(totalCount));
     }
 
     void loadJoinedGroups()
     {
-        // 通过/groups/by-teacher接口获取当前用户的群组列表
+        // 1. 从腾讯IM获取已加入的普通群列表（Public类型）
+        loadJoinedGroupsFromIM();
+        
+        // 2. 从服务器接口获取已加入的班级群列表
+        loadJoinedClassGroupsFromServer();
+    }
+    
+    // 从腾讯IM获取已加入的普通群列表
+    void loadJoinedGroupsFromIM()
+    {
+        int ret = TIMGroupGetJoinedGroupList([](int32_t code, const char* desc, const char* json_param, const void* user_data) {
+            SearchDialog* dlg = (SearchDialog*)user_data;
+            if (!dlg) return;
+            
+            if (code != 0) {
+                qDebug() << "获取已加入群组列表失败，错误码:" << code << "错误描述:" << (desc ? desc : "");
+                return;
+            }
+            
+            if (strlen(json_param) == 0) {
+                return;
+            }
+            
+            QJsonParseError parseError;
+            QJsonDocument jsonDoc = QJsonDocument::fromJson(QByteArray(json_param), &parseError);
+            if (parseError.error != QJsonParseError::NoError) {
+                qDebug() << "解析已加入群组列表失败:" << parseError.errorString();
+                return;
+            }
+            
+            if (!jsonDoc.isArray()) {
+                qDebug() << "已加入群组列表不是数组格式";
+                return;
+            }
+            
+            QJsonArray json_group_list = jsonDoc.array();
+            
+            // 处理结果
+            QMetaObject::invokeMethod(dlg, [dlg, json_group_list]() {
+                if (!dlg) return;
+                
+                auto normalizeGroupType = [](const QJsonValue& v) -> QString {
+                    if (v.isString()) {
+                        return v.toString().trimmed();
+                    }
+                    if (v.isDouble()) {
+                        const int t = v.toInt();
+                        switch (t) {
+                        case kTIMGroup_Public:    return QStringLiteral("Public");
+                        case kTIMGroup_Private:   return QStringLiteral("Private");
+                        case kTIMGroup_ChatRoom:  return QStringLiteral("ChatRoom");
+                        case kTIMGroup_BChatRoom: return QStringLiteral("BChatRoom");
+                        case kTIMGroup_AVChatRoom:return QStringLiteral("AVChatRoom");
+                        default:                  return QString::number(t);
+                        }
+                    }
+                    return QString();
+                };
+                
+                int publicGroupCount = 0;
+                for (int i = 0; i < json_group_list.size(); i++) {
+                    QJsonObject group = json_group_list[i].toObject();
+                    
+                    // 获取群组ID
+                    QString groupId = group[kTIMGroupBaseInfoGroupId].toString();
+                    if (groupId.isEmpty()) {
+                        continue;
+                    }
+                    
+                    // 获取群类型
+                    const QString groupType = normalizeGroupType(group.value(kTIMGroupBaseInfoGroupType));
+                    
+                    // 只处理Public类型的普通群
+                    if (groupType == "Public") {
+                        dlg->m_joinedGroupIds.insert(groupId);
+                        publicGroupCount++;
+                    }
+                }
+                
+                qDebug() << "从腾讯IM加载已加入普通群列表，共" << publicGroupCount << "个普通群";
+            }, Qt::QueuedConnection);
+        }, this);
+        
+        if (ret != TIM_SUCC) {
+            qDebug() << "调用TIMGroupGetJoinedGroupList失败，错误码:" << ret;
+        }
+    }
+    
+    // 从服务器接口获取已加入的班级群列表
+    void loadJoinedClassGroupsFromServer()
+    {
         UserInfo userInfo = CommonInfo::GetData();
-        if (m_httpHandler && !userInfo.teacher_unique_id.isEmpty())
+        if (!userInfo.teacher_unique_id.isEmpty())
         {
             QUrl url("http://47.100.126.194:5000/groups/by-teacher");
             QUrlQuery query;
             query.addQueryItem("teacher_unique_id", userInfo.teacher_unique_id);
             url.setQuery(query);
             
-            // 使用临时标志来区分这个请求是用于加载已加入群组列表的
-            // 由于TAHttpHandler的success信号会触发handleSearchResponse，我们需要区分
-            // 这里直接使用QNetworkAccessManager来避免冲突
+            // 使用QNetworkAccessManager来避免与TAHttpHandler冲突
             QNetworkAccessManager* tempManager = new QNetworkAccessManager(this);
             QNetworkRequest request(url);
             QNetworkReply* reply = tempManager->get(request);
@@ -703,7 +1218,9 @@ private slots:
                         if (obj["data"].isObject()) {
                             QJsonObject dataObj = obj["data"].toObject();
                             
-                            // 处理群主群组列表
+                            int classGroupCount = 0;
+                            
+                            // 处理群主群组列表（班级群）
                             if (dataObj["owner_groups"].isArray()) {
                                 QJsonArray ownerGroups = dataObj["owner_groups"].toArray();
                                 for (int i = 0; i < ownerGroups.size(); i++) {
@@ -711,11 +1228,12 @@ private slots:
                                     QString groupId = group["group_id"].toString();
                                     if (!groupId.isEmpty()) {
                                         m_joinedGroupIds.insert(groupId);
+                                        classGroupCount++;
                                     }
                                 }
                             }
                             
-                            // 处理成员群组列表
+                            // 处理成员群组列表（班级群）
                             if (dataObj["member_groups"].isArray()) {
                                 QJsonArray memberGroups = dataObj["member_groups"].toArray();
                                 for (int i = 0; i < memberGroups.size(); i++) {
@@ -723,15 +1241,67 @@ private slots:
                                     QString groupId = group["group_id"].toString();
                                     if (!groupId.isEmpty()) {
                                         m_joinedGroupIds.insert(groupId);
+                                        classGroupCount++;
                                     }
                                 }
                             }
                             
-                            qDebug() << "已加载已加入群组列表，共" << m_joinedGroupIds.size() << "个群组";
+                            qDebug() << "从服务器加载已加入班级群列表，共" << classGroupCount << "个班级群";
+                            qDebug() << "已加入群组总数（普通群+班级群）:" << m_joinedGroupIds.size();
                         }
                     }
                 } else {
-                    qDebug() << "加载已加入群组列表失败:" << reply->errorString();
+                    qDebug() << "加载已加入班级群列表失败:" << reply->errorString();
+                }
+                reply->deleteLater();
+                tempManager->deleteLater();
+            });
+        }
+    }
+    
+    void loadFriends()
+    {
+        // 通过/friends接口获取当前用户的好友列表
+        UserInfo userInfo = CommonInfo::GetData();
+        if (m_httpHandler && !userInfo.strIdNumber.isEmpty())
+        {
+            QUrl url("http://47.100.126.194:5000/friends");
+            QUrlQuery query;
+            query.addQueryItem("id_card", userInfo.strIdNumber);
+            url.setQuery(query);
+            
+            // 使用QNetworkAccessManager来避免与TAHttpHandler冲突
+            QNetworkAccessManager* tempManager = new QNetworkAccessManager(this);
+            QNetworkRequest request(url);
+            QNetworkReply* reply = tempManager->get(request);
+            
+            connect(reply, &QNetworkReply::finished, this, [=]() {
+                if (reply->error() == QNetworkReply::NoError) {
+                    QByteArray data = reply->readAll();
+                    QJsonParseError parseError;
+                    QJsonDocument jsonDoc = QJsonDocument::fromJson(data, &parseError);
+                    if (parseError.error == QJsonParseError::NoError && jsonDoc.isObject()) {
+                        QJsonObject obj = jsonDoc.object();
+                        if (obj.contains("friends") && obj["friends"].isArray()) {
+                            QJsonArray friendsArray = obj["friends"].toArray();
+                            m_friendIds.clear();
+                            
+                            for (int i = 0; i < friendsArray.size(); i++) {
+                                QJsonObject friendObj = friendsArray[i].toObject();
+                                if (friendObj.contains("teacher_info") && friendObj["teacher_info"].isObject()) {
+                                    QJsonObject teacherInfo = friendObj["teacher_info"].toObject();
+                                    QString teacherUniqueId = teacherInfo["teacher_unique_id"].toString();
+                                    if (!teacherUniqueId.isEmpty()) {
+                                        m_friendIds.insert(teacherUniqueId);
+                                    }
+                                }
+                            }
+                            
+                            qDebug() << "已加载好友列表，共" << m_friendIds.size() << "个好友";
+                        }
+                    }
+                } else {
+                    qDebug() << "加载好友列表失败:" << reply->errorString();
                 }
                 reply->deleteLater();
                 tempManager->deleteLater();
@@ -757,12 +1327,22 @@ private slots:
     {
         // 获取当前用户信息
         UserInfo userInfo = CommonInfo::GetData();
-        QString userId = userInfo.teacher_unique_id; // 使用strUserId作为用户ID
+        QString userId = userInfo.teacher_unique_id;
         QString userName = userInfo.strName;
         
         if (userId.isEmpty() || userName.isEmpty()) {
             QMessageBox::warning(this, "错误", "用户信息不完整，无法加入群组！");
             return;
+        }
+        
+        // 从搜索结果中查找这个群，判断是班级群还是普通群
+        bool isClassGroup = false;
+        for (const QJsonObject& item : m_searchGroupResults) {
+            if (item["group_id"].toString() == groupId) {
+                QString classid = item["classid"].toString();
+                isClassGroup = !classid.isEmpty(); // classid不为空表示是班级群
+                break;
+            }
         }
         
         // 弹出输入框让用户输入加入理由
@@ -783,6 +1363,7 @@ private slots:
             QString userId;
             QString userName;
             QString reason;
+            bool isClassGroup; // 是否是班级群
         };
         
         JoinGroupCallbackData* callbackData = new JoinGroupCallbackData;
@@ -792,8 +1373,9 @@ private slots:
         callbackData->userId = userId;
         callbackData->userName = userName;
         callbackData->reason = reason;
+        callbackData->isClassGroup = isClassGroup;
         
-        // 先调用腾讯SDK的申请加入群组接口
+        // 调用腾讯SDK的申请加入群组接口
         QByteArray groupIdBytes = groupId.toUtf8();
         QByteArray reasonBytes = reason.toUtf8();
         
@@ -803,10 +1385,17 @@ private slots:
                 SearchDialog* dlg = data->dlg;
                 
                 if (code == TIM_SUCC) {
-                    qDebug() << "腾讯SDK申请加入群组成功:" << data->groupId;
+                    qDebug() << "腾讯SDK申请加入群组成功:" << data->groupId << "是否班级群:" << data->isClassGroup;
                     
-                    // 腾讯SDK成功，现在调用自己的服务器接口
-                    dlg->sendJoinGroupRequestToServer(data->groupId, data->userId, data->userName, data->reason);
+                    // 如果是班级群，需要调用服务器接口
+                    if (data->isClassGroup) {
+                        dlg->sendJoinGroupRequestToServer(data->groupId, data->userId, data->userName, data->reason);
+                    } else {
+                        // 普通群：只使用腾讯IM接口，成功后刷新已加入群组列表
+                        dlg->m_joinedGroupIds.insert(data->groupId);
+                        // 发出加入群组成功信号
+                        emit dlg->groupJoined(data->groupId);
+                    }
                     
                     // 显示成功消息
                     SearchMessageDialog* msgDlg = new SearchMessageDialog(dlg);
@@ -892,7 +1481,7 @@ private slots:
 private:
     void addListItem(QVBoxLayout* parent, const QString& iconPath,
         const QString& name, const QString& memberCount,
-        const QString& tag, const QString& desc, const QString& groupId = "", bool isMember = false)
+        const QString& tag, const QString& desc, const QString& id = "", bool isMember = false, const QString& type = "group")
     {
         QHBoxLayout* itemLayout = new QHBoxLayout;
         QLabel* avatar = new QLabel;
@@ -911,27 +1500,50 @@ private:
         itemLayout->addLayout(infoLayout);
         itemLayout->addStretch();
         
-        // 只有当groupId不为空时才显示"加入"按钮（用于群组搜索结果）
-        if (!groupId.isEmpty()) {
+        // 根据类型显示不同的按钮
+        if (type == "class") {
+            // 班级：显示"加入"按钮
+            QPushButton* btnJoin = new QPushButton("加入");
+            btnJoin->setStyleSheet("background-color: #3569ff; color: #ffffff; padding: 4px 12px; border-radius: 15px;");
+            connect(btnJoin, &QPushButton::clicked, this, [=]() {
+                onJoinClassClicked(id);
+            });
+            itemLayout->addWidget(btnJoin);
+        } else if (type == "teacher") {
+            // 教师：显示"添加好友"或"已添加"按钮
+            QPushButton* btnAddFriend = new QPushButton(isMember ? "已添加" : "添加好友");
+            
+            if (isMember) {
+                // 已经是好友，按钮置灰
+                btnAddFriend->setEnabled(false);
+                btnAddFriend->setStyleSheet("background-color: #454545; color: #d3d3d3; padding: 4px 12px; border-radius: 15px;");
+            } else {
+                // 还不是好友，可以点击添加
+                btnAddFriend->setEnabled(true);
+                btnAddFriend->setStyleSheet("background-color: #3569ff; color: #ffffff; padding: 4px 12px; border-radius: 15px;");
+                connect(btnAddFriend, &QPushButton::clicked, this, [=]() {
+                    onAddFriendClicked(id);
+                });
+                // 保存按钮引用，以便后续更新状态
+                m_addFriendButtons[id] = btnAddFriend;
+            }
+            itemLayout->addWidget(btnAddFriend);
+        } else if (type == "group" && !id.isEmpty()) {
+            // 群组：显示"加入"或"已加入"按钮
             QPushButton* btnJoin = new QPushButton(isMember ? "已加入" : "加入");
             
-            // 根据是否已加入设置按钮样式和状态
             if (isMember) {
-                // 已加入：灰化按钮，禁用
                 btnJoin->setEnabled(false);
                 btnJoin->setStyleSheet("background-color: #454545; color: #d3d3d3; padding: 4px 8px; border-radius: 15px;");
             } else {
-                // 未加入：可点击
                 btnJoin->setEnabled(true);
                 btnJoin->setStyleSheet("background-color: #454545; color: #f5f5f5; padding: 4px 8px; border-radius: 15px;");
-                
-                // 连接加入按钮点击事件
                 connect(btnJoin, &QPushButton::clicked, this, [=]() {
-                    onJoinGroupClicked(groupId, name);
+                    onJoinGroupClicked(id, name);
                 });
             }
             
-            btnJoin->setProperty("group_id", groupId);
+            btnJoin->setProperty("group_id", id);
             btnJoin->setProperty("group_name", name);
             itemLayout->addWidget(btnJoin);
         }
@@ -996,6 +1608,7 @@ protected:
 
 private:
     TAHttpHandler* m_httpHandler = nullptr;
+    TaQTWebSocket* m_pWs = nullptr; // WebSocket 实例
     QLineEdit* m_editSearch = nullptr;
     QLabel* m_lblNum = nullptr;
     QScrollArea* m_scrollArea = nullptr;
@@ -1003,9 +1616,27 @@ private:
     QVBoxLayout* m_listLayout = nullptr;
     QString m_currentUserId; // 当前用户ID
     QSet<QString> m_joinedGroupIds; // 已加入的群组ID集合
+    QSet<QString> m_friendIds; // 已添加的好友ID集合（teacher_unique_id）
+    QMap<QString, QPushButton*> m_addFriendButtons; // 保存"添加好友"按钮：key为teacher_unique_id
     int m_groupCount = 0; // 群组搜索结果数量
     int m_teacherCount = 0; // 教师搜索结果数量
+    int m_classCount = 0; // 班级搜索结果数量
     bool m_dragging = false; // 是否正在拖动
     QPoint m_dragStartPos; // 拖动起始位置
     QPushButton* m_closeButton = nullptr; // 关闭按钮
+    
+    // 分类按钮
+    QPushButton* m_btnAll = nullptr;
+    QPushButton* m_btnClass = nullptr;
+    QPushButton* m_btnTeacher = nullptr;
+    QPushButton* m_btnGroup = nullptr;
+    QButtonGroup* m_categoryButtonGroup = nullptr;
+    int m_currentSearchCategory = 0; // 0:全部, 1:班级, 2:教师, 3:群
+    
+    // 搜索结果存储
+    QList<QJsonObject> m_searchClassResults;
+    QList<QJsonObject> m_searchTeacherResults;
+    QList<QJsonObject> m_searchGroupResults;
+    int m_pendingSearchRequests = 0; // 等待的搜索请求数量
 };
+
