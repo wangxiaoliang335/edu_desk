@@ -2173,15 +2173,6 @@ public:
 							if (m_groupInfo)
 							{
 								m_groupInfo->InitGroupMember(group_id, m_groupMemberInfo);
-								
-								// 设置群头像
-								if (dataObj.contains("group_info") && dataObj["group_info"].isObject()) {
-									QJsonObject groupInfo = dataObj["group_info"].toObject();
-									QString faceUrl = groupInfo.value("face_url").toString();
-									if (!faceUrl.isEmpty()) {
-										m_groupInfo->setGroupFaceUrl(faceUrl);
-									}
-								}
 							}
 							
 							// 根据当前用户的 is_voice_enabled 更新对讲按钮状态
@@ -3344,6 +3335,10 @@ public:
 							if (!faceUrl.isEmpty()) {
 								// 更新头像显示
 								updateAvatarDisplay(faceUrl);
+								// 更新 QGroupInfo 窗口的头像
+								if (m_groupInfo) {
+									m_groupInfo->setGroupFaceUrl(faceUrl);
+								}
 								QMessageBox::information(this, "成功", "头像更新成功");
 							} else {
 								QMessageBox::information(this, "成功", message);
@@ -3590,22 +3585,6 @@ public:
 				classText = groupName;
 			}
 			m_lblAvatar->setText(classText);
-		}
-		
-		// 检查是否已经有下载的头像文件，如果有则显示
-		// 头像文件保存在 group_images/{groupId}/ 目录下
-		QString avatarDir = QCoreApplication::applicationDirPath() + "/group_images/" + unique_group_id;
-		QDir dir(avatarDir);
-		if (dir.exists()) {
-			// 查找目录下的图片文件（png, jpg, jpeg等）
-			QStringList filters;
-			filters << "*.png" << "*.jpg" << "*.jpeg" << "*.bmp";
-			QFileInfoList fileList = dir.entryInfoList(filters, QDir::Files);
-			if (!fileList.isEmpty()) {
-				// 使用第一个找到的图片文件
-				QString avatarPath = fileList.first().absoluteFilePath();
-				updateAvatarDisplay(avatarPath);
-			}
 		}
 		
 		// ChatDialog 同时被班级群/普通群复用：这里是班级群场景，必须设置上下文
@@ -3922,6 +3901,12 @@ public:
 			dataObj = serverData;
 		}
 		
+		//QByteArray byteArr = QJsonDocument(serverData).toJson(QJsonDocument::Compact);
+		 // 将 QJsonObject 转换为 QJsonDocument
+		QJsonDocument doc(serverData);
+		// 转换为 QString（格式化输出，带缩进）
+		QString jsonString = doc.toJson(QJsonDocument::Indented);
+
 		// 检查是否有members数组
 		if (!dataObj.contains("members") || !dataObj["members"].isArray()) {
 			qWarning() << "服务器返回的数据格式不正确，缺少members数组";
@@ -4102,6 +4087,18 @@ public:
 		if (m_groupInfo && !groupId.isEmpty()) {
 			qDebug() << "腾讯IM和服务器接口都成功，开始填充到 InitGroupMember，群组ID:" << groupId << "，成员数:" << m_groupMemberInfo.size();
 			m_groupInfo->InitGroupMember(groupId, m_groupMemberInfo);
+			
+			// 设置群头像
+			if (dataObj.contains("group_info") && dataObj["group_info"].isObject()) {
+				QJsonObject groupInfo = dataObj["group_info"].toObject();
+				QString faceUrl = groupInfo.value("face_url").toString();
+				if (!faceUrl.isEmpty()) {
+					m_groupInfo->setGroupFaceUrl(faceUrl);
+					// 同时更新 m_lblAvatar 群头像显示
+					updateAvatarDisplay(faceUrl);
+				}
+			}
+			
 			updateBtnTalkState();
 			qDebug() << "群成员列表已填充到 InitGroupMember，共" << m_groupMemberInfo.size() << "个成员";
 		} else {
