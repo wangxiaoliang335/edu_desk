@@ -11,6 +11,8 @@
 #include <QSet>
 #include <QPointer>
 #include <QMetaObject>
+#include <QScreen>
+#include <QApplication>
 
 namespace {
 struct GroupMemberFetchSDKData {
@@ -700,7 +702,7 @@ void QGroupInfo::postTeachSubjectsAndThenClose(int doneCode)
                        << "response:" << QString::fromUtf8(response);
             // 404 可能来自服务端业务判断（HTTPException(404)），因此把响应体也展示出来便于排查
             const QString respText = QString::fromUtf8(response).trimmed();
-            QMessageBox::warning(this, QString::fromUtf8(u8"保存失败"),
+            CustomMessageBox::warning(this, QString::fromUtf8(u8"保存失败"),
                                  QString::fromUtf8(u8"任教科目保存失败：%1（HTTP %2）%3")
                                      .arg(err)
                                      .arg(httpStatus)
@@ -715,7 +717,7 @@ void QGroupInfo::postTeachSubjectsAndThenClose(int doneCode)
         QJsonParseError parseError;
         QJsonDocument jsonDoc = QJsonDocument::fromJson(response, &parseError);
         if (parseError.error != QJsonParseError::NoError || !jsonDoc.isObject()) {
-            QMessageBox::warning(this, QString::fromUtf8(u8"保存失败"),
+            CustomMessageBox::warning(this, QString::fromUtf8(u8"保存失败"),
                                  QString::fromUtf8(u8"任教科目保存失败：解析服务端响应失败。"));
             reply->deleteLater();
             manager->deleteLater();
@@ -739,7 +741,7 @@ void QGroupInfo::postTeachSubjectsAndThenClose(int doneCode)
         const QString message = container.value("message").toString();
 
         if (code != 200) {
-            QMessageBox::warning(this, QString::fromUtf8(u8"保存失败"),
+            CustomMessageBox::warning(this, QString::fromUtf8(u8"保存失败"),
                                  QString::fromUtf8(u8"任教科目保存失败：%1").arg(message.isEmpty() ? QString::number(code) : message));
             reply->deleteLater();
             manager->deleteLater();
@@ -1247,7 +1249,7 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, bool iGroupO
     auto addTagIfNonEmpty = [=](const QString& text) {
         const QString t = text.trimmed();
         if (t.isEmpty()) {
-            QMessageBox::warning(this, QString::fromUtf8(u8"提示"), QString::fromUtf8(u8"请先输入科目文本，再添加。"));
+            CustomMessageBox::warning(this, QString::fromUtf8(u8"提示"), QString::fromUtf8(u8"请先输入科目文本，再添加。"));
             return;
         }
         m_subjectsDirty = true;
@@ -2430,7 +2432,7 @@ void QGroupInfo::updateButtonStates()
 void QGroupInfo::onExitGroupClicked()
 {
     if (m_groupNumberId.isEmpty()) {
-        QMessageBox::warning(this, "错误", "群组ID为空，无法退出群聊");
+        CustomMessageBox::warning(this, "错误", "群组ID为空，无法退出群聊");
         return;
     }
     
@@ -2445,15 +2447,14 @@ void QGroupInfo::onExitGroupClicked()
     // 普通群：不走自建服务器，直接调用腾讯 IM SDK
     if (m_isNormalGroup) {
         if (isOwner) {
-            QMessageBox::information(this, "提示", "普通群群主不能退出群聊，请使用“解散群聊”。");
+            CustomMessageBox::information(this, "提示", "普通群群主不能退出群聊，请使用“解散群聊”。");
             return;
         }
 
-        int ret = QMessageBox::question(this, "确认退出",
+        int ret = CustomMessageBox::question(this, "确认退出",
             QString("确定要退出群聊 \"%1\" 吗？").arg(m_groupName),
-            QMessageBox::Yes | QMessageBox::No,
-            QMessageBox::No);
-        if (ret != QMessageBox::Yes) {
+            CustomMessageBox::StandardButtons(CustomMessageBox::Yes | CustomMessageBox::No));
+        if (ret != CustomMessageBox::Yes) {
             return;
         }
 
@@ -2484,7 +2485,7 @@ void QGroupInfo::onExitGroupClicked()
                         if (!dlg) return;
                         if (code != 0) {
                             QString err = QString("退出群聊失败\n错误码: %1\n错误描述: %2").arg(code).arg(errDesc);
-                            QMessageBox::warning(dlg, "退出失败", err);
+                            CustomMessageBox::warning(dlg, "退出失败", err);
                             return;
                         }
 
@@ -2497,7 +2498,7 @@ void QGroupInfo::onExitGroupClicked()
                         dlg->InitGroupMember(groupId, dlg->m_groupMemberInfo);
 
                         emit dlg->memberLeftGroup(groupId, userId);
-                        QMessageBox::information(dlg, "退出成功", QString("已成功退出群聊 \"%1\"！").arg(dlg->m_groupName));
+                        CustomMessageBox::information(dlg, "退出成功", QString("已成功退出群聊 \"%1\"！").arg(dlg->m_groupName));
                         dlg->accept();
                     }, Qt::QueuedConnection);
                 }
@@ -2507,7 +2508,7 @@ void QGroupInfo::onExitGroupClicked()
 
         if (callRet != TIM_SUCC) {
             delete cbData;
-            QMessageBox::warning(this, "退出失败", QString("TIMGroupQuit 调用失败，错误码: %1").arg(callRet));
+            CustomMessageBox::warning(this, "退出失败", QString("TIMGroupQuit 调用失败，错误码: %1").arg(callRet));
         }
         return;
     }
@@ -2524,7 +2525,7 @@ void QGroupInfo::onExitGroupClicked()
         
         // 如果没有其他管理员，提示错误
         if (adminList.isEmpty()) {
-            QMessageBox::warning(this, "无法退出", "只有一个班主任。请先设置新班主任，再退出。");
+            CustomMessageBox::warning(this, "无法退出", "只有一个班主任。请先设置新班主任，再退出。");
             return;
         }
         
@@ -2538,12 +2539,11 @@ void QGroupInfo::onExitGroupClicked()
         QString newOwnerName = adminList[0].member_name;
         
         // 确认对话框
-        int ret = QMessageBox::question(this, "确认退出", 
+        int ret = CustomMessageBox::question(this, "确认退出", 
             QString("确定要退出群聊 \"%1\" 吗？\n\n退出前将自动将群主身份转让给 %2（第一个管理员）。").arg(m_groupName).arg(newOwnerName),
-            QMessageBox::Yes | QMessageBox::No,
-            QMessageBox::No);
+            CustomMessageBox::StandardButtons(CustomMessageBox::Yes | CustomMessageBox::No));
         
-        if (ret != QMessageBox::Yes) {
+        if (ret != CustomMessageBox::Yes) {
             return;
         }
         
@@ -2554,12 +2554,11 @@ void QGroupInfo::onExitGroupClicked()
     
     // 不是群主，直接退出
     // 确认对话框
-    int ret = QMessageBox::question(this, "确认退出", 
+    int ret = CustomMessageBox::question(this, "确认退出", 
         QString("确定要退出群聊 \"%1\" 吗？").arg(m_groupName),
-        QMessageBox::Yes | QMessageBox::No,
-        QMessageBox::No);
+        CustomMessageBox::StandardButtons(CustomMessageBox::Yes | CustomMessageBox::No));
     
-    if (ret != QMessageBox::Yes) {
+    if (ret != CustomMessageBox::Yes) {
         return;
     }
     
@@ -2581,7 +2580,7 @@ void QGroupInfo::onExitGroupClicked()
     
     // 检查REST API是否初始化
     if (!m_restAPI) {
-        QMessageBox::critical(this, "错误", "REST API未初始化！");
+        CustomMessageBox::critical(this, "错误", "REST API未初始化！");
         delete callbackData;
         return;
     }
@@ -2600,7 +2599,7 @@ void QGroupInfo::onExitGroupClicked()
             if (errorCode != 0) {
                 QString errorMsg = QString("退出群聊失败\n错误码: %1\n错误描述: %2").arg(errorCode).arg(errorDesc);
                 qDebug() << errorMsg;
-                QMessageBox::critical(callbackData->dlg, "退出失败", errorMsg);
+                CustomMessageBox::critical(callbackData->dlg, "退出失败", errorMsg);
                 delete callbackData;
                 return;
             }
@@ -2667,7 +2666,7 @@ void QGroupInfo::sendExitGroupRequestToServer(const QString& groupId, const QStr
                     emit this->memberLeftGroup(groupId, leftUserId);
                     
                     // 显示成功消息
-                    QMessageBox::information(this, "退出成功", 
+                    CustomMessageBox::information(this, "退出成功", 
                         QString("已成功退出群聊 \"%1\"！").arg(m_groupName));
                     
                     // 关闭对话框
@@ -2675,16 +2674,16 @@ void QGroupInfo::sendExitGroupRequestToServer(const QString& groupId, const QStr
                 } else {
                     QString message = obj["message"].toString();
                     qDebug() << "服务器返回错误:" << message;
-                    QMessageBox::warning(this, "退出失败", 
+                    CustomMessageBox::warning(this, "退出失败", 
                         QString("服务器返回错误: %1").arg(message));
                 }
             } else {
                 qDebug() << "解析服务器响应失败";
-                QMessageBox::warning(this, "退出失败", "解析服务器响应失败");
+                CustomMessageBox::warning(this, "退出失败", "解析服务器响应失败");
             }
         } else {
             qDebug() << "发送退出群聊请求到服务器失败:" << reply->errorString();
-            QMessageBox::warning(this, "退出失败", 
+            CustomMessageBox::warning(this, "退出失败", 
                 QString("网络错误: %1").arg(reply->errorString()));
         }
         
@@ -2696,17 +2695,16 @@ void QGroupInfo::sendExitGroupRequestToServer(const QString& groupId, const QStr
 void QGroupInfo::onDismissGroupClicked()
 {
     if (m_groupNumberId.isEmpty()) {
-        QMessageBox::warning(this, "错误", "群组ID为空，无法解散群聊");
+        CustomMessageBox::warning(this, "错误", "群组ID为空，无法解散群聊");
         return;
     }
     
     // 确认对话框
-    int ret = QMessageBox::question(this, "确认解散", 
+    int ret = CustomMessageBox::question(this, "确认解散", 
         QString("确定要解散群聊 \"%1\" 吗？\n解散后所有成员将被移除，此操作不可恢复！").arg(m_groupName),
-        QMessageBox::Yes | QMessageBox::No,
-        QMessageBox::No);
+        CustomMessageBox::StandardButtons(CustomMessageBox::Yes | CustomMessageBox::No));
     
-    if (ret != QMessageBox::Yes) {
+    if (ret != CustomMessageBox::Yes) {
         return;
     }
 
@@ -2736,12 +2734,12 @@ void QGroupInfo::onDismissGroupClicked()
                         if (!dlg) return;
                         if (code != 0) {
                             QString err = QString("解散群聊失败\n错误码: %1\n错误描述: %2").arg(code).arg(errDesc);
-                            QMessageBox::warning(dlg, "解散失败", err);
+                            CustomMessageBox::warning(dlg, "解散失败", err);
                             return;
                         }
 
                         emit dlg->groupDismissed(groupId);
-                        QMessageBox::information(dlg, "解散成功", QString("已成功解散群聊 \"%1\"！").arg(dlg->m_groupName));
+                        CustomMessageBox::information(dlg, "解散成功", QString("已成功解散群聊 \"%1\"！").arg(dlg->m_groupName));
                         dlg->accept();
                     }, Qt::QueuedConnection);
                 }
@@ -2751,7 +2749,7 @@ void QGroupInfo::onDismissGroupClicked()
 
         if (callRet != TIM_SUCC) {
             delete cbData;
-            QMessageBox::warning(this, "解散失败", QString("TIMGroupDelete 调用失败，错误码: %1").arg(callRet));
+            CustomMessageBox::warning(this, "解散失败", QString("TIMGroupDelete 调用失败，错误码: %1").arg(callRet));
         }
         return;
     }
@@ -2765,14 +2763,14 @@ void QGroupInfo::onDismissGroupClicked()
     
     // 使用腾讯IM接口解散群组
     if (!m_restAPI) {
-        QMessageBox::warning(this, "错误", "REST API未初始化");
+        CustomMessageBox::warning(this, "错误", "REST API未初始化");
         return;
     }
     
     // 设置管理员账号信息（REST API需要使用应用管理员账号）
     std::string adminUserId = GenerateTestUserSig::instance().getAdminUserId();
     if (adminUserId.empty()) {
-        QMessageBox::warning(this, "错误", "管理员账号ID未设置，无法调用REST API");
+        CustomMessageBox::warning(this, "错误", "管理员账号ID未设置，无法调用REST API");
         return;
     }
     std::string adminUserSig = GenerateTestUserSig::instance().genTestUserSig(adminUserId);
@@ -2782,7 +2780,7 @@ void QGroupInfo::onDismissGroupClicked()
         if (errorCode != 0) {
             QString errorMsg = QString("解散群聊失败\n错误码: %1\n错误描述: %2").arg(errorCode).arg(errorDesc);
             qDebug() << errorMsg;
-            QMessageBox::warning(this, "解散失败", errorMsg);
+            CustomMessageBox::warning(this, "解散失败", errorMsg);
             return;
         }
         
@@ -2792,7 +2790,7 @@ void QGroupInfo::onDismissGroupClicked()
         emit this->groupDismissed(m_groupNumberId);
         
         // 显示成功消息
-        QMessageBox::information(this, "解散成功", 
+        CustomMessageBox::information(this, "解散成功", 
             QString("已成功解散群聊 \"%1\"！").arg(m_groupName));
         
         // 关闭对话框
@@ -2842,7 +2840,7 @@ void QGroupInfo::sendDismissGroupRequestToServer(const QString& groupId, const Q
                     emit this->groupDismissed(groupId);
                     
                     // 显示成功消息
-                    QMessageBox::information(this, "解散成功", 
+                    CustomMessageBox::information(this, "解散成功", 
                         QString("已成功解散群聊 \"%1\"！").arg(m_groupName));
                     
                     // 关闭对话框
@@ -2850,16 +2848,16 @@ void QGroupInfo::sendDismissGroupRequestToServer(const QString& groupId, const Q
                 } else {
                     QString message = obj["message"].toString();
                     qDebug() << "服务器返回错误:" << message;
-                    QMessageBox::warning(this, "解散失败", 
+                    CustomMessageBox::warning(this, "解散失败", 
                         QString("服务器返回错误: %1").arg(message));
                 }
             } else {
                 qDebug() << "解析服务器响应失败";
-                QMessageBox::warning(this, "解散失败", "解析服务器响应失败");
+                CustomMessageBox::warning(this, "解散失败", "解析服务器响应失败");
             }
         } else {
             qDebug() << "发送解散群聊请求到服务器失败:" << reply->errorString();
-            QMessageBox::warning(this, "解散失败", 
+            CustomMessageBox::warning(this, "解散失败", 
                 QString("网络错误: %1").arg(reply->errorString()));
         }
         
@@ -3024,7 +3022,7 @@ void QGroupInfo::onSetLeaderRequested(const QString& memberId)
 {
     // 当前用户是否为群主：统一使用外部传入的 iGroupOwner（m_iGroupOwner）
     if (!m_iGroupOwner) {
-        QMessageBox::warning(this, "权限不足", "只有群主可以设置管理员！");
+        CustomMessageBox::warning(this, "权限不足", "只有群主可以设置管理员！");
         return;
     }
     
@@ -3045,19 +3043,19 @@ void QGroupInfo::onSetLeaderRequested(const QString& memberId)
     
     // 如果成员不在群组中，提示错误
     if (!isMemberInGroup) {
-        QMessageBox::warning(this, "操作失败", 
+        CustomMessageBox::warning(this, "操作失败", 
             QString("无法设置管理员：用户 %1 还不是群成员。\n\n请先邀请该用户加入群组，然后再设置管理员。").arg(memberId));
         return;
     }
     
     if (isAlreadyAdmin) {
-        QMessageBox::information(this, "提示", "该成员已经是管理员！");
+        CustomMessageBox::information(this, "提示", "该成员已经是管理员！");
         return;
     }
     
     // 检查REST API是否初始化
     if (!m_restAPI) {
-        QMessageBox::critical(this, "错误", "REST API未初始化！");
+        CustomMessageBox::critical(this, "错误", "REST API未初始化！");
         return;
     }
     
@@ -3067,7 +3065,7 @@ void QGroupInfo::onSetLeaderRequested(const QString& memberId)
         std::string adminUserSig = GenerateTestUserSig::instance().genTestUserSig(adminUserId);
         m_restAPI->setAdminInfo(QString::fromStdString(adminUserId), QString::fromStdString(adminUserSig));
     } else {
-        QMessageBox::critical(this, "错误", "管理员账号未设置！");
+        CustomMessageBox::critical(this, "错误", "管理员账号未设置！");
         return;
     }
     
@@ -3078,14 +3076,14 @@ void QGroupInfo::onSetLeaderRequested(const QString& memberId)
         if (errorCode != 0) {
             QString errorMsg = QString("获取群组信息失败\n错误码: %1\n错误描述: %2").arg(errorCode).arg(errorDesc);
             qDebug() << errorMsg;
-            QMessageBox::critical(this, "错误", errorMsg);
+            CustomMessageBox::critical(this, "错误", errorMsg);
             return;
         }
         
         // 检查群组类型
         QJsonArray groupArray = result["GroupInfo"].toArray();
         if (groupArray.isEmpty()) {
-            QMessageBox::critical(this, "错误", "无法获取群组信息！");
+            CustomMessageBox::critical(this, "错误", "无法获取群组信息！");
             return;
         }
         
@@ -3094,7 +3092,7 @@ void QGroupInfo::onSetLeaderRequested(const QString& memberId)
         
         // Private群组不支持设置管理员
         if (groupType == "Private") {
-            QMessageBox::warning(this, "不支持的操作", 
+            CustomMessageBox::warning(this, "不支持的操作", 
                 "私有群（Private）不支持设置管理员功能。\n\n只有公开群（Public）、聊天室（ChatRoom）和直播群（AVChatRoom）支持设置管理员。");
             return;
         }
@@ -3116,7 +3114,7 @@ void QGroupInfo::onSetLeaderRequested(const QString& memberId)
                         errorMsg = QString("设置管理员失败\n错误码: %1\n错误描述: %2").arg(errorCode).arg(errorDesc);
                     }
                     qDebug() << errorMsg;
-                    QMessageBox::critical(this, "设置失败", errorMsg);
+                    CustomMessageBox::critical(this, "设置失败", errorMsg);
                     return;
                 }
             
@@ -3139,7 +3137,7 @@ void QGroupInfo::onSetLeaderRequested(const QString& memberId)
             // 刷新成员列表（通知父窗口刷新）
             refreshMemberList(m_groupNumberId);
             
-            QMessageBox::information(this, "成功", QString("已将 %1 设为管理员（班主任）！").arg(memberName));
+            CustomMessageBox::information(this, "成功", QString("已将 %1 设为管理员（班主任）！").arg(memberName));
         });
     });
 }
@@ -3148,7 +3146,7 @@ void QGroupInfo::onCancelLeaderRequested(const QString& memberId)
 {
     // 当前用户是否为群主：统一使用外部传入的 iGroupOwner（m_iGroupOwner）
     if (!m_iGroupOwner) {
-        QMessageBox::warning(this, "权限不足", "只有群主可以取消管理员！");
+        CustomMessageBox::warning(this, "权限不足", "只有群主可以取消管理员！");
         return;
     }
     
@@ -3166,13 +3164,13 @@ void QGroupInfo::onCancelLeaderRequested(const QString& memberId)
     }
     
     if (!isAdmin) {
-        QMessageBox::information(this, "提示", "该成员不是管理员！");
+        CustomMessageBox::information(this, "提示", "该成员不是管理员！");
         return;
     }
     
     // 检查REST API是否初始化
     if (!m_restAPI) {
-        QMessageBox::critical(this, "错误", "REST API未初始化！");
+        CustomMessageBox::critical(this, "错误", "REST API未初始化！");
         return;
     }
     
@@ -3182,7 +3180,7 @@ void QGroupInfo::onCancelLeaderRequested(const QString& memberId)
         std::string adminUserSig = GenerateTestUserSig::instance().genTestUserSig(adminUserId);
         m_restAPI->setAdminInfo(QString::fromStdString(adminUserId), QString::fromStdString(adminUserSig));
     } else {
-        QMessageBox::critical(this, "错误", "管理员账号未设置！");
+        CustomMessageBox::critical(this, "错误", "管理员账号未设置！");
         return;
     }
     
@@ -3193,14 +3191,14 @@ void QGroupInfo::onCancelLeaderRequested(const QString& memberId)
         if (errorCode != 0) {
             QString errorMsg = QString("获取群组信息失败\n错误码: %1\n错误描述: %2").arg(errorCode).arg(errorDesc);
             qDebug() << errorMsg;
-            QMessageBox::critical(this, "错误", errorMsg);
+            CustomMessageBox::critical(this, "错误", errorMsg);
             return;
         }
         
         // 检查群组类型
         QJsonArray groupArray = result["GroupInfo"].toArray();
         if (groupArray.isEmpty()) {
-            QMessageBox::critical(this, "错误", "无法获取群组信息！");
+            CustomMessageBox::critical(this, "错误", "无法获取群组信息！");
             return;
         }
         
@@ -3209,7 +3207,7 @@ void QGroupInfo::onCancelLeaderRequested(const QString& memberId)
         
         // Private群组不支持取消管理员
         if (groupType == "Private") {
-            QMessageBox::warning(this, "不支持的操作", 
+            CustomMessageBox::warning(this, "不支持的操作", 
                 "私有群（Private）不支持管理员功能。\n\n只有公开群（Public）、聊天室（ChatRoom）和直播群（AVChatRoom）支持管理员功能。");
             return;
         }
@@ -3226,7 +3224,7 @@ void QGroupInfo::onCancelLeaderRequested(const QString& memberId)
                         errorMsg = QString("取消管理员失败\n错误码: %1\n错误描述: %2").arg(errorCode).arg(errorDesc);
                     }
                     qDebug() << errorMsg;
-                    QMessageBox::critical(this, "取消失败", errorMsg);
+                    CustomMessageBox::critical(this, "取消失败", errorMsg);
                     return;
                 }
             
@@ -3249,7 +3247,7 @@ void QGroupInfo::onCancelLeaderRequested(const QString& memberId)
             // 刷新成员列表（通知父窗口刷新）
             refreshMemberList(m_groupNumberId);
             
-            QMessageBox::information(this, "成功", QString("已取消 %1 的管理员身份（班主任）！").arg(memberName));
+            CustomMessageBox::information(this, "成功", QString("已取消 %1 的管理员身份（班主任）！").arg(memberName));
         });
     });
 }
@@ -3311,7 +3309,7 @@ void QGroupInfo::transferOwnerAndQuit(const QString& newOwnerId, const QString& 
 {
     // 检查REST API是否初始化
     if (!m_restAPI) {
-        QMessageBox::critical(this, "错误", "REST API未初始化！");
+        CustomMessageBox::critical(this, "错误", "REST API未初始化！");
         return;
     }
     
@@ -3325,7 +3323,7 @@ void QGroupInfo::transferOwnerAndQuit(const QString& newOwnerId, const QString& 
         std::string adminUserSig = GenerateTestUserSig::instance().genTestUserSig(adminUserId);
         m_restAPI->setAdminInfo(QString::fromStdString(adminUserId), QString::fromStdString(adminUserSig));
     } else {
-        QMessageBox::critical(this, "错误", "管理员账号未设置！");
+        CustomMessageBox::critical(this, "错误", "管理员账号未设置！");
         return;
     }
     
@@ -3335,7 +3333,7 @@ void QGroupInfo::transferOwnerAndQuit(const QString& newOwnerId, const QString& 
             if (errorCode != 0) {
                 QString errorMsg = QString("转让群主失败\n错误码: %1\n错误描述: %2").arg(errorCode).arg(errorDesc);
                 qDebug() << errorMsg;
-                QMessageBox::critical(this, "转让失败", errorMsg);
+                CustomMessageBox::critical(this, "转让失败", errorMsg);
                 return;
             }
             
@@ -3360,7 +3358,7 @@ void QGroupInfo::transferOwnerAndQuit(const QString& newOwnerId, const QString& 
                     if (errorCode != 0) {
                         QString errorMsg = QString("退出群聊失败\n错误码: %1\n错误描述: %2").arg(errorCode).arg(errorDesc);
                         qDebug() << errorMsg;
-                        QMessageBox::critical(this, "退出失败", errorMsg);
+                        CustomMessageBox::critical(this, "退出失败", errorMsg);
                         return;
                     }
                     
@@ -3385,7 +3383,7 @@ void QGroupInfo::transferOwnerAndQuit(const QString& newOwnerId, const QString& 
                     emit this->memberLeftGroup(m_groupNumberId, currentUserId);
                     
                     // 显示成功消息
-                    QMessageBox::information(this, "退出成功", 
+                    CustomMessageBox::information(this, "退出成功", 
                         QString("已成功退出群聊 \"%1\"！\n群主身份已转让给 %2。").arg(m_groupName).arg(newOwnerName));
                     
                     // 关闭对话框
@@ -3513,5 +3511,400 @@ void QGroupInfo::mouseReleaseEvent(QMouseEvent* event)
         m_dragging = false;
     }
     QDialog::mouseReleaseEvent(event);
+}
+
+// ==================== CustomMessageBox 实现 ====================
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(CustomMessageBox::StandardButtons)
+
+CustomMessageBox::CustomMessageBox(QWidget* parent)
+    : QDialog(parent)
+    , m_titleBar(nullptr)
+    , m_titleLabel(nullptr)
+    , m_closeButton(nullptr)
+    , m_textLabel(nullptr)
+    , m_okButton(nullptr)
+    , m_yesButton(nullptr)
+    , m_noButton(nullptr)
+    , m_cancelButton(nullptr)
+    , m_icon(NoIcon)
+    , m_buttons(StandardButtons(Ok))
+    , m_result(NoButton)
+    , m_dragging(false)
+{
+    setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog | Qt::WindowStaysOnTopHint);
+    setAttribute(Qt::WA_TranslucentBackground);
+    setFixedSize(400, 150);
+    setupUI();
+}
+
+CustomMessageBox::~CustomMessageBox()
+{
+}
+
+void CustomMessageBox::setTitle(const QString& title)
+{
+    m_title = title;
+    if (m_titleLabel) {
+        m_titleLabel->setText(title);
+    }
+}
+
+void CustomMessageBox::setText(const QString& text)
+{
+    m_text = text;
+    if (m_textLabel) {
+        m_textLabel->setText(text);
+        // 根据文本长度调整窗口大小
+        QFontMetrics fm(m_textLabel->font());
+        QRect textRect = fm.boundingRect(QRect(0, 0, 360, 0), Qt::TextWordWrap, text);
+        int textHeight = textRect.height();
+        int minHeight = 120 + qMax(0, textHeight - 30);
+        setFixedHeight(minHeight);
+    }
+}
+
+void CustomMessageBox::setIcon(Icon icon)
+{
+    m_icon = icon;
+    // 可以根据图标类型设置不同的样式
+}
+
+void CustomMessageBox::setStandardButtons(StandardButtons buttons)
+{
+    m_buttons = buttons;
+    
+    if (m_okButton) m_okButton->setVisible(buttons & Ok);
+    if (m_yesButton) m_yesButton->setVisible(buttons & Yes);
+    if (m_noButton) m_noButton->setVisible(buttons & No);
+    if (m_cancelButton) m_cancelButton->setVisible(buttons & Cancel);
+}
+
+void CustomMessageBox::setupUI()
+{
+    // 创建主容器
+    QWidget* container = new QWidget(this);
+    container->setStyleSheet(
+        "QWidget { background-color: #282A2B; border: 1px solid #282A2B; border-radius: 8px; }"
+    );
+    
+    QVBoxLayout* containerLayout = new QVBoxLayout(this);
+    containerLayout->setContentsMargins(0, 0, 0, 0);
+    containerLayout->setSpacing(0);
+    containerLayout->addWidget(container);
+    
+    // 标题栏
+    m_titleBar = new QWidget(container);
+    m_titleBar->setFixedHeight(40);
+    m_titleBar->setStyleSheet("background-color: #282A2B; border-top-left-radius: 8px; border-top-right-radius: 8px;");
+    
+    QHBoxLayout* titleLayout = new QHBoxLayout(m_titleBar);
+    titleLayout->setContentsMargins(15, 0, 15, 0);
+    titleLayout->setSpacing(10);
+    
+    // 关闭按钮（初始隐藏）
+    m_closeButton = new QPushButton("×", m_titleBar);
+    m_closeButton->setFixedSize(24, 24);
+    m_closeButton->setStyleSheet(
+        "QPushButton {"
+        "border: none;"
+        "color: #ffffff;"
+        "background: rgba(255,255,255,0.12);"
+        "border-radius: 12px;"
+        "font-weight: bold;"
+        "font-size: 16px;"
+        "}"
+        "QPushButton:hover {"
+        "background: rgba(255,0,0,0.35);"
+        "}"
+    );
+    m_closeButton->setVisible(false);
+    connect(m_closeButton, &QPushButton::clicked, this, &QDialog::reject);
+    
+    // 标题文本
+    m_titleLabel = new QLabel("", m_titleBar);
+    m_titleLabel->setStyleSheet("color: #ffffff; font-size: 14px; font-weight: bold; background: transparent; border: none;");
+    m_titleLabel->setAlignment(Qt::AlignCenter);
+    
+    titleLayout->addWidget(m_titleLabel, 1);
+    titleLayout->addWidget(m_closeButton);
+    
+    // 内容区域
+    QWidget* contentWidget = new QWidget(container);
+    contentWidget->setStyleSheet("background-color: #282A2B; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;");
+    
+    QVBoxLayout* mainLayout = new QVBoxLayout(contentWidget);
+    mainLayout->setContentsMargins(20, 15, 20, 15);
+    mainLayout->setSpacing(15);
+    
+    // 消息文本
+    m_textLabel = new QLabel("", contentWidget);
+    m_textLabel->setStyleSheet("color: white; font-size: 14px; background: transparent;");
+    m_textLabel->setAlignment(Qt::AlignCenter);
+    m_textLabel->setWordWrap(true);
+    m_textLabel->setTextFormat(Qt::PlainText);
+    
+    mainLayout->addWidget(m_textLabel, 1);
+    
+    // 按钮布局
+    QHBoxLayout* btnLayout = new QHBoxLayout();
+    btnLayout->setSpacing(10);
+    btnLayout->addStretch();
+    
+    // 确定按钮
+    m_okButton = new QPushButton(QString::fromUtf8(u8"确定"), contentWidget);
+    m_okButton->setFixedSize(80, 35);
+    m_okButton->setStyleSheet(
+        "QPushButton {"
+        "background-color: #4169E1;"
+        "color: #ffffff;"
+        "border: none;"
+        "border-radius: 6px;"
+        "font-size: 13px;"
+        "font-weight: bold;"
+        "}"
+        "QPushButton:hover {"
+        "background-color: #5B7FD8;"
+        "}"
+        "QPushButton:pressed {"
+        "background-color: #3357C7;"
+        "}"
+    );
+    connect(m_okButton, &QPushButton::clicked, this, [this]() { m_result = Ok; accept(); });
+    
+    // 是按钮
+    m_yesButton = new QPushButton(QString::fromUtf8(u8"是"), contentWidget);
+    m_yesButton->setFixedSize(80, 35);
+    m_yesButton->setStyleSheet(
+        "QPushButton {"
+        "background-color: #4169E1;"
+        "color: #ffffff;"
+        "border: none;"
+        "border-radius: 6px;"
+        "font-size: 13px;"
+        "font-weight: bold;"
+        "}"
+        "QPushButton:hover {"
+        "background-color: #5B7FD8;"
+        "}"
+        "QPushButton:pressed {"
+        "background-color: #3357C7;"
+        "}"
+    );
+    connect(m_yesButton, &QPushButton::clicked, this, [this]() { m_result = Yes; accept(); });
+    
+    // 否按钮
+    m_noButton = new QPushButton(QString::fromUtf8(u8"否"), contentWidget);
+    m_noButton->setFixedSize(80, 35);
+    m_noButton->setStyleSheet(
+        "QPushButton {"
+        "background-color: #555555;"
+        "color: #ffffff;"
+        "border: none;"
+        "border-radius: 6px;"
+        "font-size: 13px;"
+        "font-weight: bold;"
+        "}"
+        "QPushButton:hover {"
+        "background-color: #666666;"
+        "}"
+        "QPushButton:pressed {"
+        "background-color: #444444;"
+        "}"
+    );
+    connect(m_noButton, &QPushButton::clicked, this, [this]() { m_result = No; reject(); });
+    
+    // 取消按钮
+    m_cancelButton = new QPushButton(QString::fromUtf8(u8"取消"), contentWidget);
+    m_cancelButton->setFixedSize(80, 35);
+    m_cancelButton->setStyleSheet(
+        "QPushButton {"
+        "background-color: #555555;"
+        "color: #ffffff;"
+        "border: none;"
+        "border-radius: 6px;"
+        "font-size: 13px;"
+        "font-weight: bold;"
+        "}"
+        "QPushButton:hover {"
+        "background-color: #666666;"
+        "}"
+        "QPushButton:pressed {"
+        "background-color: #444444;"
+        "}"
+    );
+    connect(m_cancelButton, &QPushButton::clicked, this, [this]() { m_result = Cancel; reject(); });
+    
+    btnLayout->addWidget(m_okButton);
+    btnLayout->addWidget(m_yesButton);
+    btnLayout->addWidget(m_noButton);
+    btnLayout->addWidget(m_cancelButton);
+    btnLayout->addStretch();
+    
+    mainLayout->addLayout(btnLayout);
+    
+    // 主布局
+    QVBoxLayout* containerMainLayout = new QVBoxLayout(container);
+    containerMainLayout->setContentsMargins(0, 0, 0, 0);
+    containerMainLayout->setSpacing(0);
+    containerMainLayout->addWidget(m_titleBar);
+    containerMainLayout->addWidget(contentWidget, 1);
+    
+    // 鼠标移入显示关闭按钮，移出隐藏
+    class CloseButtonEventFilter : public QObject {
+    public:
+        CloseButtonEventFilter(QDialog* dlg, QPushButton* closeBtn)
+            : QObject(dlg), m_dlg(dlg), m_closeBtn(closeBtn) {}
+        
+        bool eventFilter(QObject* obj, QEvent* event) override {
+            if (obj == m_dlg) {
+                if (event->type() == QEvent::Enter) {
+                    m_closeBtn->setVisible(true);
+                    return true;
+                } else if (event->type() == QEvent::Leave) {
+                    m_closeBtn->setVisible(false);
+                    return true;
+                }
+            }
+            return QObject::eventFilter(obj, event);
+        }
+    private:
+        QDialog* m_dlg;
+        QPushButton* m_closeBtn;
+    };
+    
+    CloseButtonEventFilter* filter = new CloseButtonEventFilter(this, m_closeButton);
+    installEventFilter(filter);
+    
+    // 初始隐藏所有按钮
+    m_okButton->setVisible(false);
+    m_yesButton->setVisible(false);
+    m_noButton->setVisible(false);
+    m_cancelButton->setVisible(false);
+}
+
+void CustomMessageBox::mousePressEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton) {
+        QPoint pos = mapFromGlobal(event->globalPos());
+        if (m_titleBar && m_titleBar->geometry().contains(pos)) {
+            m_dragging = true;
+            m_dragStartPos = event->globalPos() - frameGeometry().topLeft();
+        }
+    }
+    QDialog::mousePressEvent(event);
+}
+
+void CustomMessageBox::mouseMoveEvent(QMouseEvent* event)
+{
+    if (m_dragging && (event->buttons() & Qt::LeftButton)) {
+        move(event->globalPos() - m_dragStartPos);
+    }
+    QDialog::mouseMoveEvent(event);
+}
+
+void CustomMessageBox::mouseReleaseEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton) {
+        m_dragging = false;
+    }
+    QDialog::mouseReleaseEvent(event);
+}
+
+void CustomMessageBox::onButtonClicked()
+{
+    // 已在 connect 中处理
+}
+
+CustomMessageBox::StandardButton CustomMessageBox::information(QWidget* parent, const QString& title, const QString& text, StandardButtons buttons)
+{
+    CustomMessageBox msgBox(parent);
+    msgBox.setTitle(title);
+    msgBox.setText(text);
+    msgBox.setIcon(Information);
+    msgBox.setStandardButtons(buttons);
+    
+    // 居中显示
+    QScreen* screen = QApplication::primaryScreen();
+    if (screen) {
+        QRect screenGeometry = screen->geometry();
+        int x = (screenGeometry.width() - msgBox.width()) / 2;
+        int y = (screenGeometry.height() - msgBox.height()) / 2;
+        msgBox.move(x, y);
+    }
+    
+    if (msgBox.exec() == QDialog::Accepted) {
+        return msgBox.m_result;
+    }
+    return NoButton;
+}
+
+CustomMessageBox::StandardButton CustomMessageBox::warning(QWidget* parent, const QString& title, const QString& text, StandardButtons buttons)
+{
+    CustomMessageBox msgBox(parent);
+    msgBox.setTitle(title);
+    msgBox.setText(text);
+    msgBox.setIcon(Warning);
+    msgBox.setStandardButtons(buttons);
+    
+    // 居中显示
+    QScreen* screen = QApplication::primaryScreen();
+    if (screen) {
+        QRect screenGeometry = screen->geometry();
+        int x = (screenGeometry.width() - msgBox.width()) / 2;
+        int y = (screenGeometry.height() - msgBox.height()) / 2;
+        msgBox.move(x, y);
+    }
+    
+    if (msgBox.exec() == QDialog::Accepted) {
+        return msgBox.m_result;
+    }
+    return NoButton;
+}
+
+CustomMessageBox::StandardButton CustomMessageBox::critical(QWidget* parent, const QString& title, const QString& text, StandardButtons buttons)
+{
+    CustomMessageBox msgBox(parent);
+    msgBox.setTitle(title);
+    msgBox.setText(text);
+    msgBox.setIcon(Critical);
+    msgBox.setStandardButtons(buttons);
+    
+    // 居中显示
+    QScreen* screen = QApplication::primaryScreen();
+    if (screen) {
+        QRect screenGeometry = screen->geometry();
+        int x = (screenGeometry.width() - msgBox.width()) / 2;
+        int y = (screenGeometry.height() - msgBox.height()) / 2;
+        msgBox.move(x, y);
+    }
+    
+    if (msgBox.exec() == QDialog::Accepted) {
+        return msgBox.m_result;
+    }
+    return NoButton;
+}
+
+CustomMessageBox::StandardButton CustomMessageBox::question(QWidget* parent, const QString& title, const QString& text, StandardButtons buttons)
+{
+    CustomMessageBox msgBox(parent);
+    msgBox.setTitle(title);
+    msgBox.setText(text);
+    msgBox.setIcon(Question);
+    msgBox.setStandardButtons(buttons);
+    
+    // 居中显示
+    QScreen* screen = QApplication::primaryScreen();
+    if (screen) {
+        QRect screenGeometry = screen->geometry();
+        int x = (screenGeometry.width() - msgBox.width()) / 2;
+        int y = (screenGeometry.height() - msgBox.height()) / 2;
+        msgBox.move(x, y);
+    }
+    
+    if (msgBox.exec() == QDialog::Accepted) {
+        return msgBox.m_result;
+    }
+    return NoButton;
 }
 

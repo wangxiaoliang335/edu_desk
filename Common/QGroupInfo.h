@@ -20,7 +20,6 @@ class MemberKickDialog; // 前向声明
 #include <QAction>
 #include <QCheckBox>
 #include <QMouseEvent>
-#include <QMessageBox>
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QNetworkReply>
@@ -51,6 +50,69 @@ class MemberKickDialog; // 前向声明
 class ClassTeacherDialog;
 class ClassTeacherDelDialog;
 class FriendSelectDialog;
+
+// 自定义消息框，风格与 QGroupInfo 一致
+class CustomMessageBox : public QDialog {
+    Q_OBJECT
+public:
+    enum Icon {
+        NoIcon = 0,
+        Information = 1,
+        Warning = 2,
+        Critical = 3,
+        Question = 4
+    };
+    
+    enum StandardButton {
+        NoButton = 0,
+        Ok = 1,
+        Yes = 2,
+        No = 4,
+        Cancel = 8
+    };
+    Q_DECLARE_FLAGS(StandardButtons, StandardButton)
+    
+    explicit CustomMessageBox(QWidget* parent = nullptr);
+    ~CustomMessageBox();
+    
+    void setTitle(const QString& title);
+    void setText(const QString& text);
+    void setIcon(Icon icon);
+    void setStandardButtons(StandardButtons buttons);
+    
+    static StandardButton information(QWidget* parent, const QString& title, const QString& text, StandardButtons buttons = StandardButtons(Ok));
+    static StandardButton warning(QWidget* parent, const QString& title, const QString& text, StandardButtons buttons = StandardButtons(Ok));
+    static StandardButton critical(QWidget* parent, const QString& title, const QString& text, StandardButtons buttons = StandardButtons(Ok));
+    static StandardButton question(QWidget* parent, const QString& title, const QString& text, StandardButtons buttons = StandardButtons(Yes | No));
+    
+protected:
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
+    
+private slots:
+    void onButtonClicked();
+    
+private:
+    void setupUI();
+    QWidget* m_titleBar;
+    QLabel* m_titleLabel;
+    QPushButton* m_closeButton;
+    QLabel* m_textLabel;
+    QPushButton* m_okButton;
+    QPushButton* m_yesButton;
+    QPushButton* m_noButton;
+    QPushButton* m_cancelButton;
+    
+    QString m_title;
+    QString m_text;
+    Icon m_icon;
+    StandardButtons m_buttons;
+    StandardButton m_result;
+    
+    bool m_dragging;
+    QPoint m_dragStartPos;
+};
 
 // 开启对讲控件（自绘）
 class IntercomControlWidget : public QWidget {

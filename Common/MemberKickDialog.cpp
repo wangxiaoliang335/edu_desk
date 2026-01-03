@@ -8,6 +8,8 @@
 #include <QWidget>
 #include <QPointer>
 #include <QMetaObject>
+#include <QMouseEvent>
+#include <QEvent>
 
 #include "ImSDK/includes/TIMCloud.h"
 #include "ImSDK/includes/TIMCloudDef.h"
@@ -16,22 +18,69 @@ MemberKickDialog::MemberKickDialog(QWidget* parent)
     : QDialog(parent)
 {
     setWindowTitle("踢出群成员");
+    setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog | Qt::WindowStaysOnTopHint);
+    setAttribute(Qt::WA_TranslucentBackground);
     resize(400, 500);
-    setStyleSheet("background-color:#555555; font-size:14px;");
     
     m_httpHandler = new TAHttpHandler(this);
 
-    QVBoxLayout* mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(10, 10, 10, 10);
+    // 创建主容器
+    QWidget* container = new QWidget(this);
+    container->setStyleSheet(
+        "QWidget { background-color: #282A2B; border: 1px solid #282A2B; border-radius: 8px; }"
+    );
+
+    QVBoxLayout* containerLayout = new QVBoxLayout(this);
+    containerLayout->setContentsMargins(0, 0, 0, 0);
+    containerLayout->setSpacing(0);
+    containerLayout->addWidget(container);
+
+    // 标题栏
+    QWidget* titleBar = new QWidget(container);
+    titleBar->setFixedHeight(40);
+    titleBar->setStyleSheet("background-color: #282A2B; border-top-left-radius: 8px; border-top-right-radius: 8px;");
+
+    QHBoxLayout* titleLayout = new QHBoxLayout(titleBar);
+    titleLayout->setContentsMargins(15, 0, 15, 0);
+    titleLayout->setSpacing(10);
+
+    // 关闭按钮（初始隐藏）
+    QPushButton* btnClose = new QPushButton("×", titleBar);
+    btnClose->setFixedSize(24, 24);
+    btnClose->setStyleSheet(
+        "QPushButton {"
+        "border: none;"
+        "color: #ffffff;"
+        "background: rgba(255,255,255,0.12);"
+        "border-radius: 12px;"
+        "font-weight: bold;"
+        "font-size: 16px;"
+        "}"
+        "QPushButton:hover {"
+        "background: rgba(255,0,0,0.35);"
+        "}"
+    );
+    btnClose->setVisible(false);
+    connect(btnClose, &QPushButton::clicked, this, &QDialog::reject);
+
+    // 标题文本
+    QLabel* lblTitle = new QLabel("群成员列表", titleBar);
+    lblTitle->setStyleSheet("color: #ffffff; font-size: 14px; font-weight: bold; background: transparent; border: none;");
+    lblTitle->setAlignment(Qt::AlignCenter);
+
+    titleLayout->addWidget(lblTitle, 1);
+    titleLayout->addWidget(btnClose);
+
+    // 内容区域
+    QWidget* contentWidget = new QWidget(container);
+    contentWidget->setStyleSheet("background-color: #282A2B; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;");
+
+    QVBoxLayout* mainLayout = new QVBoxLayout(contentWidget);
+    mainLayout->setContentsMargins(20, 15, 20, 15);
     mainLayout->setSpacing(10);
 
-    // 标题
-    QLabel* lblTitle = new QLabel("群成员列表");
-    lblTitle->setStyleSheet("background-color:#3b73b8; qproperty-alignment: AlignCenter; color:white; font-weight:bold; padding:6px;");
-    mainLayout->addWidget(lblTitle);
-
     // 滚动区域
-    m_scrollArea = new QScrollArea(this);
+    m_scrollArea = new QScrollArea(contentWidget);
     m_scrollArea->setWidgetResizable(true);
     m_scrollArea->setStyleSheet("background-color:transparent; border:none;");
 
@@ -46,14 +95,123 @@ MemberKickDialog::MemberKickDialog(QWidget* parent)
 
     // 底部按钮
     QHBoxLayout* bottomLayout = new QHBoxLayout;
-    QPushButton* btnCancel = new QPushButton("取消");
-    QPushButton* btnOk = new QPushButton("确定");
-    btnCancel->setStyleSheet("background-color:green; color:white; padding:6px; border-radius:4px;");
-    btnOk->setStyleSheet("background-color:green; color:white; padding:6px; border-radius:4px;");
+    bottomLayout->setSpacing(10);
+    QPushButton* btnCancel = new QPushButton("取消", contentWidget);
+    QPushButton* btnOk = new QPushButton("确定", contentWidget);
+    btnCancel->setFixedSize(80, 35);
+    btnCancel->setStyleSheet(
+        "QPushButton {"
+        "background-color: #555555;"
+        "color: #ffffff;"
+        "border: none;"
+        "border-radius: 6px;"
+        "font-size: 13px;"
+        "font-weight: bold;"
+        "}"
+        "QPushButton:hover {"
+        "background-color: #666666;"
+        "}"
+        "QPushButton:pressed {"
+        "background-color: #444444;"
+        "}"
+    );
+    btnOk->setFixedSize(80, 35);
+    btnOk->setStyleSheet(
+        "QPushButton {"
+        "background-color: #4169E1;"
+        "color: #ffffff;"
+        "border: none;"
+        "border-radius: 6px;"
+        "font-size: 13px;"
+        "font-weight: bold;"
+        "}"
+        "QPushButton:hover {"
+        "background-color: #5B7FD8;"
+        "}"
+        "QPushButton:pressed {"
+        "background-color: #3357C7;"
+        "}"
+    );
     bottomLayout->addStretch();
     bottomLayout->addWidget(btnCancel);
     bottomLayout->addWidget(btnOk);
     mainLayout->addLayout(bottomLayout);
+
+    // 主布局
+    QVBoxLayout* containerMainLayout = new QVBoxLayout(container);
+    containerMainLayout->setContentsMargins(0, 0, 0, 0);
+    containerMainLayout->setSpacing(0);
+    containerMainLayout->addWidget(titleBar);
+    containerMainLayout->addWidget(contentWidget, 1);
+
+    // 鼠标移入显示关闭按钮，移出隐藏
+    class CloseButtonEventFilter : public QObject {
+    public:
+        CloseButtonEventFilter(QDialog* dlg, QPushButton* closeBtn)
+            : QObject(dlg), m_dlg(dlg), m_closeBtn(closeBtn) {}
+        
+        bool eventFilter(QObject* obj, QEvent* event) override {
+            if (obj == m_dlg) {
+                if (event->type() == QEvent::Enter) {
+                    m_closeBtn->setVisible(true);
+                    return true;
+                } else if (event->type() == QEvent::Leave) {
+                    m_closeBtn->setVisible(false);
+                    return true;
+                }
+            }
+            return QObject::eventFilter(obj, event);
+        }
+    private:
+        QDialog* m_dlg;
+        QPushButton* m_closeBtn;
+    };
+    
+    CloseButtonEventFilter* filter = new CloseButtonEventFilter(this, btnClose);
+    installEventFilter(filter);
+
+    // 拖拽功能
+    class DragEventFilter : public QObject {
+    public:
+        DragEventFilter(QDialog* dlg, QWidget* titleBar)
+            : QObject(dlg), m_dlg(dlg), m_titleBar(titleBar), m_dragging(false) {}
+        
+        bool eventFilter(QObject* obj, QEvent* event) override {
+            if (obj == m_dlg) {
+                if (event->type() == QEvent::MouseButtonPress) {
+                    QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+                    if (mouseEvent->button() == Qt::LeftButton) {
+                        QPoint pos = m_dlg->mapFromGlobal(mouseEvent->globalPos());
+                        if (m_titleBar->geometry().contains(pos)) {
+                            m_dragging = true;
+                            m_dragStartPos = mouseEvent->globalPos() - m_dlg->frameGeometry().topLeft();
+                            return true;
+                        }
+                    }
+                } else if (event->type() == QEvent::MouseMove) {
+                    QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+                    if (m_dragging && (mouseEvent->buttons() & Qt::LeftButton)) {
+                        m_dlg->move(mouseEvent->globalPos() - m_dragStartPos);
+                        return true;
+                    }
+                } else if (event->type() == QEvent::MouseButtonRelease) {
+                    QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+                    if (mouseEvent->button() == Qt::LeftButton) {
+                        m_dragging = false;
+                    }
+                }
+            }
+            return QObject::eventFilter(obj, event);
+        }
+    private:
+        QDialog* m_dlg;
+        QWidget* m_titleBar;
+        QPoint m_dragStartPos;
+        bool m_dragging;
+    };
+    
+    DragEventFilter* dragFilter = new DragEventFilter(this, titleBar);
+    installEventFilter(dragFilter);
 
     connect(btnCancel, &QPushButton::clicked, this, &QDialog::reject);
     connect(btnOk, &QPushButton::clicked, this, &MemberKickDialog::onOkClicked);
@@ -154,13 +312,13 @@ void MemberKickDialog::onOkClicked()
     
     if (selectedMemberIds.isEmpty())
     {
-        QMessageBox::information(this, "提示", "请至少选择一个成员");
+        CustomMessageBox::information(this, "提示", "请至少选择一个成员");
         return;
     }
     
     if (m_groupId.isEmpty())
     {
-        QMessageBox::warning(this, "错误", "群组ID未设置");
+        CustomMessageBox::warning(this, "错误", "群组ID未设置");
         return;
     }
     
@@ -201,7 +359,7 @@ void MemberKickDialog::onOkClicked()
                     QMetaObject::invokeMethod(dlg, [dlg, groupId, code, errDesc, payload]() {
                         if (!dlg) return;
                         if (code != 0) {
-                            QMessageBox::warning(dlg, QString::fromUtf8(u8"踢出失败"),
+                            CustomMessageBox::warning(dlg, QString::fromUtf8(u8"踢出失败"),
                                 QString("腾讯SDK踢出失败\n错误码: %1\n错误描述: %2").arg(code).arg(errDesc));
                             return;
                         }
@@ -232,7 +390,7 @@ void MemberKickDialog::onOkClicked()
                             if (failedIds.size() > 8) msg += "...";
                         }
 
-                        QMessageBox::information(dlg, QString::fromUtf8(u8"踢出结果"), msg);
+                        CustomMessageBox::information(dlg, QString::fromUtf8(u8"踢出结果"), msg);
 
                         if (suc > 0) {
                             emit dlg->membersKickedSuccess(groupId);
@@ -247,14 +405,14 @@ void MemberKickDialog::onOkClicked()
 
         if (callRet != TIM_SUCC) {
             delete cbData;
-            QMessageBox::warning(this, QString::fromUtf8(u8"踢出失败"),
+            CustomMessageBox::warning(this, QString::fromUtf8(u8"踢出失败"),
                 QString("TIMGroupDeleteMember 调用失败，错误码: %1").arg(callRet));
         }
         return;
     }
 
     if (!m_httpHandler) {
-        QMessageBox::critical(this, "错误", "HTTP处理器未初始化！");
+        CustomMessageBox::critical(this, "错误", "HTTP处理器未初始化！");
         return;
     }
     
@@ -307,11 +465,11 @@ void MemberKickDialog::onOkClicked()
         }
         
         if (success) {
-            QMessageBox::information(this, QString::fromUtf8(u8"踢出成功"), message);
+            CustomMessageBox::information(this, QString::fromUtf8(u8"踢出成功"), message);
             emit membersKickedSuccess(m_groupId); // 发出信号通知刷新成员列表
             accept(); // 关闭对话框
         } else {
-            QMessageBox::critical(this, QString::fromUtf8(u8"踢出失败"), message);
+            CustomMessageBox::critical(this, QString::fromUtf8(u8"踢出失败"), message);
         }
         
         kickHandler->deleteLater();
@@ -329,7 +487,7 @@ void MemberKickDialog::onOkClicked()
             }
         }
         
-        QMessageBox::critical(this, QString::fromUtf8(u8"踢出失败"), errorMsg);
+        CustomMessageBox::critical(this, QString::fromUtf8(u8"踢出失败"), errorMsg);
         kickHandler->deleteLater();
     });
     

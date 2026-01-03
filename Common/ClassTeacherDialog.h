@@ -28,6 +28,8 @@
 #include <QMetaObject>
 #include <QEvent>
 #include <QResizeEvent>
+#include <QShowEvent>
+#include <QSet>
 #include <QPainter>
 #include <QPainterPath>
 #include <QRegion>
@@ -393,6 +395,9 @@ public:
 
     void InitData(QSet<QString> setclassId)
     {
+        // 保存 setclassId，以便在 showEvent 中重新使用
+        m_setclassId = setclassId;
+        
         UserInfo userInfo = CommonInfo::GetData();
         if (m_httpHandler)
         {
@@ -487,6 +492,19 @@ protected:
         QDialog::leaveEvent(event);
         if (closeButton)
             closeButton->hide();
+    }
+
+    void showEvent(QShowEvent* event) override
+    {
+        QDialog::showEvent(event);
+        
+        // 每次显示时重新获取班级列表
+        UserInfo userInfo = CommonInfo::GetData();
+        if (!userInfo.schoolId.isEmpty())
+        {
+            // 重新获取班级列表（排除已创建班级群的班级）
+            fetchClassesByPrefix(m_setclassId, userInfo.schoolId);
+        }
     }
 
     void resizeEvent(QResizeEvent* event) override
@@ -1136,6 +1154,7 @@ private:
     bool m_dragging = false;
     QPoint m_dragStartPos;
     int m_cornerRadius = 16;
+    QSet<QString> m_setclassId;  // 保存已创建班级群的班级ID集合，用于过滤
 
     void updateMask()
     {

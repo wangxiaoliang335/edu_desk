@@ -8,10 +8,10 @@
 #include <QCheckBox>
 #include <QScrollArea>
 #include <QWidget>
-#include <QMessageBox>
 #include <QMap>
 #include "TAHttpHandler.h"
 #include "CommonInfo.h"
+#include "QGroupInfo.h"
 
 class FriendSelectDialog : public QDialog
 {

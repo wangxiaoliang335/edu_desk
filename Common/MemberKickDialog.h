@@ -8,10 +8,10 @@
 #include <QCheckBox>
 #include <QScrollArea>
 #include <QWidget>
-#include <QMessageBox>
 #include <QMap>
 #include "CommonInfo.h"
 #include "TAHttpHandler.h"
+#include "QGroupInfo.h"
 
 class MemberKickDialog : public QDialog
 {
