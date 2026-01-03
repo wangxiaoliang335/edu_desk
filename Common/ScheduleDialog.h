@@ -72,6 +72,8 @@
 #include "QGroupInfo.h"
 #include "TAHttpHandler.h"
 #include "ArrangeSeatDialog.h"
+#include "ImSDK/includes/TIMCloud.h"
+#include "ImSDK/includes/TIMCloudDef.h"
 #include "GroupNotifyDialog.h"
 #include "StudentAttributeDialog.h"
 #include "HomeworkViewDialog.h"
@@ -2058,8 +2060,29 @@ public:
                                 }
                             }
                         }
-						// 处理 /groups/members 接口返回的成员列表
-						else if (dataObj.contains("group_id") && dataObj["members"].isArray())
+						// 处理 /groups/members?group_id=xxx 接口返回的成员列表，用于补充腾讯IM数据
+						// 返回格式：{ "data": { "group_id": "...", "members": [...] } }
+						// 检查返回数据是否包含 data 对象，且 data 中有 group_id 和 members 数组
+						QJsonObject responseDataObj;
+						if (dataObj.contains("data") && dataObj["data"].isObject()) {
+							responseDataObj = dataObj["data"].toObject();
+						} else {
+							// 如果没有data对象，尝试直接使用dataObj
+							responseDataObj = dataObj;
+						}
+						
+						if (responseDataObj.contains("group_id") && responseDataObj["members"].isArray())
+						{
+							QString group_id = responseDataObj["group_id"].toString();
+							
+							// 如果这是正在等待服务器数据补充的群组，则合并数据
+							if (group_id == m_pendingGroupId && !m_pendingImMembers.isEmpty()) {
+								mergeServerMemberInfo(dataObj); // 传入完整的响应对象（包含data）
+								return; // 处理完成，不再执行后续逻辑
+							}
+						}
+						// 旧的处理逻辑已移除（用于直接使用服务器数据的情况）
+						else if (false && false && dataObj.contains("group_id") && dataObj["members"].isArray())
 						{
 							QString group_id = dataObj["group_id"].toString();
 							
@@ -2393,13 +2416,9 @@ public:
 					// 根据当前用户的 is_voice_enabled 更新对讲按钮状态
 					updateBtnTalkState();
 					
-					// 可选：重新从服务器获取成员列表以确保数据同步
-					if (m_httpHandler && !m_unique_group_id.isEmpty()) {
-						QUrl url("http://47.100.126.194:5000/groups/members");
-						QUrlQuery query;
-						query.addQueryItem("group_id", m_unique_group_id);
-						url.setQuery(query);
-						m_httpHandler->get(url.toString());
+					// 重新从腾讯IM获取成员列表以确保数据同步
+					if (!m_unique_group_id.isEmpty()) {
+						fetchGroupMemberListFromSDK(m_unique_group_id);
 					}
 				}
 			}
@@ -3605,16 +3624,10 @@ public:
 			//m_groupInfo->fetchGroupMemberListFromREST(unique_group_id);
 		}
 
-		// 备用方案：调用自己的服务器接口获取群组成员列表
-		// 注意：如果使用REST API成功，这个接口可以作为数据同步的备用方案
-		if (m_httpHandler && !unique_group_id.isEmpty())
+		// 使用腾讯IM SDK获取群成员列表
+		if (!unique_group_id.isEmpty())
 		{
-			// 使用QUrl和QUrlQuery来正确编码URL参数（特别是#等特殊字符）
-			QUrl url("http://47.100.126.194:5000/groups/members");
-			QUrlQuery query;
-			query.addQueryItem("group_id", unique_group_id);
-			url.setQuery(query);
-			m_httpHandler->get(url.toString());
+			fetchGroupMemberListFromSDK(unique_group_id);
 		}
 		
 		// 窗口初始化时拉取成绩表数据（内部带去重：同一个 class_id + term 只请求一次）
@@ -3650,28 +3663,461 @@ public:
 		// 临时房间信息会通过 WebSocket 消息（type: "3"）返回，或者从全局存储中读取
 	}
 
-	// 刷新成员列表（优先使用REST API从腾讯云IM获取最新成员列表）
+	// 刷新成员列表（使用腾讯IM SDK接口获取群成员列表）
 	void refreshMemberList(QString groupId)
 	{
 		m_unique_group_id = groupId;
 		
-		// 优先使用REST API获取群成员列表
-		if (m_groupInfo && !m_unique_group_id.isEmpty())
+		// 使用腾讯IM SDK获取群成员列表
+		if (!m_unique_group_id.isEmpty())
 		{
-			m_groupInfo->fetchGroupMemberListFromREST(m_unique_group_id);
+			fetchGroupMemberListFromSDK(m_unique_group_id);
+		}
+	}
+	
+	// 回调数据结构（用于分页获取群成员列表）
+	struct MemberFetchData {
+		QPointer<ScheduleDialog> dlg;
+		QString groupId;
+		QVector<GroupMemberInfo> members;
+	};
+	
+	// 通过腾讯IM SDK获取群成员列表（支持分页）
+	void fetchGroupMemberListFromSDK(const QString& groupId)
+	{
+		if (groupId.trimmed().isEmpty()) {
+			qWarning() << "群组ID为空，无法获取群成员列表";
+			return;
 		}
 		
-		// 备用方案：调用自己的服务器接口获取群组成员列表
-		if (m_httpHandler && !m_unique_group_id.isEmpty())
-		{
-			// 使用QUrl和QUrlQuery来正确编码URL参数（特别是#等特殊字符）
-			QUrl url("http://47.100.126.194:5000/groups/members");
-			QUrlQuery query;
-			query.addQueryItem("group_id", m_unique_group_id);
-			url.setQuery(query);
-			m_httpHandler->get(url.toString());
-			qDebug() << "刷新成员列表，群组ID:" << m_unique_group_id;
+		// 创建回调数据结构
+		MemberFetchData* data = new MemberFetchData;
+		data->dlg = this;
+		data->groupId = groupId;
+		data->members.clear();
+		
+		// 开始获取第一页（nextSeq = 0）
+		startFetchGroupMemberListFromSDK(data, 0);
+	}
+	
+	// 内部方法：递归获取群成员列表（支持分页）
+	void startFetchGroupMemberListFromSDK(MemberFetchData* data, quint64 nextSeq)
+	{
+		if (!data) return;
+		if (!data->dlg) {
+			if (data) delete data;
+			return;
 		}
+		if (data->groupId.trimmed().isEmpty()) {
+			delete data;
+			return;
+		}
+		
+		// 构建请求参数
+		QJsonObject option;
+		const quint64 infoFlag = static_cast<quint64>(kTIMGroupMemberInfoFlag_NameCard) |
+		                         static_cast<quint64>(kTIMGroupMemberInfoFlag_MemberRole);
+		option[QString::fromUtf8(kTIMGroupMemberGetInfoOptionInfoFlag)] = static_cast<double>(infoFlag);
+		option[QString::fromUtf8(kTIMGroupMemberGetInfoOptionRoleFlag)] = static_cast<double>(kTIMGroupMemberRoleFlag_All);
+		// 添加 custom_array 字段（可选，但某些情况下可能需要）
+		option[QString::fromUtf8(kTIMGroupMemberGetInfoOptionCustomArray)] = QJsonArray();
+		
+		QJsonObject req;
+		req[QString::fromUtf8(kTIMGroupGetMemberInfoListParamGroupId)] = data->groupId;
+		// 添加 identifier_array 字段（可选，但某些情况下可能需要）
+		req[QString::fromUtf8(kTIMGroupGetMemberInfoListParamIdentifierArray)] = QJsonArray();
+		req[QString::fromUtf8(kTIMGroupGetMemberInfoListParamOption)] = option;
+		req[QString::fromUtf8(kTIMGroupGetMemberInfoListParamNextSeq)] = static_cast<double>(nextSeq);
+		
+		const QByteArray json = QJsonDocument(req).toJson(QJsonDocument::Compact);
+		
+		// 调试：输出JSON参数以便排查问题
+		qDebug() << "TIMGroupGetMemberInfoList 请求参数 (nextSeq=" << nextSeq << "):" << QString::fromUtf8(json);
+		
+		// 调用腾讯IM SDK接口
+		int ret = TIMGroupGetMemberInfoList(json.constData(),
+			[](int32_t code, const char* desc, const char* json_param, const void* user_data) {
+				ScheduleDialog::MemberFetchData* cb = (ScheduleDialog::MemberFetchData*)user_data;
+				if (!cb || !cb->dlg) {
+					delete cb;
+					return;
+				}
+				
+				if (code != 0) {
+					qWarning() << "TIMGroupGetMemberInfoList失败，错误码:" << code << "描述:" << (desc ? desc : "");
+					QMetaObject::invokeMethod(cb->dlg, [cb, code, desc]() {
+						if (cb && cb->dlg) {
+							QMessageBox::warning(cb->dlg, "错误", QString("获取群成员列表失败\n错误码: %1\n错误描述: %2").arg(code).arg(desc ? desc : ""));
+						}
+						delete cb;
+					}, Qt::QueuedConnection);
+					return;
+				}
+				
+				// 解析返回的JSON
+				const QByteArray payload = QByteArray(json_param ? json_param : "");
+				QJsonParseError pe;
+				QJsonDocument doc = QJsonDocument::fromJson(payload, &pe);
+				if (pe.error != QJsonParseError::NoError || !doc.isObject()) {
+					qWarning() << "TIMGroupGetMemberInfoList解析JSON失败:" << pe.errorString();
+					delete cb;
+					return;
+				}
+				
+				const QJsonObject obj = doc.object();
+				const QJsonArray infoArr = obj.value(QString::fromUtf8(kTIMGroupGetMemberInfoListResultInfoArray)).toArray();
+				
+				QSet<QString> existingIds;
+				for (const auto& m : cb->members) {
+					existingIds.insert(m.member_id);
+				}
+				
+				// 解析成员信息
+				for (const auto& v : infoArr) {
+					if (!v.isObject()) continue;
+					const QJsonObject mo = v.toObject();
+					
+					const QString memberId = mo.value(QString::fromUtf8(kTIMGroupMemberInfoIdentifier)).toString();
+					if (memberId.isEmpty() || existingIds.contains(memberId)) continue;
+					
+					const QString nameCard = mo.value(QString::fromUtf8(kTIMGroupMemberInfoNameCard)).toString();
+					const int role = mo.value(QString::fromUtf8(kTIMGroupMemberInfoMemberRole)).toInt();
+					
+					GroupMemberInfo mi;
+					mi.member_id = memberId;
+					mi.member_name = nameCard.trimmed().isEmpty() ? memberId : nameCard;
+					
+					// 转换角色（根据腾讯IM SDK枚举定义）
+					// kTIMMemberRole_Owner = 3 (群主)
+					// kTIMMemberRole_Admin = 2 (管理员)
+					// kTIMMemberRole_Normal = 1 (普通成员)
+					// kTIMMemberRole_None = 0 (未定义)
+					if (role == kTIMMemberRole_Owner) {
+						mi.member_role = "群主";
+					} else if (role == kTIMMemberRole_Admin) {
+						mi.member_role = "管理员";
+					} else if (role == kTIMMemberRole_Normal) {
+						mi.member_role = "成员";
+					} else {
+						// 其他值（如0）也视为普通成员
+						mi.member_role = "成员";
+						qDebug() << "未知角色值:" << role << "，成员ID:" << memberId << "，视为普通成员";
+					}
+					
+					mi.is_voice_enabled = true; // 默认开启对讲
+					mi.teach_subjects.clear();
+					mi.id_number = "";
+					mi.face_url = "";
+					
+					cb->members.append(mi);
+					existingIds.insert(memberId);
+				}
+				
+				// 检查是否还有更多成员（分页）
+				const quint64 nextSeq = static_cast<quint64>(obj.value(QString::fromUtf8(kTIMGroupGetMemberInfoListResultNexSeq)).toVariant().toULongLong());
+				if (nextSeq != 0) {
+					// 继续获取下一页（递归获取所有页）
+					qDebug() << "还有更多成员，继续获取下一页，nextSeq:" << nextSeq << "，当前已获取:" << cb->members.size() << "个成员";
+					QMetaObject::invokeMethod(cb->dlg, [cb, nextSeq]() {
+						if (cb && cb->dlg) {
+							cb->dlg->startFetchGroupMemberListFromSDK(cb, nextSeq);
+						} else {
+							delete cb;
+						}
+					}, Qt::QueuedConnection);
+					return; // 继续获取下一页，不删除data
+				}
+				
+				// 所有成员已获取完成，先更新腾讯IM的数据，然后调用服务器接口补充信息
+				QMetaObject::invokeMethod(cb->dlg, [cb]() {
+					if (cb && cb->dlg) {
+						// 先保存腾讯IM获取的成员列表
+						cb->dlg->m_groupMemberInfo = cb->members;
+						qDebug() << "从腾讯IM获取群成员列表成功，共" << cb->members.size() << "个成员";
+						
+						// 调用服务器接口补充成员信息（名称、头像等）
+						cb->dlg->fetchGroupMemberListFromServer(cb->groupId, cb->members);
+						
+						// 注意：cb 会在 fetchGroupMemberListFromServer 完成后删除
+						// 但这里先不删除，因为 fetchGroupMemberListFromServer 可能需要使用 cb->members
+						// 实际上应该在 fetchGroupMemberListFromServer 的回调中删除
+					} else {
+						delete cb;
+					}
+				}, Qt::QueuedConnection);
+			},
+			data);
+		
+		if (ret != 0) {
+			QString errorDesc;
+			if (ret == TIM_ERR_JSON) {
+				errorDesc = "错误的Json格式或Json Key";
+			} else if (ret == TIM_ERR_PARAM) {
+				errorDesc = "参数错误";
+			} else if (ret == TIM_ERR_SDKUNINIT) {
+				errorDesc = "ImSDK未初始化";
+			} else if (ret == TIM_ERR_NOTLOGIN) {
+				errorDesc = "用户未登录";
+			} else if (ret == TIM_ERR_GROUP) {
+				errorDesc = "无效的群组";
+			} else {
+				errorDesc = QString("未知错误码: %1").arg(ret);
+			}
+			qWarning() << "调用TIMGroupGetMemberInfoList失败，错误码:" << ret << "，错误描述:" << errorDesc;
+			qWarning() << "请求的JSON参数:" << QString::fromUtf8(json);
+			if (data) {
+				qWarning() << "群组ID:" << data->groupId;
+			}
+			
+			// 清理资源
+			const int errorCode = ret; // 保存错误码到局部变量
+			QString errorGroupId = data ? data->groupId : QString();
+			QMetaObject::invokeMethod(this, [this, errorGroupId, errorDesc, errorCode]() {
+				QMessageBox::warning(this, "获取群成员列表失败", 
+					QString("无法获取群成员列表\n\n错误码: %1\n错误描述: %2\n\n请检查：\n1. 群组ID是否正确\n2. 是否已登录腾讯IM\n3. 是否有权限访问该群组")
+					.arg(errorCode).arg(errorDesc));
+			}, Qt::QueuedConnection);
+			
+			delete data;
+		}
+	}
+	
+	// 从服务器接口获取群成员信息，用于补充腾讯IM没有的字段（如名称、头像等）
+	// 注意：此方法在腾讯IM接口获取成功后调用
+	// 只有在服务器接口也成功后，才会调用 InitGroupMember
+	void fetchGroupMemberListFromServer(const QString& groupId, const QVector<GroupMemberInfo>& imMembers)
+	{
+		if (!m_httpHandler || groupId.isEmpty()) {
+			qWarning() << "HTTP处理器未初始化或群组ID为空，无法从服务器获取群成员补充信息";
+			// 服务器接口失败，不更新UI，等待用户重试或使用腾讯IM数据
+			// 注意：这里不调用 updateMemberListUI，因为用户要求两个接口都成功后才填充
+			qWarning() << "服务器接口调用失败，暂不更新群成员列表UI";
+			return;
+		}
+		
+		// 保存当前腾讯IM的成员列表，用于后续合并
+		// 以腾讯IM的数据为准，服务器数据只用于补充字段
+		m_pendingImMembers = imMembers;
+		m_pendingGroupId = groupId;
+		
+		// 构建请求URL（使用查询参数，不是路径参数）
+		QString url = QString("http://47.100.126.194:5000/groups/members?group_id=%1").arg(groupId);
+		qDebug() << "腾讯IM获取群成员成功，开始从服务器获取补充信息（名称、头像等），URL:" << url;
+		
+		// 发送GET请求
+		m_httpHandler->get(url);
+	}
+	
+	// 合并服务器返回的成员信息到腾讯IM的成员列表中
+	// 原则：以腾讯IM获取的数据为准，服务器数据只用于补充腾讯IM没有的字段（如名称、头像等）
+	// 只有在腾讯IM和服务器接口都成功后，才会调用 InitGroupMember
+	void mergeServerMemberInfo(const QJsonObject& serverData)
+	{
+		// 解析服务器返回的数据结构：返回格式是 { "data": { "members": [...] } }
+		QJsonObject dataObj;
+		if (serverData.contains("data") && serverData["data"].isObject()) {
+			dataObj = serverData["data"].toObject();
+		} else {
+			// 如果没有data对象，尝试直接使用serverData
+			dataObj = serverData;
+		}
+		
+		// 检查是否有members数组
+		if (!dataObj.contains("members") || !dataObj["members"].isArray()) {
+			qWarning() << "服务器返回的数据格式不正确，缺少members数组";
+			qDebug() << "服务器返回的数据结构:" << QJsonDocument(serverData).toJson(QJsonDocument::Compact);
+			// 服务器数据格式错误，不更新UI，因为用户要求两个接口都成功后才填充
+			qWarning() << "服务器数据格式错误，暂不更新群成员列表UI";
+			// 清空临时数据
+			m_pendingImMembers.clear();
+			m_pendingGroupId.clear();
+			return;
+		}
+		
+		QJsonArray memberArray = dataObj["members"].toArray();
+		qDebug() << "服务器返回群成员数据，共" << memberArray.size() << "个成员，开始合并到腾讯IM数据";
+		
+		// 创建服务器成员信息的映射表（以user_id为key）
+		QMap<QString, QJsonObject> serverMemberMap;
+		for (const auto& value : memberArray) {
+			if (!value.isObject()) continue;
+			QJsonObject memberObj = value.toObject();
+			QString userId = memberObj["user_id"].toString();
+			if (!userId.isEmpty()) {
+				serverMemberMap[userId] = memberObj;
+			}
+		}
+		
+		// 获取classid（用于识别班级成员）
+		QString classid;
+		if (dataObj.contains("group_info") && dataObj["group_info"].isObject()) {
+			QJsonObject groupInfo = dataObj["group_info"].toObject();
+			classid = groupInfo["classid"].toString();
+		}
+		
+		// 创建腾讯IM成员ID的集合，用于快速查找
+		QSet<QString> imMemberIds;
+		for (const auto& member : m_pendingImMembers) {
+			imMemberIds.insert(member.member_id);
+		}
+		
+		// 合并数据：以腾讯IM的成员列表为准，用服务器数据补充字段
+		QVector<GroupMemberInfo> mergedMembers = m_pendingImMembers;
+		int supplementedCount = 0; // 统计补充了多少个成员的信息
+		int addedCount = 0; // 统计添加了多少个新成员（服务器有但腾讯IM没有的）
+		
+		// 第一步：补充腾讯IM已有的成员信息
+		for (auto& member : mergedMembers) {
+			if (serverMemberMap.contains(member.member_id)) {
+				const QJsonObject& serverMember = serverMemberMap[member.member_id];
+				bool memberUpdated = false;
+				
+				// 补充成员名称（如果服务器有且腾讯IM的name_card为空或等于member_id）
+				if (member.member_name.isEmpty() || member.member_name == member.member_id) {
+					QString serverName = serverMember["user_name"].toString();
+					if (serverName.isEmpty()) {
+						serverName = serverMember["member_name"].toString();
+					}
+					if (!serverName.isEmpty()) {
+						member.member_name = serverName;
+						memberUpdated = true;
+					}
+				}
+				
+				// 补充头像URL（服务器数据优先，因为通常更完整）
+				QString faceUrl = serverMember["face_url"].toString();
+				if (!faceUrl.isEmpty()) {
+					member.face_url = faceUrl;
+					memberUpdated = true;
+				}
+				
+				// 补充身份证号（如果需要）
+				if (member.id_number.isEmpty()) {
+					QString idNumber = serverMember["id_number"].toString();
+					if (idNumber.isEmpty() && serverMember.contains("user_details")) {
+						QJsonObject userDetails = serverMember["user_details"].toObject();
+						idNumber = userDetails["id_number"].toString();
+					}
+					if (!idNumber.isEmpty()) {
+						member.id_number = idNumber;
+						memberUpdated = true;
+					}
+				}
+				
+				// 补充任教科目（如果需要）
+				if (member.teach_subjects.isEmpty() && serverMember.contains("teach_subjects") && serverMember["teach_subjects"].isArray()) {
+					QJsonArray subjectArr = serverMember["teach_subjects"].toArray();
+					QStringList teachSubjects;
+					for (const auto& v : subjectArr) {
+						QString s = v.toString().trimmed();
+						if (!s.isEmpty()) teachSubjects.append(s);
+					}
+					if (!teachSubjects.isEmpty()) {
+						member.teach_subjects = teachSubjects;
+						memberUpdated = true;
+					}
+				}
+				
+				// 补充语音权限（如果需要）
+				if (serverMember.contains("is_voice_enabled")) {
+					member.is_voice_enabled = serverMember["is_voice_enabled"].toInt() != 0;
+					memberUpdated = true;
+				}
+				
+				if (memberUpdated) {
+					supplementedCount++;
+				}
+			}
+		}
+		
+		// 第二步：添加服务器有但腾讯IM没有的成员（如班级成员）
+		/*for (const auto& value : memberArray) {
+			if (!value.isObject()) continue;
+			QJsonObject serverMember = value.toObject();
+			QString userId = serverMember["user_id"].toString();
+			
+			// 如果这个成员不在腾讯IM的成员列表中，则添加它
+			if (!userId.isEmpty() && !imMemberIds.contains(userId)) {
+				GroupMemberInfo newMember;
+				newMember.member_id = userId;
+				
+				// 获取成员名称
+				QString userName = serverMember["user_name"].toString();
+				if (userName.isEmpty()) {
+					userName = serverMember["member_name"].toString();
+				}
+				newMember.member_name = userName.isEmpty() ? userId : userName;
+				
+				// 获取角色（服务器返回的是self_role：200=普通成员，300=管理员，400=群主）
+				int selfRole = serverMember["self_role"].toInt();
+				if (selfRole == 400) {
+					newMember.member_role = "群主";
+				} else if (selfRole == 300) {
+					newMember.member_role = "管理员";
+				} else {
+					newMember.member_role = "成员";
+				}
+				
+				// 获取头像URL
+				newMember.face_url = serverMember["face_url"].toString();
+				
+				// 获取语音权限
+				newMember.is_voice_enabled = serverMember["is_voice_enabled"].toInt() != 0;
+				
+				// 获取任教科目
+				if (serverMember.contains("teach_subjects") && serverMember["teach_subjects"].isArray()) {
+					QJsonArray subjectArr = serverMember["teach_subjects"].toArray();
+					QStringList teachSubjects;
+					for (const auto& v : subjectArr) {
+						QString s = v.toString().trimmed();
+						if (!s.isEmpty()) teachSubjects.append(s);
+					}
+					newMember.teach_subjects = teachSubjects;
+				}
+				
+				// 判断是否是班级成员
+				bool isClassMember = (!classid.isEmpty() && userId == classid);
+				if (isClassMember) {
+					qDebug() << "添加班级成员到群成员列表: user_id=" << userId << ", name=" << newMember.member_name;
+				}
+				
+				mergedMembers.append(newMember);
+				addedCount++;
+			}
+		}*/
+		
+		// 更新成员列表
+		m_groupMemberInfo = mergedMembers;
+		
+		// 保存群组ID（在清空临时数据前）
+		QString groupId = m_pendingGroupId;
+		
+		// 清空临时数据
+		m_pendingImMembers.clear();
+		m_pendingGroupId.clear();
+		
+		qDebug() << "群成员信息合并完成，共" << m_groupMemberInfo.size() << "个成员，其中" << supplementedCount << "个成员补充了服务器数据，" << addedCount << "个成员从服务器新增（如班级成员）";
+		
+		// 腾讯IM和服务器接口都成功，现在填充到 InitGroupMember
+		if (m_groupInfo && !groupId.isEmpty()) {
+			qDebug() << "腾讯IM和服务器接口都成功，开始填充到 InitGroupMember，群组ID:" << groupId << "，成员数:" << m_groupMemberInfo.size();
+			m_groupInfo->InitGroupMember(groupId, m_groupMemberInfo);
+			updateBtnTalkState();
+			qDebug() << "群成员列表已填充到 InitGroupMember，共" << m_groupMemberInfo.size() << "个成员";
+		} else {
+			qWarning() << "无法填充到 InitGroupMember：m_groupInfo为空或groupId为空";
+		}
+	}
+	
+	// 更新成员列表UI
+	void updateMemberListUI()
+	{
+		QString groupId = m_pendingGroupId.isEmpty() ? m_unique_group_id : m_pendingGroupId;
+		if (m_groupInfo) {
+			m_groupInfo->InitGroupMember(groupId, m_groupMemberInfo);
+		}
+		updateBtnTalkState();
+		qDebug() << "群成员列表UI更新完成，共" << m_groupMemberInfo.size() << "个成员";
 	}
 
 	bool startAudioCapture(const QAudioFormat& preferredFormat) {
@@ -3954,6 +4400,8 @@ private:
 	// RTMP 推流器
 	RtmpMediaStreamer* m_rtmpStreamer = nullptr;
 	QVector<GroupMemberInfo>  m_groupMemberInfo;
+	QVector<GroupMemberInfo>  m_pendingImMembers; // 临时保存腾讯IM获取的成员列表，等待服务器数据补充
+	QString m_pendingGroupId; // 临时保存群组ID
 	QTableWidget* seatTable = nullptr; // 座位表格
 	ArrangeSeatDialog* arrangeSeatDlg = nullptr; // 排座对话框
 	QList<StudentInfo> m_students; // 学生数据
@@ -6244,13 +6692,9 @@ inline void ScheduleDialog::openIntercomWebPage()
 			return;
 		}
 		
-		// 从服务器获取群成员列表
-		if (m_httpHandler) {
-			QUrl url("http://47.100.126.194:5000/groups/members");
-			QUrlQuery query;
-			query.addQueryItem("group_id", m_unique_group_id);
-			url.setQuery(query);
-			m_httpHandler->get(url.toString());
+		// 从腾讯IM获取群成员列表
+		if (!m_unique_group_id.isEmpty()) {
+			fetchGroupMemberListFromSDK(m_unique_group_id);
 			qDebug() << "已请求加载群成员列表，等待响应...";
 		}
 		
