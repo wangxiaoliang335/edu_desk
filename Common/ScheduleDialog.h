@@ -103,6 +103,7 @@ class HeatmapViewDialog;
 #include <QGraphicsDropShadowEffect>
 #include <QPropertyAnimation>
 #include <QGraphicsOpacityEffect>
+#include "CustomMessageDialog.h"
 
 // 自定义编辑昵称对话框类 - 无标题栏
 class EditNicknameDialog : public QDialog
@@ -3280,7 +3281,7 @@ public:
 	{
 		if (m_unique_group_id.isEmpty()) {
 			qWarning() << "群组ID为空，无法上传头像";
-			QMessageBox::warning(this, "错误", "群组ID为空，无法上传头像");
+			CustomMessageDialog::showMessage(this, "错误", "群组ID为空，无法上传头像");
 			return;
 		}
 
@@ -3288,7 +3289,7 @@ public:
 		QFile file(filePath);  // 本地头像路径
 		if (!file.open(QIODevice::ReadOnly)) {
 			qDebug() << "Failed to open image file.";
-			QMessageBox::warning(this, "错误", "无法打开图片文件");
+			CustomMessageDialog::showMessage(this, "错误", "无法打开图片文件");
 			return;
 		}
 		QByteArray imageData = file.readAll(); // 二进制数据
@@ -3339,12 +3340,12 @@ public:
 								if (m_groupInfo) {
 									m_groupInfo->setGroupFaceUrl(faceUrl);
 								}
-								QMessageBox::information(this, "成功", "头像更新成功");
+								CustomMessageDialog::showMessage(this, "成功", "头像更新成功");
 							} else {
-								QMessageBox::information(this, "成功", message);
+								CustomMessageDialog::showMessage(this, "成功", message);
 							}
 						} else {
-							QMessageBox::warning(this, "错误", QString("上传头像失败: %1").arg(message));
+							CustomMessageDialog::showMessage(this, "错误", QString("上传头像失败: %1").arg(message));
 						}
 					}
 				}
@@ -3352,7 +3353,7 @@ public:
 			});
 			connect(avatarHandler, &TAHttpHandler::failed, this, [=](const QString& errorString) {
 				qWarning() << "上传头像失败:" << errorString;
-				QMessageBox::warning(this, "错误", QString("上传头像失败: %1").arg(errorString));
+				CustomMessageDialog::showMessage(this, "错误", QString("上传头像失败: %1").arg(errorString));
 				avatarHandler->deleteLater();
 			});
 			

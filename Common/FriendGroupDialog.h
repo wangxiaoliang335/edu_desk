@@ -159,4 +159,7 @@ private:
     void downloadFriendAvatar(const QString& avatarUrl, const QString& idNumber, const QString& teacherUniqueId);
     void loadTeacherClasses(); // 加载教师加入的班级列表
     void onLoadTeacherClassesResult(const QString& response);
+    void onFriendTreeContextMenu(const QPoint& pos); // 好友树右键菜单
+    void removeFriend(const QString& friendTeacherUniqueId); // 删除好友
+    void removeTeacherFromClass(const QString& classCode); // 解除教师和班级关系
 };

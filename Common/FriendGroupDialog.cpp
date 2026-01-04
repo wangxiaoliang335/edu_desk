@@ -20,7 +20,10 @@
 #include <QUrl>
 #include <QUrlQuery>
 #include <QMessageBox>
+#include <QMenu>
+#include <QAction>
 #include <cstring>
+#include "QGroupInfo.h"
 
 // 定义 TempRoomStorage 的静态成员变量（必须在所有包含之后，类定义之前）
 QMap<QString, TempRoomInfo> TempRoomStorage::s_tempRooms;
@@ -101,6 +104,10 @@ void FriendGroupDialog::setupFriendTree()
     m_teacherRootItem->setExpanded(true);
 
     connect(m_friendTree, &QTreeWidget::itemDoubleClicked, this, &FriendGroupDialog::handleFriendItemActivated);
+    
+    // 启用右键菜单
+    m_friendTree->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_friendTree, &QTreeWidget::customContextMenuRequested, this, &FriendGroupDialog::onFriendTreeContextMenu);
 }
 
 void FriendGroupDialog::clearFriendTree()
@@ -182,6 +189,7 @@ void FriendGroupDialog::addTeacherNode(const QString& displayName, const QString
     QTreeWidgetItem* item = new QTreeWidgetItem(m_teacherRootItem);
     item->setText(0, line);
     item->setData(0, Qt::UserRole, QStringLiteral("teacher"));
+    item->setData(0, Qt::UserRole + 1, teacherId);  // 存储 teacher_unique_id
     if (!avatarPath.isEmpty() && QFile::exists(avatarPath)) {
         item->setIcon(0, QIcon(avatarPath));
     }
@@ -1963,4 +1971,170 @@ void FriendGroupDialog::onLoadTeacherClassesResult(const QString& response)
         
         updateFriendCounts();
     }
+}
+
+void FriendGroupDialog::onFriendTreeContextMenu(const QPoint& pos)
+{
+    QTreeWidgetItem* item = m_friendTree->itemAt(pos);
+    if (!item || item == m_classRootItem || item == m_teacherRootItem)
+        return;
+    
+    const QString type = item->data(0, Qt::UserRole).toString();
+    if (type != QStringLiteral("class") && type != QStringLiteral("teacher"))
+        return;
+    
+    QMenu menu(this);
+    QAction* deleteAction = menu.addAction(QString::fromUtf8(u8"删除"));
+    
+    QAction* selectedAction = menu.exec(m_friendTree->mapToGlobal(pos));
+    if (selectedAction == deleteAction) {
+        if (type == QStringLiteral("class")) {
+            // 解除教师和班级关系
+            QString classCode = item->data(0, Qt::UserRole + 2).toString(); // classid
+            if (!classCode.isEmpty()) {
+                removeTeacherFromClass(classCode);
+            }
+        } else if (type == QStringLiteral("teacher")) {
+            // 删除好友
+            QString friendTeacherUniqueId = item->data(0, Qt::UserRole + 1).toString(); // teacher_unique_id
+            if (!friendTeacherUniqueId.isEmpty()) {
+                removeFriend(friendTeacherUniqueId);
+            }
+        }
+    }
+}
+
+void FriendGroupDialog::removeFriend(const QString& friendTeacherUniqueId)
+{
+    UserInfo userInfo = CommonInfo::GetData();
+    QString currentTeacherUniqueId = userInfo.teacher_unique_id;
+    
+    if (currentTeacherUniqueId.isEmpty()) {
+        CustomMessageBox::warning(this, QString::fromUtf8(u8"错误"), QString::fromUtf8(u8"当前用户ID为空，无法删除好友"));
+        return;
+    }
+    
+    if (friendTeacherUniqueId.isEmpty()) {
+        CustomMessageBox::warning(this, QString::fromUtf8(u8"错误"), QString::fromUtf8(u8"好友ID为空，无法删除"));
+        return;
+    }
+    
+    if (currentTeacherUniqueId == friendTeacherUniqueId) {
+        CustomMessageBox::warning(this, QString::fromUtf8(u8"错误"), QString::fromUtf8(u8"不能删除自己为好友"));
+        return;
+    }
+    
+    // 确认对话框
+    int ret = CustomMessageBox::question(this, QString::fromUtf8(u8"确认删除"),
+        QString::fromUtf8(u8"确定要删除该好友吗？"),
+        CustomMessageBox::StandardButtons(CustomMessageBox::Yes | CustomMessageBox::No));
+    if (ret != CustomMessageBox::Yes) {
+        return;
+    }
+    
+    // 构造请求JSON
+    QJsonObject payload;
+    payload["teacher_unique_id"] = currentTeacherUniqueId;
+    payload["friend_teacher_unique_id"] = friendTeacherUniqueId;
+    
+    QJsonDocument doc(payload);
+    QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+    
+    // 发送POST请求
+    QNetworkAccessManager* manager = new QNetworkAccessManager(this);
+    QNetworkRequest request(QUrl("http://47.100.126.194:5000/friends/remove"));
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    
+    QNetworkReply* reply = manager->post(request, jsonData);
+    connect(reply, &QNetworkReply::finished, this, [=]() {
+        if (reply->error() == QNetworkReply::NoError) {
+            QByteArray response = reply->readAll();
+            QJsonDocument respDoc = QJsonDocument::fromJson(response);
+            if (respDoc.isObject()) {
+                QJsonObject obj = respDoc.object();
+                QJsonObject dataObj = obj.value("data").toObject();
+                int code = dataObj.value("code").toInt();
+                QString message = dataObj.value("message").toString();
+                
+                if (code == 200) {
+                    CustomMessageBox::information(this, QString::fromUtf8(u8"成功"), message);
+                    // 重新加载好友列表
+                    InitData();
+                } else {
+                    CustomMessageBox::warning(this, QString::fromUtf8(u8"删除失败"), message);
+                }
+            } else {
+                CustomMessageBox::warning(this, QString::fromUtf8(u8"删除失败"), QString::fromUtf8(u8"解析服务器响应失败"));
+            }
+        } else {
+            CustomMessageBox::critical(this, QString::fromUtf8(u8"删除失败"), reply->errorString());
+        }
+        reply->deleteLater();
+        manager->deleteLater();
+    });
+}
+
+void FriendGroupDialog::removeTeacherFromClass(const QString& classCode)
+{
+    UserInfo userInfo = CommonInfo::GetData();
+    QString currentTeacherUniqueId = userInfo.teacher_unique_id;
+    
+    if (currentTeacherUniqueId.isEmpty()) {
+        CustomMessageBox::warning(this, QString::fromUtf8(u8"错误"), QString::fromUtf8(u8"当前用户ID为空，无法解除班级关系"));
+        return;
+    }
+    
+    if (classCode.isEmpty()) {
+        CustomMessageBox::warning(this, QString::fromUtf8(u8"错误"), QString::fromUtf8(u8"班级ID为空，无法解除关系"));
+        return;
+    }
+    
+    // 确认对话框
+    int ret = CustomMessageBox::question(this, QString::fromUtf8(u8"确认解除"),
+        QString::fromUtf8(u8"确定要解除与该班级的关系吗？"),
+        CustomMessageBox::StandardButtons(CustomMessageBox::Yes | CustomMessageBox::No));
+    if (ret != CustomMessageBox::Yes) {
+        return;
+    }
+    
+    // 构造请求JSON
+    QJsonObject payload;
+    payload["teacher_unique_id"] = currentTeacherUniqueId;
+    payload["class_code"] = classCode;
+    
+    QJsonDocument doc(payload);
+    QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+    
+    // 发送POST请求
+    QNetworkAccessManager* manager = new QNetworkAccessManager(this);
+    QNetworkRequest request(QUrl("http://47.100.126.194:5000/teachers/classes/remove"));
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    
+    QNetworkReply* reply = manager->post(request, jsonData);
+    connect(reply, &QNetworkReply::finished, this, [=]() {
+        if (reply->error() == QNetworkReply::NoError) {
+            QByteArray response = reply->readAll();
+            QJsonDocument respDoc = QJsonDocument::fromJson(response);
+            if (respDoc.isObject()) {
+                QJsonObject obj = respDoc.object();
+                QJsonObject dataObj = obj.value("data").toObject();
+                int code = dataObj.value("code").toInt();
+                QString message = dataObj.value("message").toString();
+                
+                if (code == 200) {
+                    CustomMessageBox::information(this, QString::fromUtf8(u8"成功"), message);
+                    // 重新加载好友列表
+                    InitData();
+                } else {
+                    CustomMessageBox::warning(this, QString::fromUtf8(u8"解除失败"), message);
+                }
+            } else {
+                CustomMessageBox::warning(this, QString::fromUtf8(u8"解除失败"), QString::fromUtf8(u8"解析服务器响应失败"));
+            }
+        } else {
+            CustomMessageBox::critical(this, QString::fromUtf8(u8"解除失败"), reply->errorString());
+        }
+        reply->deleteLater();
+        manager->deleteLater();
+    });
 }

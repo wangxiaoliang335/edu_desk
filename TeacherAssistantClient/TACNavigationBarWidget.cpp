@@ -17,7 +17,6 @@ TACNavigationBarWidget::TACNavigationBarWidget(QWidget *parent)
     QHBoxLayout* layout = new QHBoxLayout(this);
     QButtonGroup* buttonGroup = new QButtonGroup(this);
 
-
     QPushButton* folderButton = new QPushButton(this);
     folderButton->setFixedSize(BUTTON_SIZE);
     folderButton->setIcon(QIcon(":/res/img/folder.png"));
@@ -135,13 +134,13 @@ TACNavigationBarWidget::TACNavigationBarWidget(QWidget *parent)
     buttonGroup->addButton(timerButton);
     layout->addWidget(timerButton);*/
 
-    QPushButton* classNameButton = new QPushButton(this);
-    classNameButton->setText(m_className);
-    classNameButton->setObjectName("classNameButton");
-    classNameButton->setIcon(QIcon(":/res/img/arrow-down.png"));
-    classNameButton->setLayoutDirection(Qt::RightToLeft);
-    
-    layout->addWidget(classNameButton);
+    //QPushButton* classNameButton = new QPushButton(this);
+    //classNameButton->setText(m_className);
+    //classNameButton->setObjectName("classNameButton");
+    //classNameButton->setIcon(QIcon(":/res/img/arrow-down.png"));
+    //classNameButton->setLayoutDirection(Qt::RightToLeft);
+    //
+    //layout->addWidget(classNameButton);
 
     QLabel* separatorLineLabel = new QLabel(this);
     separatorLineLabel->setObjectName("separatorLineLabel");
@@ -160,7 +159,7 @@ TACNavigationBarWidget::TACNavigationBarWidget(QWidget *parent)
     layout->setSpacing(20);
     layout->setAlignment(Qt::AlignLeft);
     setLayout(layout);
-    resize(668, 88);
+    resize(408, 88);
     this->setBackgroundColor(WIDGET_BACKGROUND_COLOR);
     this->setBorderColor(WIDGET_BORDER_COLOR);
     this->setBorderWidth(WIDGET_BORDER_WIDTH);

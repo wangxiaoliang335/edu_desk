@@ -9,10 +9,14 @@
 TADialog::TADialog(QWidget *parent)
 	: TABaseDialog(parent),
     buttonWidget(new QWidget(this)),
-    cancelButton(new QPushButton("ȡ��", this)),
-    enterButton(new QPushButton("ȷ��", this)),
+    cancelButton(new QPushButton("", this)),
+    enterButton(new QPushButton("", this)),
     buttonLayout(new QHBoxLayout(buttonWidget))
 {
+    // 设置按钮文本（使用 UTF-8 编码避免乱码）
+    cancelButton->setText(QString::fromUtf8(u8"取消"));
+    enterButton->setText(QString::fromUtf8(u8"确定"));
+    
     this->titleLabel->setAlignment(Qt::AlignCenter);
     buttonWidget->setObjectName("buttonWidget");
     buttonLayout->setContentsMargins(5, 5, 5, 5);

@@ -25,6 +25,12 @@
 #include <QPoint>
 #include <QEvent>
 #include <QResizeEvent>
+#include <QPainter>
+#include <QPainterPath>
+#include <QPixmap>
+#include <QFile>
+#include <QDir>
+#include <QCoreApplication>
 #include "TAHttpHandler.h"
 #include "CommonInfo.h"
 #include "TaQTWebSocket.h"
@@ -378,6 +384,7 @@ public:
 
         // 初始化HTTP处理器
         m_httpHandler = new TAHttpHandler(this);
+        m_networkManager = new QNetworkAccessManager(this);
         if (m_httpHandler)
         {
             connect(m_httpHandler, &TAHttpHandler::success, this, [=](const QString& responseString) {
@@ -915,8 +922,21 @@ private slots:
             for (const QJsonObject& item : m_searchClassResults) {
                 QString name = item["class_name"].toString();
                 QString code = item["class_code"].toString();
+                QString faceUrl = item["face_url"].toString();
                 if (name.isEmpty()) name = code;
-                addListItem(m_listLayout, "", name, "1", "班级", "班级编号: " + code, code, false, "class");
+                
+                // 检查本地是否有头像
+                QString localPath = "";
+                if (!faceUrl.isEmpty()) {
+                    QString fileName = faceUrl.section('/', -1);
+                    QString saveDir = QCoreApplication::applicationDirPath() + "/class_images/" + code;
+                    QString filePath = saveDir + "/" + fileName;
+                    if (QFile::exists(filePath)) {
+                        localPath = filePath;
+                    }
+                }
+                
+                addListItem(m_listLayout, localPath, name, "1", "班级", "班级编号: " + code, code, false, "class", faceUrl);
             }
         } else if (m_currentSearchCategory == 2) {
             // 只显示教师结果（过滤掉自己）
@@ -929,9 +949,23 @@ private slots:
                 }
                 
                 QString name = item["name"].toString();
+                QString avatarUrl = item["avatar"].toString();
+                QString idCard = item["id_card"].toString();
                 if (name.isEmpty()) name = id;
                 bool isFriend = m_friendIds.contains(id);
-                addListItem(m_listLayout, "", name, "1", "教师", "教师唯一ID: " + id, id, isFriend, "teacher");
+                
+                // 检查本地是否有头像
+                QString localPath = "";
+                if (!idCard.isEmpty()) {
+                    QString fileName = idCard + "_.png";
+                    QString saveDir = QCoreApplication::applicationDirPath() + "/avatars/" + idCard;
+                    QString filePath = saveDir + "/" + fileName;
+                    if (QFile::exists(filePath)) {
+                        localPath = filePath;
+                    }
+                }
+                
+                addListItem(m_listLayout, localPath, name, "1", "教师", "教师唯一ID: " + id, id, isFriend, "teacher", avatarUrl);
                 displayedCount++;
             }
             // 更新教师计数（排除自己）
@@ -944,6 +978,10 @@ private slots:
                 QString classid = item["classid"].toString();
                 QString introduction = item["introduction"].toString();
                 QString notification = item["notification"].toString();
+                QString faceUrl = item["face_url"].toString();
+                if (faceUrl.isEmpty() && item.contains("detail_face_url")) {
+                    faceUrl = item["detail_face_url"].toString();
+                }
                 int memberNum = item["member_num"].toInt();
                 bool isMember = m_joinedGroupIds.contains(id);
                 
@@ -952,16 +990,40 @@ private slots:
                     desc = "群组ID: " + id;
                 }
                 
-                addListItem(m_listLayout, "", name, QString::number(memberNum), 
-                           classid.isEmpty() ? "群组" : "班级群", desc, id, isMember, "group");
+                // 检查本地是否有头像
+                QString localPath = "";
+                if (!faceUrl.isEmpty()) {
+                    QString fileName = faceUrl.section('/', -1);
+                    QString saveDir = QCoreApplication::applicationDirPath() + "/group_images/" + id;
+                    QString filePath = saveDir + "/" + fileName;
+                    if (QFile::exists(filePath)) {
+                        localPath = filePath;
+                    }
+                }
+                
+                addListItem(m_listLayout, localPath, name, QString::number(memberNum), 
+                           classid.isEmpty() ? "群组" : "班级群", desc, id, isMember, "group", faceUrl);
             }
         } else {
             // 显示全部结果
             for (const QJsonObject& item : m_searchClassResults) {
                 QString name = item["class_name"].toString();
                 QString code = item["class_code"].toString();
+                QString faceUrl = item["face_url"].toString();
                 if (name.isEmpty()) name = code;
-                addListItem(m_listLayout, "", name, "1", "班级", "班级编号: " + code, code, false, "class");
+                
+                // 检查本地是否有头像
+                QString localPath = "";
+                if (!faceUrl.isEmpty()) {
+                    QString fileName = faceUrl.section('/', -1);
+                    QString saveDir = QCoreApplication::applicationDirPath() + "/class_images/" + code;
+                    QString filePath = saveDir + "/" + fileName;
+                    if (QFile::exists(filePath)) {
+                        localPath = filePath;
+                    }
+                }
+                
+                addListItem(m_listLayout, localPath, name, "1", "班级", "班级编号: " + code, code, false, "class", faceUrl);
             }
             
             // 显示教师结果（过滤掉自己）
@@ -974,9 +1036,23 @@ private slots:
                 }
                 
                 QString name = item["name"].toString();
+                QString avatarUrl = item["avatar"].toString();
+                QString idCard = item["id_card"].toString();
                 if (name.isEmpty()) name = id;
                 bool isFriend = m_friendIds.contains(id);
-                addListItem(m_listLayout, "", name, "1", "教师", "教师唯一ID: " + id, id, isFriend, "teacher");
+                
+                // 检查本地是否有头像
+                QString localPath = "";
+                if (!idCard.isEmpty()) {
+                    QString fileName = idCard + "_.png";
+                    QString saveDir = QCoreApplication::applicationDirPath() + "/avatars/" + idCard;
+                    QString filePath = saveDir + "/" + fileName;
+                    if (QFile::exists(filePath)) {
+                        localPath = filePath;
+                    }
+                }
+                
+                addListItem(m_listLayout, localPath, name, "1", "教师", "教师唯一ID: " + id, id, isFriend, "teacher", avatarUrl);
                 displayedTeacherCount++;
             }
             // 更新教师计数（排除自己）
@@ -987,6 +1063,10 @@ private slots:
                 QString classid = item["classid"].toString();
                 QString introduction = item["introduction"].toString();
                 QString notification = item["notification"].toString();
+                QString faceUrl = item["face_url"].toString();
+                if (faceUrl.isEmpty() && item.contains("detail_face_url")) {
+                    faceUrl = item["detail_face_url"].toString();
+                }
                 int memberNum = item["member_num"].toInt();
                 bool isMember = m_joinedGroupIds.contains(id);
                 
@@ -995,8 +1075,19 @@ private slots:
                     desc = "群组ID: " + id;
                 }
                 
-                addListItem(m_listLayout, "", name, QString::number(memberNum), 
-                           classid.isEmpty() ? "群组" : "班级群", desc, id, isMember, "group");
+                // 检查本地是否有头像
+                QString localPath = "";
+                if (!faceUrl.isEmpty()) {
+                    QString fileName = faceUrl.section('/', -1);
+                    QString saveDir = QCoreApplication::applicationDirPath() + "/group_images/" + id;
+                    QString filePath = saveDir + "/" + fileName;
+                    if (QFile::exists(filePath)) {
+                        localPath = filePath;
+                    }
+                }
+                
+                addListItem(m_listLayout, localPath, name, QString::number(memberNum), 
+                           classid.isEmpty() ? "群组" : "班级群", desc, id, isMember, "group", faceUrl);
             }
         }
         
@@ -1481,12 +1572,45 @@ private slots:
 private:
     void addListItem(QVBoxLayout* parent, const QString& iconPath,
         const QString& name, const QString& memberCount,
-        const QString& tag, const QString& desc, const QString& id = "", bool isMember = false, const QString& type = "group")
+        const QString& tag, const QString& desc, const QString& id = "", bool isMember = false, const QString& type = "group", const QString& avatarUrl = "")
     {
         QHBoxLayout* itemLayout = new QHBoxLayout;
         QLabel* avatar = new QLabel;
         avatar->setFixedSize(40, 40);
-        avatar->setStyleSheet("background-color: #565656; border-radius: 20px;"); // 用灰色代替头像，可以换成 QPixmap 加载图片
+        avatar->setScaledContents(true); // 允许图片缩放
+        avatar->setStyleSheet("background-color: #565656; border-radius: 20px;"); // 默认灰色背景
+        
+        // 如果有本地头像路径，先显示（但后续会从服务器下载最新版本覆盖）
+        if (!iconPath.isEmpty() && QFile::exists(iconPath)) {
+            QPixmap pixmap(iconPath);
+            if (!pixmap.isNull()) {
+                // 将图片裁剪为圆形
+                QPixmap roundedPixmap(40, 40);
+                roundedPixmap.fill(Qt::transparent);
+                QPainter painter(&roundedPixmap);
+                painter.setRenderHint(QPainter::Antialiasing);
+                QPainterPath path;
+                path.addEllipse(0, 0, 40, 40);
+                painter.setClipPath(path);
+                painter.drawPixmap(0, 0, 40, 40, pixmap);
+                avatar->setPixmap(roundedPixmap);
+            }
+        }
+        
+        // 如果有头像URL，总是从服务器下载最新版本（覆盖本地文件）
+        if (!avatarUrl.isEmpty()) {
+            if (!id.isEmpty()) {
+                m_avatarLabels[id] = avatar;
+                // 根据类型下载头像（总是从服务器下载，确保使用最新版本）
+                if (type == "group") {
+                    downloadGroupAvatar(avatarUrl, id, avatar);
+                } else if (type == "class") {
+                    downloadClassAvatar(avatarUrl, id, avatar);
+                } else if (type == "teacher") {
+                    downloadTeacherAvatar(avatarUrl, id, avatar);
+                }
+            }
+        }
 
         QVBoxLayout* infoLayout = new QVBoxLayout;
         QLabel* lblName = new QLabel(QString("%1  ⛔ %2人  %3").arg(name).arg(memberCount).arg(tag));
@@ -1553,6 +1677,287 @@ private:
         frame->setFrameShape(QFrame::HLine);
         frame->setStyleSheet("QFrame { background-color: #565656; }");
         parent->insertWidget(parent->count() - 1, frame); // 在stretch之前插入
+    }
+    
+    // 下载群组头像
+    void downloadGroupAvatar(const QString& faceUrl, const QString& groupId, QLabel* avatarLabel)
+    {
+        if (faceUrl.isEmpty() || groupId.isEmpty() || !avatarLabel) {
+            return;
+        }
+        
+        // 检查是否是阿里云OSS地址或其他有效URL
+        if (!faceUrl.startsWith("http://") && !faceUrl.startsWith("https://")) {
+            return;
+        }
+        
+        // 构建保存路径
+        QString fileName = faceUrl.section('/', -1);
+        QString saveDir = QCoreApplication::applicationDirPath() + "/group_images/" + groupId;
+        QDir().mkpath(saveDir);
+        QString localPath = saveDir + "/" + fileName;
+        
+        // 如果本地文件已存在，先显示（但后续会从服务器下载最新版本覆盖）
+        if (QFile::exists(localPath)) {
+            QPixmap pixmap(localPath);
+            if (!pixmap.isNull()) {
+                QPixmap roundedPixmap(40, 40);
+                roundedPixmap.fill(Qt::transparent);
+                QPainter painter(&roundedPixmap);
+                painter.setRenderHint(QPainter::Antialiasing);
+                QPainterPath path;
+                path.addEllipse(0, 0, 40, 40);
+                painter.setClipPath(path);
+                painter.drawPixmap(0, 0, 40, 40, pixmap);
+                avatarLabel->setPixmap(roundedPixmap);
+            }
+        }
+        
+        // 下载图片
+        if (!m_networkManager) {
+            m_networkManager = new QNetworkAccessManager(this);
+        }
+        
+        QUrl url(faceUrl);
+        QNetworkRequest request(url);
+        QNetworkReply* reply = m_networkManager->get(request);
+        
+        connect(reply, &QNetworkReply::finished, this, [this, reply, groupId, localPath, faceUrl, avatarLabel]() {
+            if (reply->error() != QNetworkReply::NoError) {
+                qWarning() << "下载群组头像失败:" << reply->errorString() << "URL:" << faceUrl;
+                reply->deleteLater();
+                return;
+            }
+            
+            // 读取图片数据
+            QByteArray imageData = reply->readAll();
+            reply->deleteLater();
+            
+            if (imageData.isEmpty()) {
+                qWarning() << "下载的群组头像数据为空，URL:" << faceUrl;
+                return;
+            }
+            
+            // 保存到本地文件
+            QFile file(localPath);
+            if (!file.open(QIODevice::WriteOnly)) {
+                qWarning() << "无法创建群组头像文件:" << localPath;
+                return;
+            }
+            
+            file.write(imageData);
+            file.close();
+            
+            qDebug() << "群组头像下载成功，保存到:" << localPath;
+            
+            // 更新头像显示
+            if (avatarLabel && avatarLabel->parent()) {
+                QPixmap pixmap(localPath);
+                if (!pixmap.isNull()) {
+                    QPixmap roundedPixmap(40, 40);
+                    roundedPixmap.fill(Qt::transparent);
+                    QPainter painter(&roundedPixmap);
+                    painter.setRenderHint(QPainter::Antialiasing);
+                    QPainterPath path;
+                    path.addEllipse(0, 0, 40, 40);
+                    painter.setClipPath(path);
+                    painter.drawPixmap(0, 0, 40, 40, pixmap);
+                    avatarLabel->setPixmap(roundedPixmap);
+                }
+            }
+        });
+    }
+    
+    // 下载班级头像
+    void downloadClassAvatar(const QString& faceUrl, const QString& classCode, QLabel* avatarLabel)
+    {
+        if (faceUrl.isEmpty() || classCode.isEmpty() || !avatarLabel) {
+            return;
+        }
+        
+        // 检查是否是有效URL
+        if (!faceUrl.startsWith("http://") && !faceUrl.startsWith("https://")) {
+            return;
+        }
+        
+        // 构建保存路径
+        QString fileName = faceUrl.section('/', -1);
+        QString saveDir = QCoreApplication::applicationDirPath() + "/class_images/" + classCode;
+        QDir().mkpath(saveDir);
+        QString localPath = saveDir + "/" + fileName;
+        
+        // 如果本地文件已存在，先显示（但后续会从服务器下载最新版本覆盖）
+        if (QFile::exists(localPath)) {
+            QPixmap pixmap(localPath);
+            if (!pixmap.isNull()) {
+                QPixmap roundedPixmap(40, 40);
+                roundedPixmap.fill(Qt::transparent);
+                QPainter painter(&roundedPixmap);
+                painter.setRenderHint(QPainter::Antialiasing);
+                QPainterPath path;
+                path.addEllipse(0, 0, 40, 40);
+                painter.setClipPath(path);
+                painter.drawPixmap(0, 0, 40, 40, pixmap);
+                avatarLabel->setPixmap(roundedPixmap);
+            }
+        }
+        
+        // 下载图片
+        if (!m_networkManager) {
+            m_networkManager = new QNetworkAccessManager(this);
+        }
+        
+        QUrl url(faceUrl);
+        QNetworkRequest request(url);
+        QNetworkReply* reply = m_networkManager->get(request);
+        
+        connect(reply, &QNetworkReply::finished, this, [this, reply, classCode, localPath, faceUrl, avatarLabel]() {
+            if (reply->error() != QNetworkReply::NoError) {
+                qWarning() << "下载班级头像失败:" << reply->errorString() << "URL:" << faceUrl;
+                reply->deleteLater();
+                return;
+            }
+            
+            // 读取图片数据
+            QByteArray imageData = reply->readAll();
+            reply->deleteLater();
+            
+            if (imageData.isEmpty()) {
+                qWarning() << "下载的班级头像数据为空，URL:" << faceUrl;
+                return;
+            }
+            
+            // 保存到本地文件
+            QFile file(localPath);
+            if (!file.open(QIODevice::WriteOnly)) {
+                qWarning() << "无法创建班级头像文件:" << localPath;
+                return;
+            }
+            
+            file.write(imageData);
+            file.close();
+            
+            qDebug() << "班级头像下载成功，保存到:" << localPath;
+            
+            // 更新头像显示
+            if (avatarLabel && avatarLabel->parent()) {
+                QPixmap pixmap(localPath);
+                if (!pixmap.isNull()) {
+                    QPixmap roundedPixmap(40, 40);
+                    roundedPixmap.fill(Qt::transparent);
+                    QPainter painter(&roundedPixmap);
+                    painter.setRenderHint(QPainter::Antialiasing);
+                    QPainterPath path;
+                    path.addEllipse(0, 0, 40, 40);
+                    painter.setClipPath(path);
+                    painter.drawPixmap(0, 0, 40, 40, pixmap);
+                    avatarLabel->setPixmap(roundedPixmap);
+                }
+            }
+        });
+    }
+    
+    // 下载教师头像
+    void downloadTeacherAvatar(const QString& avatarUrl, const QString& teacherUniqueId, QLabel* avatarLabel)
+    {
+        if (avatarUrl.isEmpty() || teacherUniqueId.isEmpty() || !avatarLabel) {
+            return;
+        }
+        
+        // 检查是否是有效URL
+        if (!avatarUrl.startsWith("http://") && !avatarUrl.startsWith("https://")) {
+            return;
+        }
+        
+        // 从搜索结果中获取id_card
+        QString idNumber;
+        for (const QJsonObject& item : m_searchTeacherResults) {
+            if (item["teacher_unique_id"].toString() == teacherUniqueId) {
+                idNumber = item["id_card"].toString();
+                break;
+            }
+        }
+        
+        if (idNumber.isEmpty()) {
+            qWarning() << "无法获取教师身份证号，无法下载头像:" << teacherUniqueId;
+            return;
+        }
+        
+        // 构建本地保存路径：avatars/{id_number}/{id_number}_.png
+        QString fileName = idNumber + "_.png";
+        QString saveDir = QCoreApplication::applicationDirPath() + "/avatars/" + idNumber;
+        QDir().mkpath(saveDir);
+        QString localPath = saveDir + "/" + fileName;
+        
+        // 如果本地文件已存在，先显示（但后续会从服务器下载最新版本覆盖）
+        if (QFile::exists(localPath)) {
+            QPixmap pixmap(localPath);
+            if (!pixmap.isNull()) {
+                QPixmap roundedPixmap(40, 40);
+                roundedPixmap.fill(Qt::transparent);
+                QPainter painter(&roundedPixmap);
+                painter.setRenderHint(QPainter::Antialiasing);
+                QPainterPath path;
+                path.addEllipse(0, 0, 40, 40);
+                painter.setClipPath(path);
+                painter.drawPixmap(0, 0, 40, 40, pixmap);
+                avatarLabel->setPixmap(roundedPixmap);
+            }
+        }
+        
+        // 下载图片
+        if (!m_networkManager) {
+            m_networkManager = new QNetworkAccessManager(this);
+        }
+        
+        QUrl url(avatarUrl);
+        QNetworkRequest request(url);
+        QNetworkReply* reply = m_networkManager->get(request);
+        
+        connect(reply, &QNetworkReply::finished, this, [this, reply, teacherUniqueId, localPath, avatarUrl, avatarLabel]() {
+            if (reply->error() != QNetworkReply::NoError) {
+                qWarning() << "下载教师头像失败:" << reply->errorString() << "URL:" << avatarUrl;
+                reply->deleteLater();
+                return;
+            }
+            
+            // 读取图片数据
+            QByteArray imageData = reply->readAll();
+            reply->deleteLater();
+            
+            if (imageData.isEmpty()) {
+                qWarning() << "下载的教师头像数据为空，URL:" << avatarUrl;
+                return;
+            }
+            
+            // 保存到本地文件
+            QFile file(localPath);
+            if (!file.open(QIODevice::WriteOnly)) {
+                qWarning() << "无法创建教师头像文件:" << localPath;
+                return;
+            }
+            
+            file.write(imageData);
+            file.close();
+            
+            qDebug() << "教师头像下载成功，保存到:" << localPath;
+            
+            // 更新头像显示
+            if (avatarLabel && avatarLabel->parent()) {
+                QPixmap pixmap(localPath);
+                if (!pixmap.isNull()) {
+                    QPixmap roundedPixmap(40, 40);
+                    roundedPixmap.fill(Qt::transparent);
+                    QPainter painter(&roundedPixmap);
+                    painter.setRenderHint(QPainter::Antialiasing);
+                    QPainterPath path;
+                    path.addEllipse(0, 0, 40, 40);
+                    painter.setClipPath(path);
+                    painter.drawPixmap(0, 0, 40, 40, pixmap);
+                    avatarLabel->setPixmap(roundedPixmap);
+                }
+            }
+        });
     }
 
 protected:
@@ -1638,5 +2043,9 @@ private:
     QList<QJsonObject> m_searchTeacherResults;
     QList<QJsonObject> m_searchGroupResults;
     int m_pendingSearchRequests = 0; // 等待的搜索请求数量
+    
+    // 头像相关
+    QNetworkAccessManager* m_networkManager = nullptr;
+    QMap<QString, QLabel*> m_avatarLabels; // 存储ID到头像标签的映射：key为id，value为QLabel*
 };
 
