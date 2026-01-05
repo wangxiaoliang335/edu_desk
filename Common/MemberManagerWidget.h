@@ -7,7 +7,6 @@
 #include <QHeaderView>
 #include <QLabel>
 #include <qdebug.h>
-#include <qmessagebox.h>
 #include <qfiledialog.h>
 #include <qjsonobject.h>
 #include <qjsondocument.h>
@@ -16,7 +15,9 @@
 #include <qjsonarray.h>
 #include <qregularexpression.h>
 #include <QIcon>
+#include "TAIconCheckDelegate.h"
 #include "TABaseDialog.h"
+#include "CustomMessageDialog.h"
 
 class MemberManagerWidget : public QWidget
 {
@@ -72,13 +73,13 @@ public:
         btnGenerate->setIconSize(QSize(20, 20));
         btnGenerate->setFixedHeight(40);
         btnGenerate->setStyleSheet(btnStyle);
-        btnGenerate->hide();
 
         btnLayout->addWidget(btnAdd);
         btnLayout->addWidget(btnImport);
         btnLayout->addWidget(btnExport);
         btnLayout->addWidget(btnDelete);
         btnLayout->addStretch();
+        btnLayout->addWidget(btnGenerate);
 
         manager_ = new QNetworkAccessManager(this); // 初始化网络对象
 
@@ -98,6 +99,8 @@ public:
 
         //table->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
         table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Interactive); // 手动调整
+        // 复选框列使用图片自绘（checked 时叠加蓝色对勾）
+        table->setItemDelegateForColumn(0, new TAIconCheckDelegate(table));
 
         // 第一列加复选框
         for (int row = 0; row < table->rowCount(); ++row) {
@@ -185,6 +188,10 @@ public:
     }
 
 private slots:
+    void showTip(const QString& title, const QString& message) {
+        CustomMessageDialog::showMessage(this, title, message);
+    }
+
     // 添加成员
     void onAddMember() {
         int newRow = table->rowCount();
@@ -219,7 +226,7 @@ private slots:
 
         QFile file(filePath);
         if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-            QMessageBox::critical(this, "错误", "无法保存文件");
+            showTip("错误", "无法保存文件");
             return;
         }
 
@@ -257,7 +264,7 @@ private slots:
         }
 
         file.close();
-        QMessageBox::information(this, "导出完成", "已导出表头和数据到文件");
+        showTip("导出完成", "已导出表头和数据到文件");
     }
 
     // 导入（包含表头）
@@ -267,7 +274,7 @@ private slots:
 
         QFile file(filePath);
         if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            QMessageBox::critical(this, "错误", "无法打开文件");
+            showTip("错误", "无法打开文件");
             return;
         }
 
@@ -277,6 +284,7 @@ private slots:
         bool isFirstLine = true;
         int rowIndex = 0;
 
+        int invalidIdCount = 0;
         while (!in.atEnd()) {
             QString line = in.readLine();
             QStringList fields = line.split(",");
@@ -290,6 +298,7 @@ private slots:
             else {
                 if (!isIdCardFormatValid(fields[4]))   //身份证号码格式检查
                 {
+                    invalidIdCount++;
                     continue;
                 }
 
@@ -315,14 +324,17 @@ private slots:
 
         file.close();
         onGenerate();
-        QMessageBox::information(this, "导入完成", "已导入表头和数据");
+        if (invalidIdCount > 0) {
+            showTip("提示", QString("导入时有 %1 条记录身份证号码格式不正确，已跳过。").arg(invalidIdCount));
+        }
+        showTip("导入完成", "已导入表头和数据");
     }
 
     // 删除选中的行（支持多行选择）
     void onDeleteMember() {
         QList<QTableWidgetSelectionRange> selectedRanges = table->selectedRanges();
         if (selectedRanges.isEmpty()) {
-            QMessageBox::information(this, "删除成员", "请先选择要删除的行");
+            showTip("删除成员", "请先选择要删除的行");
             return;
         }
 
@@ -367,7 +379,7 @@ private slots:
             }
         }
 
-        //QMessageBox::information(this, "删除成员",
+        // CustomMessageDialog::showMessage(this, "删除成员",
         //    QString("已删除 %1 条记录（已通知服务器）").arg(delCount));
     }
 
@@ -385,10 +397,11 @@ private slots:
     void onGenerate() {
         if (m_schoolId.isEmpty())
         {
-            QMessageBox::information(this, "提示", "需要先生成学校组织代码！");
+            showTip("提示", "需要先生成学校组织代码！");
             return;
         }
 
+        QStringList invalidRows;
         for (int row = 0; row < table->rowCount(); ++row) {
             QString teacherUniqueId = table->item(row, 1) ? table->item(row, 1)->text().trimmed() : "";
 
@@ -399,6 +412,7 @@ private slots:
 
             if (!isIdCardFormatValid(table->item(row, 4) ? table->item(row, 4)->text() : ""))
             {
+                invalidRows << QString::number(row + 1);
                 continue;
             }
 
@@ -418,7 +432,7 @@ private slots:
             teacherData["educational_stage"] = table->item(row, 12) ? table->item(row, 12)->text() : "";
 
             // ⚠ schoolId 你需要从代码或其他输入获取，这里先假设写死一个
-            teacherData["schoolId"] = m_schoolId.toInt();
+            teacherData["schoolId"] = m_schoolId;
             //teacherData["gradeId"] = 12;
 
             QJsonDocument doc(teacherData);
@@ -452,6 +466,10 @@ private slots:
                 }
                 reply->deleteLater();
                 });
+        }
+
+        if (!invalidRows.isEmpty()) {
+            showTip("提示", QString("以下行身份证号码格式不正确，已跳过生成：%1").arg(invalidRows.join("、")));
         }
     }
 

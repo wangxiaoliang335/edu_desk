@@ -11,6 +11,7 @@
 #include <qmessagebox.h>
 #include <algorithm>
 #include <QSet>
+#include "TAIconCheckDelegate.h"
 
 QClassMgr::QClassMgr(QWidget *parent)
 	: QWidget(parent)
@@ -512,6 +513,8 @@ QClassMgr::QClassMgr(QWidget *parent)
     table_->setSelectionMode(QAbstractItemView::ExtendedSelection);
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->setAlternatingRowColors(false);
+    // 复选框列使用图片自绘（checked 时叠加蓝色对勾）
+    table_->setItemDelegateForColumn(0, new TAIconCheckDelegate(table_));
     // 列表框整体放大（约 1.5 倍效果：高度/行高/表头）
     table_->setMinimumHeight(450);
     table_->horizontalHeader()->setFixedHeight(48);

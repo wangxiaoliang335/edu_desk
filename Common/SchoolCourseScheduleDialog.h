@@ -473,7 +473,9 @@ private:
             return;
         }
         QString schoolIdTrimmed = schoolId.trimmed();
-        if (schoolIdTrimmed.length() != 6 || !schoolIdTrimmed.toInt()) {
+        // schoolId 全程按字符串使用：这里只做“6位数字”格式校验，不做 toInt 转换
+        QRegExp digits6(QStringLiteral("^\\d{6}$"));
+        if (!digits6.exactMatch(schoolIdTrimmed)) {
             m_status->setText(QString::fromUtf8(u8"schoolId 格式错误，应为6位数字"));
             return;
         }
