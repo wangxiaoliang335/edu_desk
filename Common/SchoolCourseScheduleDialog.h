@@ -33,6 +33,9 @@
 #include <QCursor>
 #include <QFontMetrics>
 #include <QPainterPath>
+#include <QToolButton>
+#include <QFontDatabase>
+#include <QColorDialog>
 
 #include "CommonInfo.h"
 
@@ -75,13 +78,20 @@ public:
             }
         }
         
-        // 也通过样式表设置
+        // 也通过样式表设置（支持自定义表头文字颜色）
+        QColor headerTextColor = Qt::white;
+        QVariant v = property("headerTextColor");
+        if (v.isValid() && v.canConvert<QColor>()) {
+            headerTextColor = v.value<QColor>();
+        }
+        const QString colorName = headerTextColor.isValid() ? headerTextColor.name() : QStringLiteral("#ffffff");
+
         if (horizontalHeader() && verticalHeader()) {
             horizontalHeader()->setStyleSheet(
-                "QHeaderView::section { background-color: #5C5C5C; color: white; }"
+                QString("QHeaderView::section { background-color: #5C5C5C; color: %1; }").arg(colorName)
             );
             verticalHeader()->setStyleSheet(
-                "QHeaderView::section { background-color: #5C5C5C; color: white; }"
+                QString("QHeaderView::section { background-color: #5C5C5C; color: %1; }").arg(colorName)
             );
         }
         
@@ -184,13 +194,10 @@ public:
         root->setContentsMargins(12, 12, 12, 12);
         root->setSpacing(10);
 
-        // 顶部栏：标题 + 年级下拉 + 刷新 + 关闭
+        // 顶部栏：年级下拉 + 工具按钮 + 刷新 + 关闭
         QHBoxLayout* top = new QHBoxLayout;
         top->setSpacing(10);
-        QLabel* title = new QLabel(QString::fromUtf8(u8"课程表"), this);
-        title->setStyleSheet("font-size:16px;font-weight:700;");
-        top->addWidget(title);
-        top->addStretch();
+        // 左侧标题文本去掉（按需求）
 
         m_gradeCombo = new QComboBox(this);
         m_gradeCombo->setMinimumWidth(180);
@@ -233,9 +240,63 @@ public:
         QPushButton* uploadBtn = new QPushButton(QString::fromUtf8(u8"上传"), this);
         top->addWidget(downloadBtn);
         top->addWidget(uploadBtn);
+        // 先隐藏“上传”按钮（按需求）
+        uploadBtn->hide();
+
+        // 红框区域：字体设置
+        QWidget* fontWidget = new QWidget(this);
+        QHBoxLayout* fontLayout = new QHBoxLayout(fontWidget);
+        fontLayout->setContentsMargins(0, 0, 0, 0);
+        fontLayout->setSpacing(6);
+
+        m_fontCombo = new QComboBox(fontWidget);
+        m_fontCombo->setFixedWidth(120);
+        m_fontCombo->setStyleSheet(
+            "QComboBox { background-color:#3b3b3b; color:#eaeaea; border:1px solid #555; padding:6px 10px; border-radius:6px; }"
+            "QComboBox::drop-down { border:none; width:18px; }"
+            "QComboBox QAbstractItemView { background-color:#3b3b3b; color:#eaeaea; selection-background-color:#555; border:1px solid #555; }"
+        );
+        // 字体列表（系统字体）
+        const QStringList families = QFontDatabase().families();
+        for (const QString& f : families) {
+            m_fontCombo->addItem(f);
+        }
+        // 默认选择常用字体（存在则选中）
+        const QString prefer = QStringLiteral("微软雅黑");
+        const int preferIdx = m_fontCombo->findText(prefer);
+        if (preferIdx >= 0) m_fontCombo->setCurrentIndex(preferIdx);
+
+        auto mkTool = [fontWidget](const QString& iconPath, const QString& tip, bool checkable) {
+            QToolButton* b = new QToolButton(fontWidget);
+            b->setCheckable(checkable);
+            b->setIcon(QIcon(iconPath));
+            b->setIconSize(QSize(16, 16));
+            b->setToolTip(tip);
+            b->setFixedSize(30, 30);
+            b->setStyleSheet(
+                "QToolButton{background-color:#3b3b3b;color:#eaeaea;border:1px solid #555;border-radius:6px;}"
+                "QToolButton:hover{background-color:#454545;}"
+                "QToolButton:checked{border-color:#2563eb;}"
+            );
+            return b;
+        };
+
+        m_fontIncBtn = mkTool(":/res/img/font-increase.png", QString::fromUtf8(u8"字号增大"), false);
+        m_fontDecBtn = mkTool(":/res/img/font-decrease.png", QString::fromUtf8(u8"字号减小"), false);
+        m_fontUnderlineBtn = mkTool(":/res/img/font-underline.png", QString::fromUtf8(u8"下划线"), true);
+        m_fontFillBtn = mkTool(":/res/img/font-fill.png", QString::fromUtf8(u8"字体颜色（暂不实现）"), false);
+
+        fontLayout->addWidget(m_fontCombo);
+        fontLayout->addWidget(m_fontIncBtn);
+        fontLayout->addWidget(m_fontDecBtn);
+        fontLayout->addWidget(m_fontUnderlineBtn);
+        fontLayout->addWidget(m_fontFillBtn);
+        top->addWidget(fontWidget);
 
         m_refreshBtn = new QPushButton(QString::fromUtf8(u8"刷新"), this);
         top->addWidget(m_refreshBtn);
+        // 将工具区整体靠左，关闭按钮保持最右侧
+        top->addStretch();
 
         // 关闭按钮（初始隐藏，鼠标移入窗口时显示）
         m_closeBtn = new QPushButton("×", this);
@@ -290,6 +351,77 @@ public:
         m_status = new QLabel(QString::fromUtf8(u8"就绪"), this);
         m_status->setStyleSheet("color:#cfcfcf;");
         root->addWidget(m_status);
+
+        // 字体设置：应用到整个表格（包含表头）
+        m_fontPointSize = m_table ? m_table->font().pointSize() : 12;
+        m_fontColor = QColor("#ffffff");
+        auto applyTableFont = [this]() {
+            if (!m_table) return;
+            QFont f = m_table->font();
+            if (m_fontCombo) {
+                const QString fam = m_fontCombo->currentText().trimmed();
+                if (!fam.isEmpty()) f.setFamily(fam);
+            }
+            if (m_fontPointSize > 0) f.setPointSize(m_fontPointSize);
+            f.setUnderline(m_fontUnderlineBtn && m_fontUnderlineBtn->isChecked());
+            m_table->setFont(f);
+            if (m_table->horizontalHeader()) m_table->horizontalHeader()->setFont(f);
+            if (m_table->verticalHeader()) m_table->verticalHeader()->setFont(f);
+            // 应用字体颜色：表头 + 单元格
+            if (m_fontColor.isValid()) {
+                // 表头：通过 property 让 CustomCourseScheduleTable 在 updateCornerButtonStyle 里使用
+                m_table->setProperty("headerTextColor", m_fontColor);
+                if (m_table->horizontalHeader()) {
+                    m_table->horizontalHeader()->setStyleSheet(
+                        QString("QHeaderView::section { background-color: #5C5C5C; color: %1; border: 1px solid #777777; padding: 5px; }")
+                            .arg(m_fontColor.name()));
+                }
+                if (m_table->verticalHeader()) {
+                    m_table->verticalHeader()->setStyleSheet(
+                        QString("QHeaderView::section { background-color: #5C5C5C; color: %1; border: 1px solid #777777; padding: 5px; }")
+                            .arg(m_fontColor.name()));
+                }
+            }
+            // 已存在单元格也更新字体
+            for (int r = 0; r < m_table->rowCount(); ++r) {
+                for (int c = 0; c < m_table->columnCount(); ++c) {
+                    QTableWidgetItem* it = m_table->item(r, c);
+                    if (it) {
+                        it->setFont(f);
+                        if (m_fontColor.isValid()) {
+                            it->setForeground(QBrush(m_fontColor));
+                        }
+                    }
+                }
+            }
+            m_table->viewport()->update();
+        };
+        connect(m_fontCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [applyTableFont](int) {
+            applyTableFont();
+        });
+        connect(m_fontIncBtn, &QToolButton::clicked, this, [this, applyTableFont]() {
+            m_fontPointSize = qMin(28, m_fontPointSize + 1);
+            applyTableFont();
+        });
+        connect(m_fontDecBtn, &QToolButton::clicked, this, [this, applyTableFont]() {
+            m_fontPointSize = qMax(8, m_fontPointSize - 1);
+            applyTableFont();
+        });
+        connect(m_fontUnderlineBtn, &QToolButton::toggled, this, [applyTableFont](bool) {
+            applyTableFont();
+        });
+        connect(m_fontFillBtn, &QToolButton::clicked, this, [this, applyTableFont]() {
+            const QColor chosen = QColorDialog::getColor(m_fontColor, this, QString::fromUtf8(u8"选择字体颜色"));
+            if (chosen.isValid()) {
+                m_fontColor = chosen;
+                applyTableFont();
+                // 更新角落按钮/表头等可能被重绘覆盖的样式
+                CustomCourseScheduleTable* customTable = static_cast<CustomCourseScheduleTable*>(m_table);
+                if (customTable) {
+                    QTimer::singleShot(0, customTable, [customTable]() { customTable->updateCornerButtonStyle(); });
+                }
+            }
+        });
 
         connect(m_closeBtn, &QPushButton::clicked, this, &QDialog::close);
         connect(m_refreshBtn, &QPushButton::clicked, this, [this]() { refresh(); });
@@ -966,6 +1098,15 @@ private:
     QPushButton* m_closeBtn = nullptr; // 关闭按钮
     CustomCourseScheduleTable* m_table = nullptr; // 自定义表格
     QLabel* m_status = nullptr;
+
+    // 红框：字体设置
+    QComboBox* m_fontCombo = nullptr;
+    QToolButton* m_fontIncBtn = nullptr;
+    QToolButton* m_fontDecBtn = nullptr;
+    QToolButton* m_fontUnderlineBtn = nullptr;
+    QToolButton* m_fontFillBtn = nullptr;
+    int m_fontPointSize = 12;
+    QColor m_fontColor;
 
     // 窗口拖拽相关
     bool m_dragging = false;
