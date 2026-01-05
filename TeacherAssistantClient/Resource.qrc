@@ -75,5 +75,14 @@
         <file>res/img/class_card_ic_random.png</file>
         <file>res/img/class_card_ic_random@2x.png</file>
         <file>res/img/class_card_ic_random@3x.png</file>
+        <file>res/img/signin_ic_phone.png</file>
+        <file>res/img/signin_ic_phone@2x.png</file>
+        <file>res/img/signin_ic_phone@3x.png</file>
+        <file>res/img/signin_ic_verify.png</file>
+        <file>res/img/signin_ic_verify@2x.png</file>
+        <file>res/img/signin_ic_verify@3x.png</file>
+        <file>res/img/signin_ic_password.png</file>
+        <file>res/img/signin_ic_password@2x.png</file>
+        <file>res/img/signin_ic_password@3x.png</file>
     </qresource>
 </RCC>

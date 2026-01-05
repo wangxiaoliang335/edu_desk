@@ -310,7 +310,7 @@ void FriendGroupDialog::updateGroupCounts()
     }
 }
 
-void FriendGroupDialog::addGroupTreeNode(const QString& displayName, const QString& groupId, const QString& classid, bool iGroupOwner, bool isClassGroup)
+void FriendGroupDialog::addGroupTreeNode(const QString& displayName, const QString& groupId, const QString& classid, bool iGroupOwner, bool isClassGroup, const QString& avatarPath)
 {
     if (!m_groupTree || groupId.isEmpty())
         return;
@@ -338,6 +338,11 @@ void FriendGroupDialog::addGroupTreeNode(const QString& displayName, const QStri
     item->setData(0, Qt::UserRole + 2, classid);
     item->setData(0, Qt::UserRole + 3, iGroupOwner);
     item->setData(0, Qt::UserRole + 4, isClassGroup);
+
+    // 如果头像文件存在，设置图标
+    if (!avatarPath.isEmpty() && QFile::exists(avatarPath)) {
+        item->setIcon(0, QIcon(avatarPath));
+    }
 
     parent->setExpanded(true);
     if (parent->parent())
@@ -1273,9 +1278,28 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
                 classid = groupid.left(groupid.length() - 2);
             }
             
+            // 优先使用详细信息中的FaceUrl，如果没有则使用基础信息中的FaceUrl
+            QString detailFaceUrl = group[kTIMGroupDetialInfoFaceUrl].toString();
+            QString baseFaceUrl = group[kTIMGroupBaseInfoFaceUrl].toString();
+            QString faceUrl = !detailFaceUrl.isEmpty() ? detailFaceUrl : baseFaceUrl;
+            
+            // 检查头像文件是否已存在
+            QString avatarPath;
+            if (!faceUrl.isEmpty()) {
+                QString fileName = faceUrl.section('/', -1);
+                QString saveDir = QCoreApplication::applicationDirPath() + "/group_images/" + groupid;
+                QString localPath = saveDir + "/" + fileName;
+                if (QFile::exists(localPath)) {
+                    avatarPath = localPath;
+                } else {
+                    // 如果文件不存在，启动下载
+                    ths->downloadGroupAvatar(faceUrl, groupid);
+                }
+            }
+            
             // 直接刷新到界面
             ths->addClassNode(groupName, groupid, classid, isGroupOwner, isClassGroup);
-            ths->addGroupTreeNode(groupName, groupid, classid, isGroupOwner, isClassGroup);
+            ths->addGroupTreeNode(groupName, groupid, classid, isGroupOwner, isClassGroup, avatarPath);
             
             if (!classid.isEmpty()) {
                 ths->m_setClassId.insert(classid);
@@ -1291,18 +1315,8 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
             groupObj["group_id"] = groupid;
             groupObj["group_name"] = groupName;
             groupObj["group_type"] = groupType;
-            
-            // 优先使用详细信息中的FaceUrl，如果没有则使用基础信息中的FaceUrl
-            QString detailFaceUrl = group[kTIMGroupDetialInfoFaceUrl].toString();
-            QString baseFaceUrl = group[kTIMGroupBaseInfoFaceUrl].toString();
-            QString faceUrl = !detailFaceUrl.isEmpty() ? detailFaceUrl : baseFaceUrl;
             groupObj["face_url"] = faceUrl;
             groupObj["detail_face_url"] = detailFaceUrl;
-            
-            // 如果face_url不为空，下载头像并显示到班级群界面
-            if (!faceUrl.isEmpty()) {
-                ths->downloadGroupAvatar(faceUrl, groupid);
-            }
             
             groupObj["info_seq"] = group[kTIMGroupBaseInfoInfoSeq].toInt();
             groupObj["latest_seq"] = group[kTIMGroupBaseInfoLastestSeq].toInt();
@@ -1763,6 +1777,14 @@ void FriendGroupDialog::downloadGroupAvatar(const QString& faceUrl, const QStrin
     
     // 如果文件已存在，直接更新界面显示
     if (QFile::exists(localPath)) {
+        // 更新群组列表的图标
+        if (m_groupItemMap.contains(groupId)) {
+            QTreeWidgetItem* item = m_groupItemMap[groupId];
+            if (item) {
+                item->setIcon(0, QIcon(localPath));
+            }
+        }
+        
         // 如果ScheduleDialog已打开，更新其头像显示
         if (m_scheduleDlg.contains(groupId)) {
             ScheduleDialog* dlg = m_scheduleDlg[groupId];
@@ -1809,6 +1831,14 @@ void FriendGroupDialog::downloadGroupAvatar(const QString& faceUrl, const QStrin
         file.close();
         
         qDebug() << "群组头像下载成功，保存到:" << localPath;
+        
+        // 更新群组列表的图标
+        if (m_groupItemMap.contains(groupId)) {
+            QTreeWidgetItem* item = m_groupItemMap[groupId];
+            if (item) {
+                item->setIcon(0, QIcon(localPath));
+            }
+        }
         
         // 如果ScheduleDialog已打开，更新其头像显示
         if (m_scheduleDlg.contains(groupId)) {

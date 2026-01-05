@@ -148,7 +148,7 @@ private:
     void setupGroupTree();
     void clearGroupTree();
     void updateGroupCounts();
-    void addGroupTreeNode(const QString& displayName, const QString& groupId, const QString& classid, bool iGroupOwner, bool isClassGroup);
+    void addGroupTreeNode(const QString& displayName, const QString& groupId, const QString& classid, bool iGroupOwner, bool isClassGroup, const QString& avatarPath = QString());
     void handleGroupItemActivated(QTreeWidgetItem* item);
     void openScheduleForGroup(const QString& groupName, const QString& unique_group_id, const QString& classid, bool iGroupOwner, bool isClassGroup);
     void processPrepareClassHistoryMessage(const QJsonObject& rootObj);

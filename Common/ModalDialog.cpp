@@ -3,6 +3,52 @@
 #include <qpainterpath>
 #include <QRegExp>
 #include <QMessageBox>
+#include <QImage>
+#include <QPainter>
+
+static QPixmap loadTrimmedScaledPixmap(const QString& path, int targetSize, int yOffset = 0)
+{
+    QImage img(path);
+    if (img.isNull())
+        return QPixmap();
+
+    // 裁掉四周透明留白，避免视觉重心偏移
+    int left = img.width();
+    int right = -1;
+    int top = img.height();
+    int bottom = -1;
+
+    for (int y = 0; y < img.height(); ++y) {
+        for (int x = 0; x < img.width(); ++x) {
+            if (img.pixelColor(x, y).alpha() > 0) {
+                if (x < left) left = x;
+                if (x > right) right = x;
+                if (y < top) top = y;
+                if (y > bottom) bottom = y;
+            }
+        }
+    }
+
+    if (right >= left && bottom >= top) {
+        QRect rect(left, top, right - left + 1, bottom - top + 1);
+        rect.adjust(-1, -1, 1, 1);
+        rect = rect.intersected(img.rect());
+        img = img.copy(rect);
+    }
+
+    const QPixmap scaled = QPixmap::fromImage(img).scaled(targetSize, targetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+
+    // 固定大小画布 + 可调 y 偏移（负数上移，正数下移）
+    QPixmap canvas(targetSize, targetSize);
+    canvas.fill(Qt::transparent);
+    {
+        QPainter painter(&canvas);
+        const int x = (targetSize - scaled.width()) / 2;
+        const int y = (targetSize - scaled.height()) / 2 + yOffset;
+        painter.drawPixmap(x, y, scaled);
+    }
+    return canvas;
+}
 
 ModalDialog::ModalDialog(QWidget* parent)
     : QDialog(parent), m_dragging(false),
@@ -126,6 +172,8 @@ ModalDialog::ModalDialog(QWidget* parent)
     titleLayout->addWidget(closeButton);
 
     // 手机号输入
+    const int kInputIconSize = 40;
+    const int kInputIconYOffset = 13; // 图形本体微调：负数上移，正数下移
     phoneEdit = new QLineEdit(this);
     phoneEdit->setPlaceholderText("请输入手机号");
     phoneEdit->setStyleSheet(
@@ -134,12 +182,12 @@ ModalDialog::ModalDialog(QWidget* parent)
     );
     phoneEdit->setClearButtonEnabled(true);
     QLabel* phoneIcon = new QLabel(this);
-    phoneIcon->setPixmap(QPixmap(":/icons/phone.png").scaled(16, 16, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    phoneIcon->setFixedSize(16, 16);
+    phoneIcon->setPixmap(loadTrimmedScaledPixmap(":/res/img/signin_ic_phone@3x.png", kInputIconSize, kInputIconYOffset));
+    phoneIcon->setFixedSize(kInputIconSize, kInputIconSize);
     phoneIcon->setStyleSheet("background: transparent;");
     QHBoxLayout* phoneLayout = new QHBoxLayout(this);
     phoneLayout->setContentsMargins(8, 0, 8, 0);
-    phoneLayout->addWidget(phoneIcon);
+    phoneLayout->addWidget(phoneIcon, 0, Qt::AlignVCenter);
     phoneLayout->addWidget(phoneEdit);
     QWidget* phoneWidget = new QWidget(this);
     phoneWidget->setLayout(phoneLayout);
@@ -154,8 +202,8 @@ ModalDialog::ModalDialog(QWidget* parent)
     );
     codeEdit->setClearButtonEnabled(true);
     QLabel* codeIcon = new QLabel(this);
-    codeIcon->setPixmap(QPixmap(":/icons/code.png").scaled(16, 16, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    codeIcon->setFixedSize(16, 16);
+    codeIcon->setPixmap(loadTrimmedScaledPixmap(":/res/img/signin_ic_verify@3x.png", kInputIconSize, kInputIconYOffset));
+    codeIcon->setFixedSize(kInputIconSize, kInputIconSize);
     codeIcon->setStyleSheet("background: transparent;");
     //getCodeButton = new QPushButton("获取验证码", this);
     getCodeButton = new QPushButton(tr("获取验证码"), this);
@@ -167,7 +215,7 @@ ModalDialog::ModalDialog(QWidget* parent)
 
     QHBoxLayout* codeLayout = new QHBoxLayout(this);
     codeLayout->setContentsMargins(8, 0, 8, 0);
-    codeLayout->addWidget(codeIcon);
+    codeLayout->addWidget(codeIcon, 0, Qt::AlignVCenter);
     codeLayout->addWidget(codeEdit);
     codeLayout->addSpacing(5);
     codeLayout->addWidget(getCodeButton);

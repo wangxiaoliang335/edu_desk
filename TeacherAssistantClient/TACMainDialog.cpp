@@ -389,6 +389,9 @@ void TACMainDialog::Init(QString qPhone, int user_id)
     connect(countDownWidget, &TACCountDownWidget::doubleClicked, this, [=]() {
         countDownDialog->show();
         });
+    connect(countDownDialog, &TACCountDownDialog::done, this, [=]() {
+        countDownWidget->setContent(countDownDialog->content());
+    });
     countDownWidget->setContent(countDownDialog->content());
     countDownWidget->show();
 
