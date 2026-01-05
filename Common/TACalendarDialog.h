@@ -23,6 +23,10 @@
 #include <QJsonArray>
 #include <QPushButton>
 #include <QHBoxLayout>
+#include <QDateTime>
+#include <QDateTimeEdit>
+#include <QLineEdit>
+#include <QSettings>
 #include "QXlsx/header/xlsxdocument.h"
 #include "QXlsx/header/xlsxworksheet.h"
 #include "QXlsx/header/xlsxcell.h"
@@ -30,6 +34,7 @@
 #include <QTimer>
 #include <QPropertyAnimation>
 #include <QEasingCurve>
+#include <QColor>
 
 class TACalendarWidget : public QWidget
 {
@@ -173,8 +178,26 @@ private:
     QString weekName(int idx) const;
     QString formatDateCell(const QDate& date) const;
     void applyCellStyle(QTableWidgetItem* item, const QDate& date) const;
+    bool getReminderStyleForDate(const QDate& date, QColor* outBg) const;
     void parseCalendarResponse(const QString& response);
     void parseSingleCalendar(const QJsonObject& calendarObj);
+
+    // ====== 提醒（本地） ======
+    struct ReminderItem {
+        QString id;          // 唯一ID
+        QDateTime when;      // 提醒时间
+        QString text;        // 事项
+        QString iconPath;    // 图标资源路径（可为空）
+        int advanceMinutes = 0;      // 提前提醒（分钟）
+        QColor bgColor = QColor();   // 弹窗背景色（无效表示默认）
+        bool soundEnabled = false;   // 语音/声音提示（当前用系统 beep）
+        bool repeatDaily = false;    // 重复（当前实现：每日重复）
+    };
+    void loadReminders();
+    void saveReminders() const;
+    void addReminder(const QDateTime& when, const QString& text, const QString& iconPath);
+    void deleteReminderById(const QString& id);
+    void checkReminders();
 
 private:
     QColor m_backgroundColor;
@@ -207,4 +230,16 @@ private:
     
     // HTTP处理器，用于获取校历
     TAHttpHandler* m_httpHandlerForGet = nullptr;
+
+    // ====== 提醒UI ======
+    QWidget* m_remindBar = nullptr;
+    QDateTimeEdit* m_remindTimeEdit = nullptr;
+    QLineEdit* m_remindTextEdit = nullptr;
+    QComboBox* m_remindIconCombo = nullptr;
+    QPushButton* m_remindOkBtn = nullptr;
+
+    // 提醒数据/计时
+    QList<ReminderItem> m_reminders;
+    QSet<QString> m_firedReminderIds;
+    QTimer* m_remindTimer = nullptr;
 };

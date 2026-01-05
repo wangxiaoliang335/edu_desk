@@ -15,6 +15,8 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QPushButton>
+#include <QCheckBox>
+#include <QComboBox>
 #include <QHBoxLayout>
 #include <QUrl>
 #include <QUrlQuery>
@@ -26,6 +28,8 @@
 #include <QGraphicsOpacityEffect>
 #include <QUrl>
 #include <QUrlQuery>
+#include <QUuid>
+#include <functional>
 // ==================== TACalendarToastWidget（自定义提示窗口） ====================
 
 TACalendarToastWidget::TACalendarToastWidget(QWidget* parent)
@@ -284,6 +288,149 @@ static QSet<QDate> buildRangeDates(const QDate& start, const QDate& endInclusive
     return s;
 }
 
+static QString calendarRemindersSettingsPath()
+{
+    return QCoreApplication::applicationDirPath() + "/tac_calendar_reminders.ini";
+}
+
+// 轻量提醒弹窗（居中显示，可删除）
+class TAReminderPopup : public QWidget
+{
+public:
+    explicit TAReminderPopup(QWidget* parent,
+        const QString& reminderId,
+        const QString& text,
+        const QColor& bgColor,
+        std::function<void(const QString&)> onDelete)
+        : QWidget(parent), m_id(reminderId), m_text(text), m_bgColor(bgColor), m_onDelete(std::move(onDelete))
+    {
+        setAttribute(Qt::WA_TranslucentBackground);
+        setWindowFlags(Qt::FramelessWindowHint | Qt::Tool);
+        setFixedSize(260, 160);
+
+        QVBoxLayout* root = new QVBoxLayout(this);
+        root->setContentsMargins(16, 16, 16, 16);
+        root->setSpacing(12);
+
+        // 关闭按钮
+        QToolButton* closeBtn = new QToolButton(this);
+        closeBtn->setText(QStringLiteral("×"));
+        closeBtn->setFixedSize(24, 24);
+        closeBtn->setStyleSheet(
+            "QToolButton{border:none;color:rgba(255,255,255,0.9);background:rgba(255,255,255,0.12);border-radius:12px;font-weight:bold;}"
+            "QToolButton:hover{background:rgba(255,0,0,0.35);}"
+        );
+        connect(closeBtn, &QToolButton::clicked, this, &QWidget::close);
+
+        QHBoxLayout* top = new QHBoxLayout();
+        top->addStretch();
+        top->addWidget(closeBtn);
+        root->addLayout(top);
+
+        QLabel* title = new QLabel(text, this);
+        title->setAlignment(Qt::AlignCenter);
+        title->setWordWrap(true);
+        title->setStyleSheet("color: rgba(255,255,255,0.92); font-size: 16px; font-weight: 700;");
+        root->addWidget(title, 1);
+
+        QPushButton* delBtn = new QPushButton(QString::fromUtf8(u8"删除"), this);
+        delBtn->setFixedHeight(42);
+        delBtn->setStyleSheet(
+            "QPushButton{background-color:#2563eb;color:white;border:none;border-radius:10px;font-size:14px;font-weight:600;padding:0 18px;}"
+            "QPushButton:hover{background-color:#1d4ed8;}"
+        );
+        connect(delBtn, &QPushButton::clicked, this, [this]() {
+            if (m_onDelete) m_onDelete(m_id);
+            close();
+        });
+
+        QHBoxLayout* btnRow = new QHBoxLayout();
+        btnRow->addStretch();
+        btnRow->addWidget(delBtn);
+        btnRow->addStretch();
+        root->addLayout(btnRow);
+    }
+
+protected:
+    void paintEvent(QPaintEvent* e) override
+    {
+        Q_UNUSED(e);
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        QPainterPath path;
+        path.addRoundedRect(rect().adjusted(0, 0, -1, -1), 14, 14);
+        // 弹窗背景：更不透明，且支持自定义颜色
+        QColor fill = m_bgColor.isValid() ? m_bgColor : QColor(43, 43, 43);
+        fill.setAlpha(255);
+        p.fillPath(path, fill);
+        p.setPen(QPen(QColor(120, 120, 120, 180), 1));
+        p.drawPath(path);
+    }
+
+private:
+    QString m_id;
+    QString m_text;
+    QColor m_bgColor;
+    std::function<void(const QString&)> m_onDelete;
+};
+
+// 让无边框弹窗可拖拽移动（按住非交互控件区域拖动）
+class TADraggableFilter : public QObject
+{
+public:
+    explicit TADraggableFilter(QWidget* target)
+        : QObject(target), m_target(target) {}
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        if (!m_target || watched != m_target) {
+            return QObject::eventFilter(watched, event);
+        }
+
+        if (event->type() == QEvent::MouseButtonPress) {
+            QMouseEvent* me = static_cast<QMouseEvent*>(event);
+            if (me->button() == Qt::LeftButton) {
+                // 如果点在输入控件/按钮上，不启动拖拽（避免影响交互）
+                QWidget* child = m_target->childAt(me->pos());
+                if (child &&
+                    (qobject_cast<QLineEdit*>(child) ||
+                     qobject_cast<QComboBox*>(child) ||
+                     qobject_cast<QDateTimeEdit*>(child) ||
+                     qobject_cast<QAbstractButton*>(child))) {
+                    m_dragging = false;
+                    return QObject::eventFilter(watched, event);
+                }
+
+                m_dragging = true;
+                m_dragOffset = me->globalPos() - m_target->frameGeometry().topLeft();
+                return true;
+            }
+        } else if (event->type() == QEvent::MouseMove) {
+            if (m_dragging) {
+                QMouseEvent* me = static_cast<QMouseEvent*>(event);
+                if (me->buttons() & Qt::LeftButton) {
+                    m_target->move(me->globalPos() - m_dragOffset);
+                    return true;
+                }
+            }
+        } else if (event->type() == QEvent::MouseButtonRelease) {
+            QMouseEvent* me = static_cast<QMouseEvent*>(event);
+            if (me->button() == Qt::LeftButton) {
+                m_dragging = false;
+                return true;
+            }
+        }
+
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    QWidget* m_target = nullptr;
+    bool m_dragging = false;
+    QPoint m_dragOffset;
+};
+
 TASchoolCalendarWidget::TASchoolCalendarWidget(QWidget* parent)
     : QWidget(parent)
 {
@@ -350,6 +497,196 @@ TASchoolCalendarWidget::TASchoolCalendarWidget(QWidget* parent)
     );
     mainLayout->addWidget(m_table, 1);
 
+    // 双击单元格：弹出添加提醒对话框
+    connect(m_table, &QTableWidget::cellDoubleClicked, this, [this](int row, int col) {
+        if (!m_table) return;
+        // 仅允许双击周一~周日列（1..7）。0=周次，8=备注
+        if (col < 1 || col > 7) return;
+        QTableWidgetItem* it = m_table->item(row, col);
+        QDate date;
+        if (it) {
+            const QVariant v = it->data(Qt::UserRole);
+            if (v.isValid()) {
+                date = v.toDate();
+            }
+        }
+        if (!date.isValid()) {
+            // 兜底：根据周次/星期推算日期
+            date = m_termStartMonday.addDays(row * 7 + (col - 1));
+        }
+        if (!date.isValid()) return;
+
+        // 弹窗（样式尽量贴近截图）
+        QDialog dlg(this);
+        dlg.setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+        // 整体不需要透明度：使用不透明背景
+        dlg.setAttribute(Qt::WA_TranslucentBackground, false);
+        dlg.setAutoFillBackground(true);
+        dlg.setFixedSize(760, 210);
+        // 提醒对话框支持拖拽移动
+        dlg.installEventFilter(new TADraggableFilter(&dlg));
+
+        QVBoxLayout* root = new QVBoxLayout(&dlg);
+        root->setContentsMargins(16, 16, 16, 16);
+        root->setSpacing(10);
+
+        // 顶部：标题 + 关闭 + 确定
+        QHBoxLayout* topRow = new QHBoxLayout();
+        QLabel* title = new QLabel(QString::fromUtf8(u8"添加提醒"), &dlg);
+        title->setStyleSheet("color: rgba(255,255,255,0.92); font-size: 16px; font-weight: 700;");
+        topRow->addWidget(title);
+        topRow->addStretch();
+
+        QPushButton* okBtn = new QPushButton(QString::fromUtf8(u8"确定"), &dlg);
+        okBtn->setFixedSize(72, 32);
+        okBtn->setStyleSheet(
+            "QPushButton{background-color:#2563eb;color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;}"
+            "QPushButton:hover{background-color:#1d4ed8;}"
+        );
+
+        QToolButton* closeBtn = new QToolButton(&dlg);
+        closeBtn->setText(QStringLiteral("×"));
+        closeBtn->setFixedSize(24, 24);
+        closeBtn->setStyleSheet(
+            "QToolButton{border:none;color:rgba(255,255,255,0.9);background:rgba(255,255,255,0.12);border-radius:12px;font-weight:bold;}"
+            "QToolButton:hover{background:rgba(255,0,0,0.35);}"
+        );
+        connect(closeBtn, &QToolButton::clicked, &dlg, &QDialog::reject);
+        connect(okBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
+        topRow->addWidget(okBtn);
+        topRow->addWidget(closeBtn);
+        root->addLayout(topRow);
+
+        // 表单：时间 / 事项 / 图标 / 提前提醒 / 背景颜色 / 语音提示 / 重复
+        QWidget* form = new QWidget(&dlg);
+        form->setStyleSheet(
+            "QWidget{background-color: #1f1f1f; border: 1px solid rgba(255,255,255,0.10); border-radius: 12px;}"
+            "QLabel{color: rgba(255,255,255,0.86);}"
+            "QLineEdit{background-color: #333333; color: white; border: 1px solid rgba(255,255,255,0.16); border-radius: 8px; padding: 8px 10px;}"
+            "QDateTimeEdit{background-color: #333333; color: white; border: 1px solid rgba(255,255,255,0.16); border-radius: 8px; padding: 8px 10px;}"
+            "QComboBox{background-color: #333333; color: white; border: 1px solid rgba(255,255,255,0.16); border-radius: 8px; padding: 8px 10px; padding-right: 26px;}"
+            "QComboBox::drop-down{border:none; width: 20px;}"
+            "QComboBox QAbstractItemView{background-color:#2b2b2b;color:white;selection-background-color:#555;border:1px solid #555;}"
+        );
+        // 一行放不下：拆成两行
+        QVBoxLayout* formCol = new QVBoxLayout(form);
+        formCol->setContentsMargins(14, 10, 14, 10);
+        formCol->setSpacing(10);
+        QHBoxLayout* formRow1 = new QHBoxLayout();
+        formRow1->setSpacing(10);
+        QHBoxLayout* formRow2 = new QHBoxLayout();
+        formRow2->setSpacing(10);
+
+        QLabel* lTime = new QLabel(QString::fromUtf8(u8"时间"), form);
+        QDateTimeEdit* timeEdit = new QDateTimeEdit(form);
+        timeEdit->setCalendarPopup(true);
+        timeEdit->setDisplayFormat(QString::fromUtf8(u8"M月d日  HH:mm"));
+        // 默认时间：目标日期 13:20；若是今天则用“当前时间+10分钟”
+        QDateTime defTime(date, QTime(13, 20));
+        if (date == QDate::currentDate()) {
+            defTime = QDateTime::currentDateTime().addSecs(10 * 60);
+        }
+        timeEdit->setDateTime(defTime);
+        timeEdit->setFixedWidth(160);
+
+        QLabel* lText = new QLabel(QString::fromUtf8(u8"事项"), form);
+        QLineEdit* textEdit = new QLineEdit(form);
+        textEdit->setPlaceholderText(QString::fromUtf8(u8"请输入提醒事项"));
+        textEdit->setFixedWidth(260);
+
+        QLabel* lIcon = new QLabel(QString::fromUtf8(u8"图标"), form);
+        QComboBox* iconCombo = new QComboBox(form);
+        iconCombo->setFixedWidth(160);
+        iconCombo->addItem(QString::fromUtf8(u8"无"), QString());
+        iconCombo->addItem(QIcon(":/res/img/timer.png"), QString::fromUtf8(u8"铃铛"), QString(":/res/img/timer.png"));
+        iconCombo->addItem(QIcon(":/res/img/calendar.png"), QString::fromUtf8(u8"日历"), QString(":/res/img/calendar.png"));
+        iconCombo->addItem(QIcon(":/res/img/message.png"), QString::fromUtf8(u8"消息"), QString(":/res/img/message.png"));
+
+        formRow1->addWidget(lTime);
+        formRow1->addWidget(timeEdit);
+        formRow1->addWidget(lText);
+        formRow1->addWidget(textEdit);
+        formRow1->addWidget(lIcon);
+        formRow1->addWidget(iconCombo);
+        formRow1->addStretch();
+
+        // 提前提醒时间
+        QLabel* lAdvance = new QLabel(QString::fromUtf8(u8"提前提醒时间"), form);
+        QComboBox* advanceCombo = new QComboBox(form);
+        advanceCombo->setFixedWidth(110);
+        advanceCombo->addItem(QString::fromUtf8(u8"0分钟"), 0);
+        advanceCombo->addItem(QString::fromUtf8(u8"3分钟"), 3);
+        advanceCombo->addItem(QString::fromUtf8(u8"5分钟"), 5);
+        advanceCombo->addItem(QString::fromUtf8(u8"10分钟"), 10);
+        advanceCombo->addItem(QString::fromUtf8(u8"15分钟"), 15);
+        advanceCombo->addItem(QString::fromUtf8(u8"30分钟"), 30);
+        formRow2->addWidget(lAdvance);
+        formRow2->addWidget(advanceCombo);
+
+        // 背景颜色（预设色块）
+        QLabel* lBg = new QLabel(QString::fromUtf8(u8"背景颜色"), form);
+        QComboBox* bgCombo = new QComboBox(form);
+        bgCombo->setFixedWidth(95);
+        auto addColor = [bgCombo](const QString& name, const QColor& c) {
+            QPixmap pm(14, 14);
+            pm.fill(c);
+            bgCombo->addItem(QIcon(pm), name, c.name(QColor::HexArgb));
+        };
+        addColor(QString::fromUtf8(u8"默认"), QColor());
+        addColor(QString::fromUtf8(u8"黄"), QColor("#facc15"));
+        addColor(QString::fromUtf8(u8"蓝"), QColor("#60a5fa"));
+        addColor(QString::fromUtf8(u8"绿"), QColor("#34d399"));
+        addColor(QString::fromUtf8(u8"红"), QColor("#f87171"));
+        formRow2->addWidget(lBg);
+        formRow2->addWidget(bgCombo);
+
+        // 语音提示
+        QLabel* lSound = new QLabel(QString::fromUtf8(u8"语音提示"), form);
+        QCheckBox* soundYes = new QCheckBox(QString::fromUtf8(u8"是"), form);
+        soundYes->setStyleSheet("color: rgba(255,255,255,0.86);");
+        formRow2->addWidget(lSound);
+        formRow2->addWidget(soundYes);
+
+        // 重复
+        QLabel* lRepeat = new QLabel(QString::fromUtf8(u8"重复"), form);
+        QCheckBox* repeatYes = new QCheckBox(QString::fromUtf8(u8"是"), form);
+        repeatYes->setStyleSheet("color: rgba(255,255,255,0.86);");
+        formRow2->addWidget(lRepeat);
+        formRow2->addWidget(repeatYes);
+        formRow2->addStretch();
+
+        formCol->addLayout(formRow1);
+        formCol->addLayout(formRow2);
+
+        root->addWidget(form);
+
+        // 背景绘制：完全不透明
+        dlg.setStyleSheet("QDialog{background-color: #2b2b2b;}");
+
+        if (dlg.exec() == QDialog::Accepted) {
+            const QString text = textEdit->text().trimmed();
+            if (text.isEmpty()) {
+                TACalendarToastWidget::showToast(this, QString::fromUtf8(u8"请输入提醒事项"), TACalendarToastWidget::Warning);
+                return;
+            }
+            // 写入提醒（含扩展字段）
+            ReminderItem it;
+            it.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+            it.when = timeEdit->dateTime();
+            it.text = text;
+            it.iconPath = iconCombo->currentData().toString();
+            it.advanceMinutes = advanceCombo->currentData().toInt();
+            const QString bgStr = bgCombo->currentData().toString();
+            if (!bgStr.isEmpty()) it.bgColor = QColor(bgStr);
+            it.soundEnabled = soundYes->isChecked();
+            it.repeatDaily = repeatYes->isChecked();
+            m_reminders.push_back(it);
+            saveReminders();
+            rebuildTable(); // 刷新表格以显示提醒背景色
+            TACalendarToastWidget::showToast(this, QString::fromUtf8(u8"提醒已添加"), TACalendarToastWidget::Success);
+        }
+    });
+
     // 导入按钮布局
     QHBoxLayout* buttonLayout = new QHBoxLayout();
     buttonLayout->addStretch();
@@ -387,8 +724,81 @@ TASchoolCalendarWidget::TASchoolCalendarWidget(QWidget* parent)
     m_legendLabel->setStyleSheet("color: rgba(255,255,255,0.85); font-size:12px;");
     mainLayout->addWidget(m_legendLabel);
 
+    // ====== 提醒：添加提醒栏（底部） ======
+    m_remindBar = new QWidget(this);
+    m_remindBar->setStyleSheet(
+        "QWidget{background-color: rgba(0,0,0,0.18); border: 1px solid rgba(255,255,255,0.10); border-radius: 12px;}"
+        "QLabel{color: rgba(255,255,255,0.88);}"
+        "QLineEdit{background-color: rgba(255,255,255,0.10); color: white; border: 1px solid rgba(255,255,255,0.16); border-radius: 8px; padding: 8px 10px;}"
+        "QDateTimeEdit{background-color: rgba(255,255,255,0.10); color: white; border: 1px solid rgba(255,255,255,0.16); border-radius: 8px; padding: 8px 10px;}"
+        "QComboBox{background-color: rgba(255,255,255,0.10); color: white; border: 1px solid rgba(255,255,255,0.16); border-radius: 8px; padding: 8px 10px; padding-right: 26px;}"
+        "QComboBox::drop-down{border:none; width: 20px;}"
+        "QComboBox QAbstractItemView{background-color:#2b2b2b;color:white;selection-background-color:#555;border:1px solid #555;}"
+        "QPushButton{background-color:#2563eb;color:white;border:none;border-radius:10px;font-size:14px;font-weight:600;padding:8px 18px;}"
+        "QPushButton:hover{background-color:#1d4ed8;}"
+    );
+    QHBoxLayout* remindLayout = new QHBoxLayout(m_remindBar);
+    remindLayout->setContentsMargins(14, 10, 14, 10);
+    remindLayout->setSpacing(10);
+
+    QLabel* l1 = new QLabel(QString::fromUtf8(u8"添加提醒"), m_remindBar);
+    l1->setStyleSheet("font-weight:700;");
+    remindLayout->addWidget(l1);
+
+    QLabel* lTime = new QLabel(QString::fromUtf8(u8"时间"), m_remindBar);
+    remindLayout->addWidget(lTime);
+    m_remindTimeEdit = new QDateTimeEdit(m_remindBar);
+    m_remindTimeEdit->setCalendarPopup(true);
+    m_remindTimeEdit->setDisplayFormat(QString::fromUtf8(u8"M月d日  HH:mm"));
+    m_remindTimeEdit->setDateTime(QDateTime::currentDateTime().addSecs(10 * 60));
+    m_remindTimeEdit->setFixedWidth(160);
+    remindLayout->addWidget(m_remindTimeEdit);
+
+    QLabel* lText = new QLabel(QString::fromUtf8(u8"事项"), m_remindBar);
+    remindLayout->addWidget(lText);
+    m_remindTextEdit = new QLineEdit(m_remindBar);
+    m_remindTextEdit->setPlaceholderText(QString::fromUtf8(u8"请输入提醒事项"));
+    m_remindTextEdit->setFixedWidth(260);
+    remindLayout->addWidget(m_remindTextEdit);
+
+    QLabel* lIcon = new QLabel(QString::fromUtf8(u8"图标"), m_remindBar);
+    remindLayout->addWidget(lIcon);
+    m_remindIconCombo = new QComboBox(m_remindBar);
+    m_remindIconCombo->setFixedWidth(130);
+    m_remindIconCombo->addItem(QString::fromUtf8(u8"无"), QString());
+    m_remindIconCombo->addItem(QIcon(":/res/img/timer.png"), QString::fromUtf8(u8"铃铛"), QString(":/res/img/timer.png"));
+    m_remindIconCombo->addItem(QIcon(":/res/img/calendar.png"), QString::fromUtf8(u8"日历"), QString(":/res/img/calendar.png"));
+    m_remindIconCombo->addItem(QIcon(":/res/img/message.png"), QString::fromUtf8(u8"消息"), QString(":/res/img/message.png"));
+    remindLayout->addWidget(m_remindIconCombo);
+
+    remindLayout->addStretch();
+    m_remindOkBtn = new QPushButton(QString::fromUtf8(u8"确定"), m_remindBar);
+    remindLayout->addWidget(m_remindOkBtn);
+
+    connect(m_remindOkBtn, &QPushButton::clicked, this, [this]() {
+        if (!m_remindTimeEdit || !m_remindTextEdit || !m_remindIconCombo) return;
+        const QString text = m_remindTextEdit->text().trimmed();
+        if (text.isEmpty()) {
+            TACalendarToastWidget::showToast(this, QString::fromUtf8(u8"请输入提醒事项"), TACalendarToastWidget::Warning);
+            return;
+        }
+        const QDateTime when = m_remindTimeEdit->dateTime();
+        const QString iconPath = m_remindIconCombo->currentData().toString();
+        addReminder(when, text, iconPath);
+        m_remindTextEdit->clear();
+        TACalendarToastWidget::showToast(this, QString::fromUtf8(u8"提醒已添加"), TACalendarToastWidget::Success);
+    });
+
+    mainLayout->addWidget(m_remindBar);
+
     // 默认窗口大小
     resize(1100, 820);
+
+    // 提醒计时器（到点弹出）
+    m_remindTimer = new QTimer(this);
+    m_remindTimer->setInterval(1000);
+    connect(m_remindTimer, &QTimer::timeout, this, [this]() { checkReminders(); });
+    m_remindTimer->start();
     
     // 初始化HTTP处理器（用于上传）
     m_httpHandler = new TAHttpHandler(this);
@@ -478,12 +888,167 @@ void TASchoolCalendarWidget::setCalendarInfo(const QString& schoolName,
     if (m_termLabel) m_termLabel->setText(m_termTitle);
 
     rebuildTable();
+    // 按学期加载提醒（本地）
+    loadReminders();
 }
 
 void TASchoolCalendarWidget::setRemarksByDate(const QMap<QDate, QStringList>& remarksByDate)
 {
     m_remarksByDate = remarksByDate;
     rebuildTable();
+}
+
+// ====== 提醒（本地） ======
+
+void TASchoolCalendarWidget::loadReminders()
+{
+    m_reminders.clear();
+    m_firedReminderIds.clear();
+
+    const QString schoolId = CommonInfo::GetData().schoolId.trimmed();
+    const QString term = m_termTitle.trimmed();
+    if (schoolId.isEmpty() || term.isEmpty()) {
+        return;
+    }
+
+    QSettings s(calendarRemindersSettingsPath(), QSettings::IniFormat);
+    s.beginGroup("reminders");
+    s.beginGroup(schoolId);
+    s.beginGroup(term);
+    const QString json = s.value("items").toString();
+    s.endGroup();
+    s.endGroup();
+    s.endGroup();
+
+    if (json.isEmpty()) return;
+
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    if (!doc.isArray()) return;
+    const QJsonArray arr = doc.array();
+    for (const QJsonValue& v : arr) {
+        if (!v.isObject()) continue;
+        const QJsonObject o = v.toObject();
+        ReminderItem it;
+        it.id = o.value("id").toString();
+        it.text = o.value("text").toString();
+        it.iconPath = o.value("icon").toString();
+        it.when = QDateTime::fromString(o.value("when").toString(), Qt::ISODate);
+        it.advanceMinutes = o.value("advanceMinutes").toInt(0);
+        it.soundEnabled = o.value("soundEnabled").toBool(false);
+        it.repeatDaily = o.value("repeatDaily").toBool(false);
+        const QString bg = o.value("bgColor").toString();
+        if (!bg.isEmpty()) it.bgColor = QColor(bg);
+        if (it.id.isEmpty()) continue;
+        if (!it.when.isValid()) continue;
+        m_reminders.push_back(it);
+    }
+}
+
+void TASchoolCalendarWidget::saveReminders() const
+{
+    const QString schoolId = CommonInfo::GetData().schoolId.trimmed();
+    const QString term = m_termTitle.trimmed();
+    if (schoolId.isEmpty() || term.isEmpty()) {
+        return;
+    }
+
+    QJsonArray arr;
+    for (const ReminderItem& it : m_reminders) {
+        QJsonObject o;
+        o["id"] = it.id;
+        o["text"] = it.text;
+        o["icon"] = it.iconPath;
+        o["when"] = it.when.toString(Qt::ISODate);
+        o["advanceMinutes"] = it.advanceMinutes;
+        o["soundEnabled"] = it.soundEnabled;
+        o["repeatDaily"] = it.repeatDaily;
+        o["bgColor"] = it.bgColor.isValid() ? it.bgColor.name(QColor::HexArgb) : QString();
+        arr.append(o);
+    }
+
+    QSettings s(calendarRemindersSettingsPath(), QSettings::IniFormat);
+    s.beginGroup("reminders");
+    s.beginGroup(schoolId);
+    s.beginGroup(term);
+    s.setValue("items", QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
+    s.sync();
+    s.endGroup();
+    s.endGroup();
+    s.endGroup();
+}
+
+void TASchoolCalendarWidget::addReminder(const QDateTime& when, const QString& text, const QString& iconPath)
+{
+    if (!when.isValid() || text.trimmed().isEmpty()) return;
+
+    ReminderItem it;
+    it.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    it.when = when;
+    it.text = text.trimmed();
+    it.iconPath = iconPath;
+    m_reminders.push_back(it);
+    saveReminders();
+    rebuildTable(); // 同步刷新：有提醒的日期需要高亮
+}
+
+void TASchoolCalendarWidget::deleteReminderById(const QString& id)
+{
+    if (id.isEmpty()) return;
+    for (int i = 0; i < m_reminders.size(); ++i) {
+        if (m_reminders[i].id == id) {
+            m_reminders.removeAt(i);
+            break;
+        }
+    }
+    m_firedReminderIds.remove(id);
+    saveReminders();
+    rebuildTable(); // 同步刷新：取消高亮
+}
+
+void TASchoolCalendarWidget::checkReminders()
+{
+    if (m_reminders.isEmpty()) return;
+
+    const QDateTime now = QDateTime::currentDateTime();
+    for (ReminderItem& it : m_reminders) {
+        if (!it.when.isValid()) continue;
+        const QDateTime fireTime = it.when.addSecs(-it.advanceMinutes * 60);
+        if (fireTime > now) continue;
+        if (m_firedReminderIds.contains(it.id)) continue;
+
+        m_firedReminderIds.insert(it.id);
+
+        // 声音提示（当前实现：系统 beep）
+        if (it.soundEnabled) {
+            QApplication::beep();
+        }
+
+        // 居中弹出提醒，可删除
+        auto* popup = new TAReminderPopup(this, it.id, it.text, it.bgColor, [this](const QString& rid) {
+            deleteReminderById(rid);
+            TACalendarToastWidget::showToast(this, QString::fromUtf8(u8"已删除提醒"), TACalendarToastWidget::Info);
+        });
+        // 提醒弹窗支持拖拽移动
+        popup->installEventFilter(new TADraggableFilter(popup));
+        const int x = (width() - popup->width()) / 2;
+        const int y = (height() - popup->height()) / 2;
+        popup->move(qMax(0, x), qMax(0, y));
+        popup->show();
+        popup->raise();
+
+        // 重复：每日重复 -> 自动顺延到下一次，并清除 fired 标记以便下次触发
+        if (it.repeatDaily) {
+            QDateTime next = it.when.addDays(1);
+            while (next.isValid() && next <= now) next = next.addDays(1);
+            it.when = next;
+            m_firedReminderIds.remove(it.id);
+            saveReminders();
+            rebuildTable(); // 重复顺延后，日期高亮也要跟着移动
+        }
+
+        // 一次只弹一个
+        break;
+    }
 }
 
 void TASchoolCalendarWidget::rebuildTable()
@@ -516,12 +1081,17 @@ void TASchoolCalendarWidget::rebuildTable()
         QTableWidgetItem* weekItem = new QTableWidgetItem(weekName(r + 1));
         weekItem->setTextAlignment(Qt::AlignCenter);
         weekItem->setForeground(QBrush(Qt::white));
+        QFont weekFont = weekItem->font();
+        weekFont.setPointSize(14);
+        weekItem->setFont(weekFont);
         m_table->setItem(r, 0, weekItem);
 
         for (int d = 0; d < 7; ++d) {
             const QDate date = m_termStartMonday.addDays(r * 7 + d);
             QTableWidgetItem* item = new QTableWidgetItem(formatDateCell(date));
             item->setTextAlignment(Qt::AlignCenter);
+            // 用于双击时快速定位日期
+            item->setData(Qt::UserRole, date);
             applyCellStyle(item, date);
             m_table->setItem(r, 1 + d, item);
         }
@@ -551,11 +1121,14 @@ void TASchoolCalendarWidget::rebuildTable()
         remarkItem->setTextAlignment(Qt::AlignLeft | Qt::AlignTop);
         remarkItem->setForeground(QBrush(QColor(255, 255, 255, 220)));
         remarkItem->setFlags(remarkItem->flags() & ~Qt::ItemIsSelectable);
+        QFont remarkFont = remarkItem->font();
+        remarkFont.setPointSize(14);
+        remarkItem->setFont(remarkFont);
         m_table->setItem(r, 8, remarkItem);
 
-        // 行高：有备注则自适应更高
+        // 行高：有备注则自适应更高（增加最小高度）
         int lines = remarkTextForWeek.isEmpty() ? 1 : (remarkTextForWeek.count('\n') + 1);
-        int rowH = qMax(28, 18 * lines + 10);
+        int rowH = qMax(45, 22 * lines + 12);
         m_table->setRowHeight(r, rowH);
     }
 }
@@ -609,8 +1182,47 @@ void TASchoolCalendarWidget::applyCellStyle(QTableWidgetItem* item, const QDate&
     if (isHoliday) bg = weekendOrHolidayColor;
     if (isMakeupWork) bg = workdayColor;
 
+    // 若该日期有提醒：用提醒的背景色覆盖（默认提醒色用蓝色高亮）
+    QColor remindBg;
+    if (getReminderStyleForDate(date, &remindBg)) {
+        bg = remindBg;
+    }
+
     item->setBackground(QBrush(bg));
-    item->setForeground(QBrush(Qt::white));
+    // 亮色背景用黑字，深色背景用白字
+    const int lightness = bg.lightness(); // 0..255
+    item->setForeground(QBrush(lightness >= 150 ? Qt::black : Qt::white));
+    
+    // 设置字体大小（增大）
+    QFont font = item->font();
+    font.setPointSize(14); // 字体大小设为14
+    font.setBold(false);
+    item->setFont(font);
+}
+
+bool TASchoolCalendarWidget::getReminderStyleForDate(const QDate& date, QColor* outBg) const
+{
+    if (!outBg || !date.isValid()) return false;
+
+    bool has = false;
+    QColor picked;
+    for (const ReminderItem& it : m_reminders) {
+        if (!it.when.isValid()) continue;
+        if (it.when.date() != date) continue;
+        has = true;
+        if (it.bgColor.isValid()) {
+            picked = it.bgColor;
+            break;
+        }
+    }
+
+    if (!has) return false;
+
+    // 没设置背景色时，给一个默认高亮色（与按钮主色保持一致）
+    QColor bg = picked.isValid() ? picked : QColor("#2563eb");
+    bg.setAlpha(255);
+    *outBg = bg;
+    return true;
 }
 
 void TASchoolCalendarWidget::paintEvent(QPaintEvent* event)
