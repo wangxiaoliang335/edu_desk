@@ -10,13 +10,47 @@
 
 QSchoolInfoWidget::QSchoolInfoWidget(QWidget *parent)
 	: QWidget(parent)
-{// 右侧表单
-    QGridLayout* formLayout = new QGridLayout;
-    //QLabel *lblSchool = new QLabel("学校名");
-    QLabel* lblSchool = new QLabel(" 学校名");
+{
+    // 深色主题表单布局
+    QVBoxLayout* formLayout = new QVBoxLayout;
+    formLayout->setContentsMargins(0, 20, 0, 0);
+    formLayout->setSpacing(24);
+    
+    // 学校名字段
+    QLabel* lblSchool = new QLabel("学校名");
+    lblSchool->setStyleSheet("color: rgba(255, 255, 255, 0.9); font-size: 14px; font-weight: 500;");
     editSchool = new QLineEdit;
-    QLabel* lblAddr = new QLabel(" 地址");
+    editSchool->setStyleSheet(
+        "QLineEdit { "
+        "background-color: rgba(255, 255, 255, 0.1); "
+        "color: white; "
+        "font-size: 14px; "
+        "border: 1px solid rgba(255, 255, 255, 0.2); "
+        "border-radius: 6px; "
+        "padding: 8px 12px; "
+        "} "
+        "QLineEdit:focus { "
+        "border-color: #2563eb; "
+        "}");
+    editSchool->setFixedHeight(40);
+    
+    // 地址字段
+    QLabel* lblAddr = new QLabel("地址");
+    lblAddr->setStyleSheet("color: rgba(255, 255, 255, 0.9); font-size: 14px; font-weight: 500;");
     editAddr = new QLineEdit;
+    editAddr->setStyleSheet(
+        "QLineEdit { "
+        "background-color: rgba(255, 255, 255, 0.1); "
+        "color: white; "
+        "font-size: 14px; "
+        "border: 1px solid rgba(255, 255, 255, 0.2); "
+        "border-radius: 6px; "
+        "padding: 8px 12px; "
+        "} "
+        "QLineEdit:focus { "
+        "border-color: #2563eb; "
+        "}");
+    editAddr->setFixedHeight(40);
 
     m_httpHandler = new TAHttpHandler(this);
     if (m_httpHandler)
@@ -43,11 +77,10 @@ QSchoolInfoWidget::QSchoolInfoWidget(QWidget *parent)
                                 if (schoolArr[0].isObject())
                                 {
                                     QJsonObject schoolSub = schoolArr[0].toObject();
-                                    if (lblCode)
+                                    if (editCode)
                                     {
-                                        //if (schoolSub[0].is)
                                         {
-                                            lblCode->setText(schoolSub["id"].toString());
+                                            editCode->setText(schoolSub["id"].toString());
                                         }
                                         /*else if (schoolSub[0].toString())
                                         {
@@ -62,9 +95,9 @@ QSchoolInfoWidget::QSchoolInfoWidget(QWidget *parent)
                 }
                 else
                 {
-                    if (lblCode)
+                    if (editCode)
                     {
-                        lblCode->setText(obj["code"].toString());
+                        editCode->setText(obj["code"].toString());
 
                         QMap<QString, QString> params;
                         params["id"] = obj["code"].toString();
@@ -106,70 +139,79 @@ QSchoolInfoWidget::QSchoolInfoWidget(QWidget *parent)
             });
     }
 
-    lblSchool->setStyleSheet("background-color:blue; color:white; font-size:20px;");
-    editSchool->setStyleSheet("background-color:blue; color:white; font-size:20px;");
-    formLayout->addWidget(lblSchool, 0, 0, 1, 1);
-    formLayout->addWidget(editSchool, 0, 1, 1, 2);
-    formLayout->addWidget(lblAddr, 1, 0, 1, 1);
-    formLayout->addWidget(editAddr, 1, 1, 1, 2);
-
-    lblAddr->setStyleSheet("font-size:20px;");
-    editAddr->setStyleSheet("font-size:20px;");
-
-    errLabel = new QLabel(NULL, this);
-    errLabel->setStyleSheet("background-color: rgba(255,255,255,200); font-size:16px; font-weight:bold;");
-    errLabel->hide();
-
-    // 右侧按钮区域
+    // 组织代码字段 - 标签 + 输入框 + 按钮在同一行
+    QLabel* lblCodeLabel = new QLabel("组织代码");
+    lblCodeLabel->setStyleSheet("color: rgba(255, 255, 255, 0.9); font-size: 14px; font-weight: 500;");
+    
+    editCode = new QLineEdit;
+    editCode->setStyleSheet(
+        "QLineEdit { "
+        "background-color: rgba(255, 255, 255, 0.1); "
+        "color: white; "
+        "font-size: 14px; "
+        "border: 1px solid rgba(255, 255, 255, 0.2); "
+        "border-radius: 6px; "
+        "padding: 8px 12px; "
+        "} "
+        "QLineEdit:focus { "
+        "border-color: #2563eb; "
+        "}");
+    editCode->setFixedHeight(40);
+    editCode->setReadOnly(true); // 组织代码只读，通过按钮获取
+    editCode->setMinimumWidth(200);
+    
     QPushButton* btnGetCode = new QPushButton("获取组织代码");
-    btnGetCode->setStyleSheet("background-color:green; color:white; font-size:16px;");
-    lblCode = new QLabel();
-    lblCode->setAlignment(Qt::AlignCenter);
-    lblCode->setStyleSheet("background-color:blue; color:white; font-size:20px;");
-    lblCode->setFixedSize(100, 40);
+    btnGetCode->setFixedHeight(40);
+    btnGetCode->setStyleSheet(
+        "QPushButton { "
+        "background-color: rgba(255, 255, 255, 0.1); "
+        "color: white; "
+        "font-size: 14px; "
+        "border: 1px solid rgba(255, 255, 255, 0.2); "
+        "border-radius: 6px; "
+        "padding: 8px 16px; "
+        "} "
+        "QPushButton:hover { "
+        "background-color: rgba(255, 255, 255, 0.15); "
+        "}");
 
-    QHBoxLayout* codeLayout = new QHBoxLayout;
-    codeLayout->addWidget(btnGetCode);
-    codeLayout->addWidget(lblCode);
+    // 组织代码布局：输入框 + 按钮
+    QHBoxLayout* codeInputLayout = new QHBoxLayout;
+    codeInputLayout->setSpacing(12);
+    codeInputLayout->addWidget(editCode);
+    codeInputLayout->addWidget(btnGetCode);
+    codeInputLayout->addStretch();
 
+    // 错误提示标签
+    errLabel = new QLabel(this);
+    errLabel->setStyleSheet("color: #ef4444; font-size: 14px; font-weight: 500;");
+    errLabel->hide();
+    
     connect(btnGetCode, &QPushButton::clicked, this, [=]() {
-        //UniqueNumberGenerator gen;
-        //lblCode->setText(QString::number(gen.generate()));
-
         QUrl url("http://47.100.126.194:5000/unique6digit"); // MySQL+Redis服务端
-        if (lblCode->text().isEmpty() && m_httpHandler)
+        if (editCode && editCode->text().isEmpty() && m_httpHandler)
         {
             m_httpHandler->get("http://47.100.126.194:5000/unique6digit");
         }
      });
 
-    QHBoxLayout* bottomLayout = new QHBoxLayout;
-    QPushButton* pBtnConfirm = new QPushButton("应用");
-    //QPushButton* pBtnCancel = new QPushButton("取消");
-    bottomLayout->addWidget(errLabel);
-    bottomLayout->addStretch(2);
-    bottomLayout->addWidget(pBtnConfirm);
-    bottomLayout->addStretch();
-    //bottomLayout->addWidget(pBtnCancel);
-    //bottomLayout->addStretch();
+    // 表单布局：垂直排列各个字段
+    formLayout->addWidget(lblSchool);
+    formLayout->addWidget(editSchool);
+    formLayout->addWidget(lblAddr);
+    formLayout->addWidget(editAddr);
+    formLayout->addWidget(lblCodeLabel);
+    formLayout->addLayout(codeInputLayout);
+    formLayout->addWidget(errLabel);
+    formLayout->addStretch();
 
-    pBtnConfirm->setStyleSheet("background-color:blue; color:white; font-size:20px;");
-    connect(pBtnConfirm, &QPushButton::clicked, this, [=]() {
-        //UniqueNumberGenerator gen;
-        //lblCode->setText(QString::number(gen.generate()));
-    });
-
-    //connect(pBtnCancel, &QPushButton::clicked, this, [=]() {
-    //    //UniqueNumberGenerator gen;
-    //    //lblCode->setText(QString::number(gen.generate()));
-    //});
-
+    // 主布局
     QVBoxLayout* rightLayout = new QVBoxLayout(this);
+    rightLayout->setContentsMargins(0, 0, 0, 0);
     rightLayout->addLayout(formLayout);
-    rightLayout->addLayout(codeLayout);
-    rightLayout->addStretch();
-    rightLayout->addLayout(bottomLayout);
-    setStyleSheet("background-color: rgba(255,255,255,200);");
+    
+    // 设置透明背景，让父窗口的背景显示
+    setStyleSheet("QWidget { background-color: transparent; }");
 }
 
 QSchoolInfoWidget::~QSchoolInfoWidget()
@@ -197,9 +239,9 @@ void QSchoolInfoWidget::InitData(UserInfo userInfo)
 
 QString QSchoolInfoWidget::getSchoolId()
 {
-    if (lblCode)
+    if (editCode)
     {
-        return lblCode->text();
+        return editCode->text();
     }
     return QString("");
 }

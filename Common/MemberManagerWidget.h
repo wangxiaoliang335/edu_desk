@@ -15,6 +15,7 @@
 #include <qnetworkreply.h>
 #include <qjsonarray.h>
 #include <qregularexpression.h>
+#include <QIcon>
 #include "TABaseDialog.h"
 
 class MemberManagerWidget : public QWidget
@@ -23,24 +24,60 @@ class MemberManagerWidget : public QWidget
 public:
     explicit MemberManagerWidget(QWidget* parent = nullptr) : QWidget(parent)
     {
-        // 顶部按钮行
+        // 顶部按钮行（深色主题 + 图标）
         QHBoxLayout* btnLayout = new QHBoxLayout;
-        QString btnStyle = "QPushButton {background-color: green; color: white; font-size:16px; padding:6px 12px;}";
+        btnLayout->setContentsMargins(0, 0, 0, 0);
+        btnLayout->setSpacing(12);
+
+        const QString btnStyle =
+            "QPushButton { "
+            "background-color: rgba(255, 255, 255, 0.1); "
+            "color: white; "
+            "font-size: 14px; "
+            "border: 1px solid rgba(255, 255, 255, 0.2); "
+            "border-radius: 6px; "
+            "padding: 6px 16px; "
+            "} "
+            "QPushButton:hover { "
+            "background-color: rgba(255, 255, 255, 0.15); "
+            "}";
+
         btnAdd = new QPushButton("添加成员");
-        btnImport = new QPushButton("导入");
-        btnExport = new QPushButton("导出");
-        btnDelete = new QPushButton("删除");
-        btnGenerate = new QPushButton("生成");
+        btnAdd->setIcon(QIcon(":/res/img/com_card_ic_member@3x.png"));
+        btnAdd->setIconSize(QSize(20, 20));
+        btnAdd->setFixedHeight(40);
         btnAdd->setStyleSheet(btnStyle);
+
+        btnImport = new QPushButton("导入");
+        btnImport->setIcon(QIcon(":/res/img/com_card_ic_import@3x.png"));
+        btnImport->setIconSize(QSize(20, 20));
+        btnImport->setFixedHeight(40);
         btnImport->setStyleSheet(btnStyle);
+
+        btnExport = new QPushButton("导出");
+        btnExport->setIcon(QIcon(":/res/img/com_card_ic_export@3x.png"));
+        btnExport->setIconSize(QSize(20, 20));
+        btnExport->setFixedHeight(40);
         btnExport->setStyleSheet(btnStyle);
+
+        btnDelete = new QPushButton("删除");
+        btnDelete->setIcon(QIcon(":/res/img/com_card_ic_del@3x.png"));
+        btnDelete->setIconSize(QSize(20, 20));
+        btnDelete->setFixedHeight(40);
         btnDelete->setStyleSheet(btnStyle);
+
+        // 生成按钮保留逻辑但不展示（导入后会自动调用 onGenerate）
+        btnGenerate = new QPushButton("生成");
+        btnGenerate->setIcon(QIcon(":/res/img/com_card_ic_generate@3x.png"));
+        btnGenerate->setIconSize(QSize(20, 20));
+        btnGenerate->setFixedHeight(40);
         btnGenerate->setStyleSheet(btnStyle);
+        btnGenerate->hide();
+
         btnLayout->addWidget(btnAdd);
         btnLayout->addWidget(btnImport);
         btnLayout->addWidget(btnExport);
         btnLayout->addWidget(btnDelete);
-        btnLayout->addWidget(btnGenerate);
         btnLayout->addStretch();
 
         manager_ = new QNetworkAccessManager(this); // 初始化网络对象
@@ -97,14 +134,47 @@ public:
             }
         }
 
+        // 表格深色主题
+        table->setStyleSheet(
+            "QTableWidget { "
+            "background-color: transparent; "
+            "color: white; "
+            "border: 1px solid rgba(255, 255, 255, 0.2); "
+            "border-radius: 6px; "
+            "gridline-color: rgba(255, 255, 255, 0.1); "
+            "} "
+            "QTableWidget::item { "
+            "background-color: rgba(255, 255, 255, 0.05); "
+            "color: white; "
+            "padding: 10px; "
+            "border: none; "
+            "} "
+            "QTableWidget::item:selected { "
+            "background-color: rgba(37, 99, 235, 0.3); "
+            "} "
+            "QHeaderView::section { "
+            "background-color: rgba(255, 255, 255, 0.1); "
+            "color: white; "
+            "font-size: 14px; "
+            "font-weight: 500; "
+            "padding: 10px; "
+            "border: none; "
+            "border-bottom: 1px solid rgba(255, 255, 255, 0.2); "
+            "}"
+        );
+        table->horizontalHeader()->setFixedHeight(42);
+        table->verticalHeader()->setDefaultSectionSize(42);
+
         // 主布局
         QVBoxLayout* mainLayout = new QVBoxLayout(this);
+        mainLayout->setContentsMargins(0, 0, 0, 0);
+        mainLayout->setSpacing(12);
         mainLayout->addLayout(btnLayout);
         mainLayout->addWidget(table);
         setLayout(mainLayout);
 
-        // 设置整体样式（可选）
-        setStyleSheet("background-color: rgba(220, 230, 255, 255);"); // 浅蓝背景
+        // 透明背景，让父窗口的深色背景显示
+        setStyleSheet("QWidget { background-color: transparent; }");
 
         // 连接按钮事件
         connect(btnAdd, &QPushButton::clicked, this, &MemberManagerWidget::onAddMember);

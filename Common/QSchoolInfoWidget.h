@@ -17,10 +17,9 @@ public:
 	QString getSchoolId();
 private:
 	TAHttpHandler* m_httpHandler = NULL;
-	QLabel* errLabel = NULL;  //µÇÂ¼´íÎóÏûÏ¢
-	QLabel* lblCode = NULL;
+	QLabel* errLabel = NULL;  //é”™è¯¯æç¤ºä¿¡æ¯
+	QLineEdit* editCode = NULL;  // ç»„ç»‡ä»£ç è¾“å…¥æ¡†
 	QLineEdit* editSchool = NULL;
 	QLineEdit* editAddr = NULL;
 	UserInfo m_userInfo;
 };
-

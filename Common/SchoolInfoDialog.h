@@ -10,6 +10,8 @@
 #include <qpainterpath.h>
 #include <qpainter.h>
 #include <QMouseEvent>
+#include <QRegion>
+#include <QStackedWidget>
 #include "QSchoolInfoWidget.h"
 #include "QClassMgr.h"
 #include "MemberManagerWidget.h"
@@ -19,15 +21,15 @@ class SchoolInfoDialog : public QDialog
     Q_OBJECT
 public:
     SchoolInfoDialog(QWidget *parent = nullptr) : QDialog(parent),
-        m_backgroundColor(QColor(50, 50, 50)),
+        m_backgroundColor(QColor(43, 43, 43)),  // 深色主题背景
         m_dragging(false),
-        m_borderColor(Qt::white),
-        m_borderWidth(2), m_radius(6)
+        m_borderColor(QColor(120, 120, 120)),
+        m_borderWidth(1), m_radius(20)  // 增大圆角半径
     {
         setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
         setAttribute(Qt::WA_TranslucentBackground);
-        setWindowTitle("学校信息");
-        resize(1000, 400);
+        setWindowTitle("配置学校信息");
+        resize(900, 550);  // 增大窗口尺寸，让右侧内容区域更大
 
         // 设置背景图片
         //setStyleSheet("QDialog {"
@@ -36,145 +38,234 @@ public:
         //              "background-position: center;"
         //              "}");
 
-        // 左侧菜单按钮
+        // 左侧菜单按钮 - 深色主题风格，靠近左边缘
         menuLayout = new QVBoxLayout;
+        menuLayout->setContentsMargins(0, 0, 0, 0);  // 无左边距，让菜单靠近窗口左边缘
+        menuLayout->setSpacing(2);
+        
+        // 菜单按钮样式：选中为蓝色，未选中为深灰色
+        QString selectedStyle = "QPushButton { "
+            "background-color: #2563eb; "  // 蓝色选中
+            "color: white; "
+            "font-size: 18px; "  // 增大字体
+            "font-weight: 500; "
+            "border: none; "
+            "padding: 14px 16px; "  // 增大内边距
+            "text-align: left; "
+            "}";
+        
+        QString unselectedStyle = "QPushButton { "
+            "background-color: transparent; "
+            "color: rgba(255, 255, 255, 0.7); "
+            "font-size: 18px; "  // 增大字体
+            "font-weight: 400; "
+            "border: none; "
+            "padding: 14px 16px; "  // 增大内边距
+            "text-align: left; "
+            "} "
+            "QPushButton:hover { "
+            "background-color: rgba(255, 255, 255, 0.1); "
+            "color: rgba(255, 255, 255, 0.9); "
+            "}";
+        
         btn1 = new QPushButton("学校信息");
-        btn1->setStyleSheet("background-color:red; color:white; font-size:16px;");
+        btn1->setStyleSheet(selectedStyle);
         btn2 = new QPushButton("班级管理");
+        btn2->setStyleSheet(unselectedStyle);
         btn3 = new QPushButton("通讯录");
+        btn3->setStyleSheet(unselectedStyle);
         btn4 = new QPushButton("健康管理");
+        btn4->setStyleSheet(unselectedStyle);
         btn5 = new QPushButton("成长管理");
+        btn5->setStyleSheet(unselectedStyle);
 
-        QString greenBtnStyle = "background-color:green; color:white; font-size:16px;";
-        btn2->setStyleSheet(greenBtnStyle);
-        btn3->setStyleSheet(greenBtnStyle);
-        btn4->setStyleSheet(greenBtnStyle);
-        btn5->setStyleSheet(greenBtnStyle);
+        // 创建左侧菜单容器，设置固定宽度和背景，靠近左边缘
+        QWidget* menuWidget = new QWidget;
+        menuWidget->setFixedWidth(180);  // 减小宽度，让菜单更紧凑
+        menuWidget->setStyleSheet("QWidget { background-color: rgba(0, 0, 0, 0.2); }");
+        QVBoxLayout* menuContainerLayout = new QVBoxLayout(menuWidget);
+        menuContainerLayout->setContentsMargins(5, 80, 5, 0);  // 减少左右边距，让菜单靠近边缘
+        menuContainerLayout->setSpacing(2);
+        menuContainerLayout->addWidget(btn1);
+        menuContainerLayout->addWidget(btn2);
+        menuContainerLayout->addWidget(btn3);
+        menuContainerLayout->addWidget(btn4);
+        menuContainerLayout->addWidget(btn5);
+        menuContainerLayout->addStretch();
+        
+        menuLayout->addWidget(menuWidget);
 
-        menuLayout->addWidget(btn1);
-        menuLayout->addWidget(btn2);
-        menuLayout->addWidget(btn3);
-        menuLayout->addWidget(btn4);
-        menuLayout->addWidget(btn5);
-        menuLayout->addStretch();
-
-        closeButton = new QPushButton;
-        closeButton->setIcon(QIcon(":/res/img/widget-close.png"));
-        closeButton->setIconSize(QSize(22, 22));
-        closeButton->setFixedSize(QSize(22, 22));
-        closeButton->setStyleSheet("background: transparent;");
-        closeButton->move(width() - 24, 4);
-        closeButton->hide();
+        // 关闭按钮 - 右上角，使用绝对定位，不参与布局，避免影响标题位置
+        closeButton = new QPushButton("×", this);
+        closeButton->setFixedSize(QSize(30, 30));
+        closeButton->setStyleSheet(
+            "QPushButton { "
+            "background: transparent; "
+            "color: rgba(255, 255, 255, 0.8); "
+            "font-size: 20px; "
+            "font-weight: bold; "
+            "border: none; "
+            "} "
+            "QPushButton:hover { "
+            "background-color: rgba(255, 0, 0, 0.3); "
+            "color: white; "
+            "}");
+        closeButton->move(this->width() - 40, 10);  // 右上角位置
+        closeButton->hide();  // 默认隐藏
+        closeButton->raise();  // 确保在最上层
         connect(closeButton, &QPushButton::clicked, this, &QDialog::reject);
 
         connect(btn1, &QPushButton::clicked, this, [=]() {
-            int count = mainLayout->count();
-            /*if(2 <= mainLayout->count())
-            { 
-                if (curWidget)
-                {
-                    mainLayout->removeWidget(curWidget);
-                    mainLayout->addWidget(schoolInfoWidget);
-                    curWidget = schoolInfoWidget;
-                }
-            }
-            else*/
-            {
-                m_vBoxLayout->addWidget(schoolInfoWidget);
-                schoolInfoWidget->show();
-                classMgr->hide();
-                memberMgrWidget->hide();
+            if (m_stack && schoolInfoWidget) {
+                m_stack->setCurrentWidget(schoolInfoWidget);
                 curWidget = schoolInfoWidget;
-
-                btn1->setStyleSheet("background-color:red; color:white; font-size:16px;");
-                QString greenBtnStyle = "background-color:green; color:white; font-size:16px;";
-                btn2->setStyleSheet(greenBtnStyle);
-                btn3->setStyleSheet(greenBtnStyle);
             }
+
+            // 学校信息页面：显示确定和取消按钮
+            if (cancelButton) cancelButton->show();
+            if (okButton) okButton->show();
+
+            // 更新按钮样式
+            QString selectedStyle = "QPushButton { background-color: #2563eb; color: white; font-size: 18px; font-weight: 500; border: none; padding: 14px 16px; text-align: left; }";
+            QString unselectedStyle = "QPushButton { background-color: transparent; color: rgba(255, 255, 255, 0.7); font-size: 18px; font-weight: 400; border: none; padding: 14px 16px; text-align: left; } QPushButton:hover { background-color: rgba(255, 255, 255, 0.1); color: rgba(255, 255, 255, 0.9); }";
+            btn1->setStyleSheet(selectedStyle);
+            btn2->setStyleSheet(unselectedStyle);
+            btn3->setStyleSheet(unselectedStyle);
+            btn4->setStyleSheet(unselectedStyle);
+            btn5->setStyleSheet(unselectedStyle);
         });
 
         connect(btn2, &QPushButton::clicked, this, [=]() {
-            int count = mainLayout->count();
-            /*if (2 <= mainLayout->count())
-            {
-                if (curWidget)
-                {
-                    mainLayout->removeWidget(curWidget);
-                    mainLayout->addWidget(classMgr);
-                    curWidget = classMgr;
-                }
-            }
-            else*/
-            {
-
+            if (schoolInfoWidget && classMgr) {
                 QString schoolId = schoolInfoWidget->getSchoolId();
                 classMgr->setSchoolId(schoolId);
                 classMgr->initData();
-                m_vBoxLayout->addWidget(classMgr);
-                classMgr->show();
-                schoolInfoWidget->hide();
-                memberMgrWidget->hide();
-                curWidget = classMgr;
-
-                btn2->setStyleSheet("background-color:red; color:white; font-size:16px;");
-                QString greenBtnStyle = "background-color:green; color:white; font-size:16px;";
-                btn1->setStyleSheet(greenBtnStyle);
-                btn3->setStyleSheet(greenBtnStyle);
             }
+            if (m_stack && classMgr) {
+                m_stack->setCurrentWidget(classMgr);
+                curWidget = classMgr;
+            }
+
+            // 班级管理页面：隐藏确定和取消按钮
+            if (cancelButton) cancelButton->hide();
+            if (okButton) okButton->hide();
+
+            // 更新按钮样式
+            QString selectedStyle = "QPushButton { background-color: #2563eb; color: white; font-size: 18px; font-weight: 500; border: none; padding: 14px 16px; text-align: left; }";
+            QString unselectedStyle = "QPushButton { background-color: transparent; color: rgba(255, 255, 255, 0.7); font-size: 18px; font-weight: 400; border: none; padding: 14px 16px; text-align: left; } QPushButton:hover { background-color: rgba(255, 255, 255, 0.1); color: rgba(255, 255, 255, 0.9); }";
+            btn2->setStyleSheet(selectedStyle);
+            btn1->setStyleSheet(unselectedStyle);
+            btn3->setStyleSheet(unselectedStyle);
+            btn4->setStyleSheet(unselectedStyle);
+            btn5->setStyleSheet(unselectedStyle);
         });
 
         connect(btn3, &QPushButton::clicked, this, [=]() {
-            int count = mainLayout->count();
-            /*if (2 <= mainLayout->count())
-            {
-                if (curWidget)
-                {
-                    mainLayout->removeWidget(curWidget);
-                    mainLayout->addWidget(classMgr);
-                    curWidget = classMgr;
-                }
-            }
-            else*/
-            {
-                m_vBoxLayout->addWidget(memberMgrWidget);
+            if (schoolInfoWidget && memberMgrWidget) {
                 QString schoolId = schoolInfoWidget->getSchoolId();
                 memberMgrWidget->setSchoolId(schoolId);
-                memberMgrWidget->show();
-                schoolInfoWidget->hide();
-                classMgr->hide();
-                curWidget = classMgr;
-
-                btn3->setStyleSheet("background-color:red; color:white; font-size:16px;");
-                QString greenBtnStyle = "background-color:green; color:white; font-size:16px;";
-                btn1->setStyleSheet(greenBtnStyle);
-                btn2->setStyleSheet(greenBtnStyle);
             }
+            if (m_stack && memberMgrWidget) {
+                m_stack->setCurrentWidget(memberMgrWidget);
+                curWidget = memberMgrWidget;
+            }
+
+            // 通讯录页面：显示确定和取消按钮
+            if (cancelButton) cancelButton->show();
+            if (okButton) okButton->show();
+
+            // 更新按钮样式
+            QString selectedStyle = "QPushButton { background-color: #2563eb; color: white; font-size: 18px; font-weight: 500; border: none; padding: 14px 16px; text-align: left; }";
+            QString unselectedStyle = "QPushButton { background-color: transparent; color: rgba(255, 255, 255, 0.7); font-size: 18px; font-weight: 400; border: none; padding: 14px 16px; text-align: left; } QPushButton:hover { background-color: rgba(255, 255, 255, 0.1); color: rgba(255, 255, 255, 0.9); }";
+            btn3->setStyleSheet(selectedStyle);
+            btn1->setStyleSheet(unselectedStyle);
+            btn2->setStyleSheet(unselectedStyle);
+            btn4->setStyleSheet(unselectedStyle);
+            btn5->setStyleSheet(unselectedStyle);
             });
 
-        QHBoxLayout* closeLayout = new QHBoxLayout;
+        // 顶部标题栏 - 标题居中，关闭按钮固定位置不影响标题
+        QHBoxLayout* titleLayout = new QHBoxLayout;
+        titleLayout->setContentsMargins(50, 15, 15, 15);
+        titleLayout->addStretch();  // 左侧弹性空间
+        pLabel = new QLabel("配置学校信息");
+        pLabel->setStyleSheet("color: white; font-size: 20px; font-weight: 600;");  // 增大标题字体
+        titleLayout->addWidget(pLabel);
+        titleLayout->addStretch();  // 右侧弹性空间，使标题居中
+        
+        // 关闭按钮使用固定宽度的占位符，确保标题始终居中
+        QWidget* closeButtonPlaceholder = new QWidget;
+        closeButtonPlaceholder->setFixedWidth(40);  // 与关闭按钮区域同宽（30px按钮 + 10px边距）
+        titleLayout->addWidget(closeButtonPlaceholder);
+        
+        // 右侧内容区域布局，增大尺寸
         m_vBoxLayout = new QVBoxLayout;
+        m_vBoxLayout->setContentsMargins(30, 0, 30, 0);  // 增大左右边距，让内容区域更大
+        m_vBoxLayout->setSpacing(0);
 
         schoolInfoWidget = new QSchoolInfoWidget(NULL);
         classMgr = new QClassMgr(NULL);
         memberMgrWidget = new MemberManagerWidget;
 
-        pLabel = new QLabel(NULL);
-        pLabel->setFixedSize(QSize(22, 22));
-        closeLayout->addWidget(pLabel);
-        closeLayout->addStretch();
-        closeLayout->addWidget(closeButton);
+        m_vBoxLayout->addLayout(titleLayout);
+        // 右侧内容使用堆叠容器，切换页面不触发布局抖动（左侧菜单位置固定）
+        m_stack = new QStackedWidget;
+        m_stack->setContentsMargins(0, 0, 0, 0);
+        m_stack->addWidget(schoolInfoWidget);
+        m_stack->addWidget(classMgr);
+        m_stack->addWidget(memberMgrWidget);
+        m_stack->setCurrentWidget(schoolInfoWidget);
+        m_vBoxLayout->addWidget(m_stack, 1);
+        
+        // 底部按钮区域 - 按钮居中，固定在窗口底部
+        buttonLayout = new QHBoxLayout;
+        buttonLayout->setContentsMargins(0, 20, 0, 30);  // 增大底部边距到30px，让按钮更靠下
+        buttonLayout->addStretch();  // 左侧弹性空间
+        cancelButton = new QPushButton("取消");
+        cancelButton->setFixedSize(100, 36);
+        cancelButton->setStyleSheet(
+            "QPushButton { "
+            "background-color: rgba(255, 255, 255, 0.1); "
+            "color: white; "
+            "border: 1px solid rgba(255, 255, 255, 0.2); "
+            "border-radius: 6px; "
+            "font-size: 14px; "
+            "} "
+            "QPushButton:hover { "
+            "background-color: rgba(255, 255, 255, 0.15); "
+            "}");
+        okButton = new QPushButton("确定");
+        okButton->setFixedSize(100, 36);
+        okButton->setStyleSheet(
+            "QPushButton { "
+            "background-color: #2563eb; "
+            "color: white; "
+            "border: none; "
+            "border-radius: 6px; "
+            "font-size: 14px; "
+            "font-weight: 500; "
+            "} "
+            "QPushButton:hover { "
+            "background-color: #1d4ed8; "
+            "}");
+        buttonLayout->addWidget(cancelButton);
+        buttonLayout->addSpacing(12);  // 按钮之间的间距
+        buttonLayout->addWidget(okButton);
+        buttonLayout->addStretch();  // 右侧弹性空间，使按钮居中
+        connect(cancelButton, &QPushButton::clicked, this, &QDialog::reject);
+        connect(okButton, &QPushButton::clicked, this, &QDialog::accept);
+        
+        m_vBoxLayout->addLayout(buttonLayout);
 
-        m_vBoxLayout->addLayout(closeLayout);
-        m_vBoxLayout->addWidget(schoolInfoWidget);
-
-        // 总布局：左菜单 + 右表单
-        mainLayout = new QHBoxLayout(NULL);
+        // 总布局：左菜单固定贴左，右侧自适应占满（切换页左侧不移动）
+        mainLayout = new QHBoxLayout;
+        mainLayout->setContentsMargins(0, 0, 0, 0);
+        mainLayout->setSpacing(0);
         mainLayout->addLayout(menuLayout);
-        int count = mainLayout->count();
-        mainLayout->addLayout(m_vBoxLayout);
+        mainLayout->addSpacing(30);
+        mainLayout->addLayout(m_vBoxLayout, 1);
+
         curWidget = schoolInfoWidget;
-        schoolInfoWidget->show();
-        count = mainLayout->count();
         setLayout(mainLayout);
     }
 
@@ -191,9 +282,11 @@ public:
         QPen pen(m_borderColor, m_borderWidth);
         p.strokePath(path, pen);
 
-        // 标题
-        p.setPen(Qt::white);
-        p.drawText(10, 25, m_titleName);
+        // 设置窗口遮罩，使圆角之外透明
+        QRegion region(path.toFillPolygon().toPolygon());
+        setMask(region);
+
+        // 标题已在布局中显示，这里不再绘制
     }
 
     void mousePressEvent(QMouseEvent* event) {
@@ -218,21 +311,33 @@ public:
     void leaveEvent(QEvent* event)
     {
         QDialog::leaveEvent(event);
-        closeButton->hide();
+        if (closeButton) {
+            closeButton->hide();
+        }
     }
 
     void enterEvent(QEvent* event)
     {
         QDialog::enterEvent(event);
-        if (m_visibleCloseButton)
+        if (m_visibleCloseButton && closeButton) {
             closeButton->show();
+            // 确保关闭按钮位置正确（右上角）
+            closeButton->move(this->width() - closeButton->width() - 10, 10);
+        }
     }
 
     void resizeEvent(QResizeEvent* event)
     {
         QDialog::resizeEvent(event);
-        //initShow();
-        closeButton->move(this->width() - 22, 0);
+        // 关闭按钮使用绝对定位，确保始终在右上角
+        if (closeButton) {
+            closeButton->move(this->width() - closeButton->width() - 10, 10);
+        }
+        // 更新窗口遮罩以适应新的窗口大小
+        QPainterPath path;
+        path.addRoundedRect(0, 0, width(), height(), m_radius, m_radius);
+        QRegion region(path.toFillPolygon().toPolygon());
+        setMask(region);
     }
 
     void setTitleName(const QString& name) {
@@ -294,6 +399,10 @@ public:
     QPushButton* closeButton = NULL;
     QVBoxLayout* m_vBoxLayout = NULL;
     QVBoxLayout* menuLayout = NULL;
+    QHBoxLayout* buttonLayout = NULL;  // 底部按钮布局
+    QPushButton* cancelButton = NULL;  // 取消按钮
+    QPushButton* okButton = NULL;  // 确定按钮
+    QStackedWidget* m_stack = NULL;  // 右侧内容堆叠容器
     QLabel* pLabel = NULL;
     QPushButton* btn1 = NULL;
     QPushButton* btn2 = NULL;

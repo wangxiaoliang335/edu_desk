@@ -7,14 +7,21 @@
 #include <QTableWidget>
 #include <QHeaderView>
 #include <QCheckBox>
+#include <QIcon>
 #include <qmessagebox.h>
 #include <algorithm>
 #include <QSet>
 
 QClassMgr::QClassMgr(QWidget *parent)
 	: QWidget(parent)
-{ // 右侧内容布局
+{ 
+    // 深色主题布局
     QVBoxLayout* contentLayout = new QVBoxLayout(this);
+    contentLayout->setContentsMargins(0, 0, 0, 0);
+    contentLayout->setSpacing(12);
+    
+    // 设置透明背景
+    setStyleSheet("QWidget { background-color: transparent; }");
 
     // 上方按钮组合 (学段、年级、班级数)
     //QGridLayout* topGrid = new QGridLayout;
@@ -99,10 +106,10 @@ QClassMgr::QClassMgr(QWidget *parent)
                                 
                                 // 在表格中查找匹配的行（学段、年级、班级名称相同，且班级编号为空）
                                 for (int row = 0; row < table_->rowCount(); ++row) {
-                                    QTableWidgetItem* itemSchoolStage = table_->item(row, 0);
-                                    QTableWidgetItem* itemGrade = table_->item(row, 1);
-                                    QTableWidgetItem* itemClassName = table_->item(row, 2);
-                                    QTableWidgetItem* itemClassCode = table_->item(row, 3);
+                                    QTableWidgetItem* itemSchoolStage = table_->item(row, 1);  // 学段在第二列
+                                    QTableWidgetItem* itemGrade = table_->item(row, 2);  // 年级在第三列
+                                    QTableWidgetItem* itemClassName = table_->item(row, 3);  // 班级在第四列
+                                    QTableWidgetItem* itemClassCode = table_->item(row, 4);  // 班级编号在第五列
                                     
                                     // 检查是否匹配：学段、年级、班级名称相同，且班级编号为空
                                     if (itemSchoolStage && itemSchoolStage->text() == schoolStage &&
@@ -114,7 +121,7 @@ QClassMgr::QClassMgr(QWidget *parent)
                                         if (!itemClassCode) {
                                             itemClassCode = new QTableWidgetItem(classCode);
                                             itemClassCode->setFlags(itemClassCode->flags() & ~Qt::ItemIsEditable);
-                                            table_->setItem(row, 3, itemClassCode);
+                                            table_->setItem(row, 4, itemClassCode);  // 班级编号在第五列
                                         } else {
                                             itemClassCode->setText(classCode);
                                         }
@@ -162,26 +169,66 @@ QClassMgr::QClassMgr(QWidget *parent)
             });
     }
 
-    QPushButton* btnGenerate = new QPushButton("生成");
-    btnGenerate->setStyleSheet("background-color:blue; color:white; font-size:16px;");
-    //topGrid->addWidget(btnGenerate, 0, 4, 3, 1);
-
-    //contentLayout->addLayout(topGrid);
-    //contentLayout->addWidget(btnGenerate);
-
-    // 添加、删除按钮
+    // 顶部操作栏：添加、删除、生成按钮（带图标）
     QHBoxLayout* btnLayout = new QHBoxLayout;
+    btnLayout->setContentsMargins(0, 0, 0, 0);
+    btnLayout->setSpacing(12);
+    
     QPushButton* btnAdd = new QPushButton("添加");
+    btnAdd->setIcon(QIcon(":/res/img/com_card_ic_add@3x.png"));
+    btnAdd->setIconSize(QSize(22, 22));
+    btnAdd->setFixedHeight(40);
+    btnAdd->setStyleSheet(
+        "QPushButton { "
+        "background-color: rgba(255, 255, 255, 0.1); "
+        "color: white; "
+        "font-size: 14px; "
+        "border: 1px solid rgba(255, 255, 255, 0.2); "
+        "border-radius: 6px; "
+        "padding: 6px 14px; "
+        "} "
+        "QPushButton:hover { "
+        "background-color: rgba(255, 255, 255, 0.15); "
+        "}");
+    
     QPushButton* btnDelete = new QPushButton("删除");
-    btnAdd->setStyleSheet("background-color:green; color:white; font-size:16px;");
-    btnDelete->setStyleSheet("background-color:green; color:white; font-size:16px;");
-    btnLayout->addStretch();
+    btnDelete->setIcon(QIcon(":/res/img/com_card_ic_del@3x.png"));
+    btnDelete->setIconSize(QSize(22, 22));
+    btnDelete->setFixedHeight(40);
+    btnDelete->setStyleSheet(
+        "QPushButton { "
+        "background-color: rgba(255, 255, 255, 0.1); "
+        "color: white; "
+        "font-size: 14px; "
+        "border: 1px solid rgba(255, 255, 255, 0.2); "
+        "border-radius: 6px; "
+        "padding: 6px 14px; "
+        "} "
+        "QPushButton:hover { "
+        "background-color: rgba(255, 255, 255, 0.15); "
+        "}");
+    
+    QPushButton* btnGenerate = new QPushButton("生成");
+    btnGenerate->setIcon(QIcon(":/res/img/com_card_ic_generate@3x.png"));
+    btnGenerate->setIconSize(QSize(22, 22));
+    btnGenerate->setFixedHeight(40);
+    btnGenerate->setStyleSheet(
+        "QPushButton { "
+        "background-color: rgba(255, 255, 255, 0.1); "
+        "color: white; "
+        "font-size: 14px; "
+        "border: 1px solid rgba(255, 255, 255, 0.2); "
+        "border-radius: 6px; "
+        "padding: 6px 14px; "
+        "} "
+        "QPushButton:hover { "
+        "background-color: rgba(255, 255, 255, 0.15); "
+        "}");
+    
     btnLayout->addWidget(btnAdd);
-    btnLayout->addStretch();
     btnLayout->addWidget(btnDelete);
     btnLayout->addStretch();
     btnLayout->addWidget(btnGenerate);
-    btnLayout->addStretch();
     contentLayout->addLayout(btnLayout);
 
 	connect(btnGenerate, &QPushButton::clicked, this, [=] {
@@ -189,11 +236,10 @@ QClassMgr::QClassMgr(QWidget *parent)
         {
             QJsonArray jsonArray;
             for (int row = 0; row < table_->rowCount(); ++row) {
-                QTableWidgetItem* itemSchoolStage = table_->item(row, 0);
-                QTableWidgetItem* itemGrade = table_->item(row, 1);
-                QTableWidgetItem* itemClassName = table_->item(row, 2);
-                QTableWidgetItem* itemClassCode = table_->item(row, 3); // 班级编号列
-                QTableWidgetItem* itemRemark = table_->item(row, 4);
+                QTableWidgetItem* itemSchoolStage = table_->item(row, 1);  // 学段在第二列
+                QTableWidgetItem* itemGrade = table_->item(row, 2);  // 年级在第三列
+                QTableWidgetItem* itemClassName = table_->item(row, 3);  // 班级在第四列
+                QTableWidgetItem* itemClassCode = table_->item(row, 4);  // 班级编号在第五列
 
                 // 只上传班级编号为空的行
                 if (itemClassCode && !itemClassCode->text().isEmpty()) {
@@ -213,9 +259,7 @@ QClassMgr::QClassMgr(QWidget *parent)
                 obj["class_name"] = itemClassName->text();
                 obj["schoolid"] = m_schoolId; // 添加学校ID
                 // 不再包含 class_code 字段
-                if (itemRemark && !itemRemark->text().isEmpty()) {
-                    obj["remark"] = itemRemark->text();
-                }
+                // 备注列已移除，不再包含在表格中
                 jsonArray.append(obj);
             }
 
@@ -252,15 +296,15 @@ QClassMgr::QClassMgr(QWidget *parent)
                 
                 // 检查表格中所有有班级编号的行
                 for (int row = 0; row < table_->rowCount(); ++row) {
-                    QTableWidgetItem* itemClassCode = table_->item(row, 3);
+                    QTableWidgetItem* itemClassCode = table_->item(row, 4);  // 班级编号在第五列
                     // 只检查有班级编号的行
                     if (!itemClassCode || itemClassCode->text().isEmpty()) {
                         continue;
                     }
                     
-                    QTableWidgetItem* itemSchoolStage = table_->item(row, 0);
-                    QTableWidgetItem* itemGrade = table_->item(row, 1);
-                    QTableWidgetItem* itemClassName = table_->item(row, 2);
+                    QTableWidgetItem* itemSchoolStage = table_->item(row, 1);  // 学段在第二列
+                    QTableWidgetItem* itemGrade = table_->item(row, 2);  // 年级在第三列
+                    QTableWidgetItem* itemClassName = table_->item(row, 3);  // 班级在第四列
                     
                     if (itemSchoolStage && itemSchoolStage->text() == uploadSchoolStage &&
                         itemGrade && itemGrade->text() == uploadGrade &&
@@ -319,7 +363,7 @@ QClassMgr::QClassMgr(QWidget *parent)
         
         for (int row = 0; row < table_->rowCount(); ++row) {
             QTableWidgetItem* chkItem = table_->item(row, 0); // 第一列复选框
-            QTableWidgetItem* itemClassCode = table_->item(row, 3); // 班级编号列
+            QTableWidgetItem* itemClassCode = table_->item(row, 4); // 班级编号在第五列
             
             // 检查复选框是否被勾选
             if (!chkItem || chkItem->checkState() != Qt::Checked) {
@@ -333,10 +377,9 @@ QClassMgr::QClassMgr(QWidget *parent)
             }
             
             // 收集要删除的班级数据
-            QTableWidgetItem* itemSchoolStage = table_->item(row, 0);
-            QTableWidgetItem* itemGrade = table_->item(row, 1);
-            QTableWidgetItem* itemClassName = table_->item(row, 2);
-            QTableWidgetItem* itemRemark = table_->item(row, 4);
+            QTableWidgetItem* itemSchoolStage = table_->item(row, 1);  // 学段在第二列
+            QTableWidgetItem* itemGrade = table_->item(row, 2);  // 年级在第三列
+            QTableWidgetItem* itemClassName = table_->item(row, 3);  // 班级在第四列
             
             QJsonObject obj;
             obj["class_code"] = itemClassCode->text();
@@ -350,9 +393,7 @@ QClassMgr::QClassMgr(QWidget *parent)
             if (itemClassName) {
                 obj["class_name"] = itemClassName->text();
             }
-            if (itemRemark && !itemRemark->text().isEmpty()) {
-                obj["remark"] = itemRemark->text();
-            }
+            // 备注列已移除，不再包含在表格中
             jsonArray.append(obj);
             rowsToDelete.append(row);
         }
@@ -401,7 +442,7 @@ QClassMgr::QClassMgr(QWidget *parent)
                         // 根据返回的班级编号列表，从表格中删除对应的行
                         QList<int> rowsToRemove;
                         for (int row = 0; row < table_->rowCount(); ++row) {
-                            QTableWidgetItem* itemClassCode = table_->item(row, 3);
+                            QTableWidgetItem* itemClassCode = table_->item(row, 4);  // 班级编号在第五列
                             if (itemClassCode && deletedCodeSet.contains(itemClassCode->text())) {
                                 rowsToRemove.append(row);
                             }
@@ -428,25 +469,53 @@ QClassMgr::QClassMgr(QWidget *parent)
         });
     });
 
-    // 表格
+    // 表格 - 深色主题样式
     table_ = new QTableWidget(0, 5);
-    table_->setHorizontalHeaderLabels({ "学段","年级","班级","班级编号","备注" });
-
-    // 第一列加复选框
-    for (int row = 0; row < table_->rowCount(); ++row) {
-        //QCheckBox* chk = new QCheckBox;
-        //table->setCellWidget(row, 0, chk);
-
-        QTableWidgetItem* item = new QTableWidgetItem();
-        item->setCheckState(Qt::Unchecked);                  // 初始为未勾选
-        item->setFlags(item->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsEditable); // 允许勾选
-        table_->setItem(row, 0, item);
-    }
+    table_->setHorizontalHeaderLabels({ "", "学段", "年级", "班级", "班级编号" });  // 第一列为复选框列，无标题
+    
+    // 表格样式
+    table_->setStyleSheet(
+        "QTableWidget { "
+        "background-color: transparent; "
+        "color: white; "
+        "border: 1px solid rgba(255, 255, 255, 0.2); "
+        "border-radius: 6px; "
+        "gridline-color: rgba(255, 255, 255, 0.1); "
+        "} "
+        "QTableWidget::item { "
+        "background-color: rgba(255, 255, 255, 0.05); "
+        "color: white; "
+        "padding: 12px; "
+        "border: none; "
+        "} "
+        "QTableWidget::item:selected { "
+        "background-color: rgba(37, 99, 235, 0.3); "
+        "} "
+        "QHeaderView::section { "
+        "background-color: rgba(255, 255, 255, 0.1); "
+        "color: white; "
+        "font-size: 16px; "
+        "font-weight: 500; "
+        "padding: 12px; "
+        "border: none; "
+        "border-bottom: 1px solid rgba(255, 255, 255, 0.2); "
+        "}");
+    
     // 隐藏行号
     table_->verticalHeader()->setVisible(false);
-    table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    table_->horizontalHeader()->setStretchLastSection(false);
+    table_->setColumnWidth(0, 40);  // 复选框列固定宽度
+    table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    table_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+    table_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+    table_->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Stretch);
     table_->setSelectionMode(QAbstractItemView::ExtendedSelection);
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table_->setAlternatingRowColors(false);
+    // 列表框整体放大（约 1.5 倍效果：高度/行高/表头）
+    table_->setMinimumHeight(450);
+    table_->horizontalHeader()->setFixedHeight(48);
+    table_->verticalHeader()->setDefaultSectionSize(48);
     contentLayout->addWidget(table_);
 
     // 将左菜单和右内容加到主布局
@@ -509,18 +578,34 @@ void QClassMgr::initData()
                     int row = table_->rowCount();
                     table_->insertRow(row);
 
-                    QTableWidgetItem* chkItem = new QTableWidgetItem(cls.value("school_stage").toString());
+                    // 第一列：复选框
+                    QTableWidgetItem* chkItem = new QTableWidgetItem();
                     chkItem->setCheckState(Qt::Unchecked);
-                    chkItem->setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsEditable);
+                    chkItem->setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsEnabled);
+                    // 注意：不要同时设置 checkState + icon，否则会出现“复选框 + 图标”错位叠加
+                    chkItem->setText("");
+                    chkItem->setTextAlignment(Qt::AlignCenter);
                     table_->setItem(row, 0, chkItem);
-                    table_->setItem(row, 1, new QTableWidgetItem(cls.value("grade").toString()));
-                    table_->setItem(row, 2, new QTableWidgetItem(cls.value("class_name").toString()));
+                    
+                    // 第二列：学段
+                    QTableWidgetItem* stageItem = new QTableWidgetItem(cls.value("school_stage").toString());
+                    stageItem->setFlags(stageItem->flags() | Qt::ItemIsEditable);
+                    table_->setItem(row, 1, stageItem);
+                    
+                    // 第三列：年级
+                    QTableWidgetItem* gradeItem = new QTableWidgetItem(cls.value("grade").toString());
+                    gradeItem->setFlags(gradeItem->flags() | Qt::ItemIsEditable);
+                    table_->setItem(row, 2, gradeItem);
+                    
+                    // 第四列：班级
+                    QTableWidgetItem* classItem = new QTableWidgetItem(cls.value("class_name").toString());
+                    classItem->setFlags(classItem->flags() | Qt::ItemIsEditable);
+                    table_->setItem(row, 3, classItem);
 
+                    // 第五列：班级编号（只读）
                     QTableWidgetItem* bhItem = new QTableWidgetItem(cls.value("class_code").toString());
                     bhItem->setFlags(bhItem->flags() & ~Qt::ItemIsEditable);
-                    table_->setItem(row, 3, bhItem);
-                    table_->setItem(row, 4, new QTableWidgetItem(cls.value("remark").toString()));
-                    //table_->setItem(row, 5, new QTableWidgetItem(cls.value("created_at").toString()));
+                    table_->setItem(row, 4, bhItem);
                 }
                 //QMessageBox::information(this, "查询成功",
                 //    QString("共查询到 %1 条班级数据").arg(classes.size()));
@@ -540,25 +625,36 @@ void QClassMgr::setSchoolId(QString schoolId)
 
 void QClassMgr::fillRow(int row)
 {
-    QString xueduan = "小学";
-    QString nianji = "一年级";
-    QString banji = "3班";
+    // 表格列定义：
+    // 0: 复选框（无文本）
+    // 1: 学段
+    // 2: 年级
+    // 3: 班级
+    // 4: 班级编号（只读）
 
-    // 第一列复选框
-    QTableWidgetItem* chkItem = new QTableWidgetItem(xueduan);
+    const QString xueduan = "小学";
+    const QString nianji = "一年级";
+    const QString banji = "1班";
+
+    // 第一列：复选框（只用 checkState，避免与 icon 叠加错位）
+    QTableWidgetItem* chkItem = new QTableWidgetItem();
+    chkItem->setText("");
+    chkItem->setTextAlignment(Qt::AlignCenter);
     chkItem->setCheckState(Qt::Unchecked);
-    chkItem->setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsEditable);
+    chkItem->setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsEnabled);
     table_->setItem(row, 0, chkItem);
 
-    // 填入各列
-    table_->setItem(row, 1, new QTableWidgetItem(nianji));
-    table_->setItem(row, 2, new QTableWidgetItem(banji));
+    // 第二列：学段
+    table_->setItem(row, 1, new QTableWidgetItem(xueduan));
+    // 第三列：年级
+    table_->setItem(row, 2, new QTableWidgetItem(nianji));
+    // 第四列：班级
+    table_->setItem(row, 3, new QTableWidgetItem(banji));
 
-    // 班级编号列为空，不自动生成
-    QTableWidgetItem* bhItem = new QTableWidgetItem("");
-    bhItem->setFlags(bhItem->flags() & ~Qt::ItemIsEditable);
-    table_->setItem(row, 3, bhItem);
-    table_->setItem(row, 4, new QTableWidgetItem());
+    // 第五列：班级编号（只读，为空）
+    QTableWidgetItem* codeItem = new QTableWidgetItem("");
+    codeItem->setFlags(codeItem->flags() & ~Qt::ItemIsEditable);
+    table_->setItem(row, 4, codeItem);
 }
 
 QString QClassMgr::generateClassIdAuto(const QString& xueduan, const QString& nianji)
@@ -567,15 +663,17 @@ QString QClassMgr::generateClassIdAuto(const QString& xueduan, const QString& ni
 
     // 遍历表格所有行，找到同学段+年级的最大编号
     for (int r = 0; r < table_->rowCount(); ++r) {
-        QTableWidgetItem* sdItem = table_->item(r, 0); // 学段
-        QTableWidgetItem* njItem = table_->item(r, 1); // 年级
-        QTableWidgetItem* bhItem = table_->item(r, 3); // 班级编号
+        QTableWidgetItem* sdItem = table_->item(r, 1); // 学段
+        QTableWidgetItem* njItem = table_->item(r, 2); // 年级
+        QTableWidgetItem* bhItem = table_->item(r, 4); // 班级编号
 
         if (!sdItem || !njItem || !bhItem) continue;
 
         if (sdItem->text() == xueduan && njItem->text() == nianji) {
+            // 班级编号形如：<学校id><后三位流水>，取后三位做自增
             bool ok = false;
-            int num = bhItem->text().toInt(&ok);
+            const QString code = bhItem->text().trimmed();
+            const int num = (code.size() >= 3) ? code.right(3).toInt(&ok) : 0;
             if (ok && num > maxNum) {
                 maxNum = num;
             }

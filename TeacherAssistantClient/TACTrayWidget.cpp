@@ -30,7 +30,22 @@ TACTrayWidget::TACTrayWidget(QWidget *parent)
 	layout->addWidget(m_fileManagerButton);
 	
 	// ����������Lambda����Ϊ����¼�
+	// 连接按钮点击事件，只有管理员才能打开配置学校信息页面
 	connect(m_fileManagerButton, &QPushButton::toggled, this, [=](bool checked) {
+		// 再次检查管理员权限，防止非管理员用户打开
+		UserInfo userInfo = CommonInfo::GetData();
+		bool isAdmin = (userInfo.strIsAdministrator == "1" ||
+			userInfo.strIsAdministrator.compare(QString::fromUtf8(u8"是"), Qt::CaseInsensitive) == 0 ||
+			userInfo.strIsAdministrator.compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0);
+		
+		if (!isAdmin) {
+			// 如果不是管理员，阻止打开并重置按钮状态
+			m_fileManagerButton->blockSignals(true);
+			m_fileManagerButton->setChecked(false);
+			m_fileManagerButton->blockSignals(false);
+			return;
+		}
+		
 		emit navChoolInfo(checked);
 		});
 

@@ -353,6 +353,17 @@ void TACMainDialog::Init(QString qPhone, int user_id)
      });
 
     connect(trayWidget, &TACTrayWidget::navChoolInfo, this, [=](bool checked) {
+        // 再次检查管理员权限，确保只有管理员可以打开配置学校信息页面
+        UserInfo userInfo = CommonInfo::GetData();
+        bool isAdmin = (userInfo.strIsAdministrator == "1" ||
+            userInfo.strIsAdministrator.compare(QString::fromUtf8(u8"是"), Qt::CaseInsensitive) == 0 ||
+            userInfo.strIsAdministrator.compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0);
+        
+        if (!isAdmin) {
+            // 如果不是管理员，不打开对话框
+            return;
+        }
+        
         if (schoolInfoDlg)
         {
             // 获取主屏幕几何信息（Qt 5.14+ 推荐 QScreen）
