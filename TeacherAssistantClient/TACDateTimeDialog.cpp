@@ -78,6 +78,15 @@ TACDateTimeDialog::TACDateTimeDialog(QWidget *parent)
         }
     });
     timer->start(100);
+    
+    // 连接确定/取消按钮信号
+    connect(this, &TADialog::cancelClicked, this, [=]() {
+        this->close();
+    });
+    connect(this, &TADialog::enterClicked, this, [=]() {
+        // 确定时关闭对话框，类型已经通过 updateType 信号实时更新了
+        this->close();
+    });
 }
 
 TACDateTimeDialog::~TACDateTimeDialog()

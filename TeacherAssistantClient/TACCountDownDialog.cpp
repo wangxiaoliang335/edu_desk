@@ -3,7 +3,24 @@
 #include <QLineEdit>
 #include <QDate>
 #include <QSettings>
+#include <QDebug>
+#include <QDir>
+#include <QStandardPaths>
+#include <QSignalBlocker>
 #include "common.h"
+
+namespace {
+static QString countdownSettingsPath()
+{
+    // 固定到可写配置目录，避免 QSettings 因组织名/应用名/权限差异导致读写不一致
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+    if (!dir.isEmpty())
+        QDir().mkpath(dir);
+    // 兜底：如果拿不到可写目录，则写到当前工作目录
+    return dir.isEmpty() ? QStringLiteral("./tac_countdown.ini")
+                         : (dir + QStringLiteral("/tac_countdown.ini"));
+}
+} // namespace
 TACCountDownDialog::TACCountDownDialog(QWidget *parent)
 	: TADialog(parent)
 {
@@ -23,7 +40,8 @@ TACCountDownDialog::TACCountDownDialog(QWidget *parent)
     calendar->setBorderWidth(WIDGET_BORDER_WIDTH);
     calendar->setRadius(40);
     // 初始化时先按本地配置填充（showEvent 里也会每次刷新一遍，保证取消后不残留）
-    QSettings settings;
+    QSettings settings(countdownSettingsPath(), QSettings::IniFormat);
+    settings.sync(); // 确保从磁盘读取最新值
     const QDate savedDate = settings.value("countdown/date").toDate();
     m_date = savedDate.isValid() ? savedDate : QDate(2026, 6, 7);
     calendar->setSelectedDate(m_date);
@@ -35,6 +53,11 @@ TACCountDownDialog::TACCountDownDialog(QWidget *parent)
     calendarButton->setIcon(QIcon(":/res/img/arrow-down.png"));
     calendarButton->setLayoutDirection(Qt::RightToLeft);
     connect(calendarButton, &QPushButton::clicked, this, [=]() {
+        // 打开时让弹窗定位到当前选择日期所在月份（避免第一次打开总是落在 1 月）
+        if (calendar) {
+            const QSignalBlocker blocker(calendar); // 防止触发 selectionChanged 导致弹窗立刻关闭
+            calendar->setSelectedDate(m_date);
+        }
         calendar->setFixedWidth(calendarButton->width());
         QPoint bottomLeft = calendarButton->mapToGlobal(QPoint(0, calendarButton->height()));
         calendar->move(bottomLeft.x(), bottomLeft.y()+5);
@@ -50,7 +73,8 @@ TACCountDownDialog::TACCountDownDialog(QWidget *parent)
     this->contentLayout->addWidget(calendarButton);
 
     contentLineEdit = new QLineEdit(this);
-    contentLineEdit->setText(settings.value("countdown/prefix", QString::fromUtf8(u8"距高考还有")).toString());
+    QString savedPrefix = settings.value("countdown/prefix", QString::fromUtf8(u8"距高考还有")).toString();
+    contentLineEdit->setText(savedPrefix);
     QLabel* label1 = new QLabel("提示文字", this);
     this->contentLayout->addWidget(label1);
     this->contentLayout->addWidget(contentLineEdit);
@@ -79,15 +103,18 @@ TACCountDownDialog::TACCountDownDialog(QWidget *parent)
     // 这里需要显式连接，否则按钮点击没有任何效果。
     connect(this, &TADialog::cancelClicked, this, [=]() {
         // 取消：回滚到上次保存的状态（该对话框实例会被复用，下次打开要看到已保存的数据）
-        QSettings s;
+        QSettings s(countdownSettingsPath(), QSettings::IniFormat);
+        s.sync(); // 确保从磁盘读取最新值
         const QDate d = s.value("countdown/date").toDate();
         m_date = d.isValid() ? d : QDate(2026, 6, 7);
         if (calendar)
             calendar->setSelectedDate(m_date);
         if (calendarButton)
             calendarButton->setText(m_date.toString("yyyy年M月d日"));
-        if (contentLineEdit)
-            contentLineEdit->setText(s.value("countdown/prefix", QString::fromUtf8(u8"距高考还有")).toString());
+        if (contentLineEdit) {
+            QString savedPrefix = s.value("countdown/prefix", QString::fromUtf8(u8"距高考还有")).toString();
+            contentLineEdit->setText(savedPrefix);
+        }
         if (countDownLabel)
             countDownLabel->setText(QString::number(daysLeft()));
         if (calendar)
@@ -96,10 +123,22 @@ TACCountDownDialog::TACCountDownDialog(QWidget *parent)
     });
     connect(this, &TADialog::enterClicked, this, [=]() {
         // 保存配置并通知外部刷新
-        QSettings s;
+        QSettings s(countdownSettingsPath(), QSettings::IniFormat);
+        QString prefixText = contentLineEdit->text().trimmed(); // 获取并去除首尾空格
+        if (prefixText.isEmpty()) {
+            prefixText = QString::fromUtf8(u8"距高考还有"); // 如果为空，使用默认值
+        }
         s.setValue("countdown/date", m_date);
-        s.setValue("countdown/prefix", contentLineEdit->text());
-        emit done();
+        s.setValue("countdown/prefix", prefixText);
+        s.sync(); // 确保立即写入磁盘
+        
+        qDebug() << "TACCountDownDialog::enterClicked - 保存提示文字:" << prefixText
+                 << ", settings file:" << s.fileName();
+        
+        // 确保 contentLineEdit 显示的是保存后的值
+        contentLineEdit->setText(prefixText);
+        
+        emit done(); // 发出信号，通知主窗口刷新显示
         if (calendar)
             calendar->close();
         this->close();
@@ -123,16 +162,29 @@ QString TACCountDownDialog::content()
 
 void TACCountDownDialog::showEvent(QShowEvent * event)
 {
-    // 每次展示都从本地配置重新加载，避免“取消后仍保留未保存修改”的体验问题
-    QSettings s;
+    // 每次展示都从本地配置重新加载，避免"取消后仍保留未保存修改"的体验问题
+    QSettings s(countdownSettingsPath(), QSettings::IniFormat);
+    s.sync(); // 确保从磁盘读取最新值
+    
+    // 读取日期
     const QDate d = s.value("countdown/date").toDate();
     m_date = d.isValid() ? d : QDate(2026, 6, 7);
     if (calendar)
         calendar->setSelectedDate(m_date);
     if (calendarButton)
         calendarButton->setText(m_date.toString("yyyy年M月d日"));
-    if (contentLineEdit)
-        contentLineEdit->setText(s.value("countdown/prefix", QString::fromUtf8(u8"距高考还有")).toString());
+    
+    // 读取提示文字 - 确保读取到最新保存的值
+    if (contentLineEdit) {
+        QString savedPrefix = s.value("countdown/prefix").toString();
+        // 如果读取的值为空，才使用默认值
+        if (savedPrefix.isEmpty()) {
+            savedPrefix = QString::fromUtf8(u8"距高考还有");
+        }
+        contentLineEdit->setText(savedPrefix);
+        qDebug() << "TACCountDownDialog::showEvent - 读取提示文字:" << savedPrefix
+                 << ", settings file:" << s.fileName();
+    }
 
     countDownLabel->setText(QString::number(daysLeft()));
     QWidget::showEvent(event);

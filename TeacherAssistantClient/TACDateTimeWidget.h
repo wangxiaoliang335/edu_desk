@@ -17,6 +17,10 @@ public:
 	void setType(int type);
 protected:
 	void initShow() override;
+	void mouseDoubleClickEvent(QMouseEvent* event) override;
+	
+signals:
+	void doubleClicked();
 	
 private:
 	

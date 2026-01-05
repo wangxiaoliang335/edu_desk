@@ -808,7 +808,8 @@ void TACalendarWidget::updateCalendar()
         }
         btn->setStyleSheet(style);
         connect(btn, &QPushButton::clicked, this, [this, dateObj]() {
-            //selectDate(dateObj);
+            // 点击日期即可选中（会触发 selectionChanged，由外部决定是否关闭弹窗）
+            this->setSelectedDate(dateObj);
             });
 
         m_calendarLayout->addWidget(btn, currentRow, currentCol);
@@ -880,6 +881,9 @@ void TACalendarWidget::setSelectedDate(const QDate& date)
     if (date.isValid() && date != m_selectedDate) {
         m_selectedDate = date;
         m_currentDate = date;
+        // 同步顶部年/月显示
+        updateYearButton();
+        updateMonthButton();
         updateCalendar();
         emit selectionChanged();
     }

@@ -401,6 +401,11 @@ void TACMainDialog::Init(QString qPhone, int user_id)
     });
 
     datetimeWidget = new TACDateTimeWidget(this);
+    connect(datetimeWidget, &TACDateTimeWidget::doubleClicked, this, [=]() {
+        if (datetimeDialog) {
+            datetimeDialog->show();
+        }
+    });
     datetimeWidget->show();
 
     logoWidget = new TACLogoWidget(this);
@@ -463,7 +468,7 @@ void TACMainDialog::Init(QString qPhone, int user_id)
     folderWidget->show();
 
     courseSchedule = new TACCourseSchedule(this);
-    courseSchedule->show();
+    // courseSchedule->show(); // 已隐藏，不再显示
 
     QMap<TimeRange, QString> classMap;
     classMap[TimeRange(QTime(8, 0), QTime(8, 45))] = "数学";
