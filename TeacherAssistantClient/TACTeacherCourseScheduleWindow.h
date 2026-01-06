@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "mainwindow.h"
 #include <QMouseEvent>
@@ -9,6 +9,8 @@
 #include <QShowEvent>
 #include <QResizeEvent>
 #include <QEvent>
+#include <QPushButton>
+#include <QToolButton>
 
 // 对外统一的教师课程表窗口名（不使用 Q_OBJECT，因此不需要单独 moc）
 class TACTeacherCourseScheduleWindow : public MainWindow
@@ -16,6 +18,7 @@ class TACTeacherCourseScheduleWindow : public MainWindow
 public:
     explicit TACTeacherCourseScheduleWindow(QWidget* parent = nullptr)
         : MainWindow(parent)
+        , m_closeButton(nullptr)
     {
         setObjectName(QStringLiteral("TACTeacherCourseScheduleWindow"));
         setWindowTitle(QString::fromUtf8(u8"我的课表"));
@@ -81,9 +84,15 @@ public:
             ensureFramelessWindow();
         });
         m_windowFlagsTimer->start();
+        
+        // 延迟创建关闭按钮，确保 toolbar 已经创建
+        QTimer::singleShot(100, this, [this]() {
+            setupCloseButton();
+        });
     }
 
 protected:
+    
     void mousePressEvent(QMouseEvent* event) override
     {
         if (event->button() == Qt::LeftButton) {
@@ -138,6 +147,7 @@ protected:
             if (central) {
                 central->setStyleSheet("background-color: #282A2B; color: #ffffff;");
             }
+            
         });
     }
 
@@ -273,11 +283,40 @@ private:
             }
         }
     }
+    
+    // 设置关闭按钮
+    void setupCloseButton()
+    {
+        if (!mainToolbarWidget) return;
+        
+        // 找到 toolbar 的布局
+        QLayout* toolbarLayout = mainToolbarWidget->layout();
+        if (!toolbarLayout) return;
+        
+        // 创建关闭按钮
+        m_closeButton = new QPushButton(this);
+        // 使用"X"作为关闭按钮文本
+        m_closeButton->setText(QStringLiteral("X"));
+        m_closeButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+        m_closeButton->setStyleSheet(
+            "QPushButton{padding:4px 8px;color:rgba(255,255,255,0.9);background:rgba(255,255,255,0.12);border-radius:4px;font-weight:bold;}"
+            "QPushButton:hover{background:rgba(255,0,0,0.35);}"
+        );
+        m_closeButton->setCursor(Qt::PointingHandCursor);
+        m_closeButton->setToolTip(QString::fromUtf8(u8"关闭窗口"));
+        connect(m_closeButton, &QPushButton::clicked, this, [this]() {
+            hide();  // 隐藏窗口而不是关闭
+        });
+        
+        // 将关闭按钮添加到 toolbar 布局的最后（在 minimalToggleButton 之后）
+        toolbarLayout->addWidget(m_closeButton);
+    }
 
 private:
     QPoint m_dragPosition;  // 窗口拖动位置
     QTimer* m_toolbarCheckTimer;  // 工具栏可见性检查定时器
     QTimer* m_windowFlagsTimer;  // 窗口标志检查定时器
+    QPushButton* m_closeButton;  // 关闭按钮
 };
 
 

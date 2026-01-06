@@ -1,5 +1,6 @@
 ﻿#include <QApplication>
 #include <QGuiApplication>
+#include <QCoreApplication>
 #include <QDialog>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -8,6 +9,7 @@
 #include <QPushButton>
 #include <QFrame>
 #include <QDir>
+#include <QFileInfo>
 #include <QWebSocket>
 #include <QTimer>
 #include <qbuttongroup.h>
@@ -35,6 +37,8 @@
 #include <QRegion>
 #include <QScrollArea>
 #include <QScreen>
+#include <QBuffer>
+#include <QIODevice>
 #include "CustomMessageDialog.h"
 #include "ScheduleDialog.h"  // 包含以使用 TempRoomStorage
 
@@ -578,8 +582,9 @@ private:
                         // 构建临时房间信息
                         TempRoomInfo tempRoomInfo;
                         tempRoomInfo.room_id = tempRoomObj.value(QStringLiteral("room_id")).toString();
-                        tempRoomInfo.whip_url = tempRoomObj.value(QStringLiteral("whip_url")).toString();
-                        tempRoomInfo.whep_url = tempRoomObj.value(QStringLiteral("whep_url")).toString();
+                        // 服务器返回的是 publish_url 和 play_url，映射到 whip_url 和 whep_url
+                        tempRoomInfo.whip_url = tempRoomObj.value(QStringLiteral("publish_url")).toString();  // 推流地址
+                        tempRoomInfo.whep_url = tempRoomObj.value(QStringLiteral("play_url")).toString();     // 拉流地址
                         tempRoomInfo.stream_name = tempRoomObj.value(QStringLiteral("stream_name")).toString();
                         tempRoomInfo.group_id = groupId;
                         tempRoomInfo.owner_id = tempRoomObj.value(QStringLiteral("owner_id")).toString();
@@ -595,6 +600,14 @@ private:
                         qDebug() << "  推流地址:" << tempRoomInfo.whip_url;
                         qDebug() << "  拉流地址:" << tempRoomInfo.whep_url;
                         qDebug() << "  流名称:" << tempRoomInfo.stream_name;
+                    }
+                    
+                    // 处理返回的头像URL（如果存在）
+                    QString faceUrl = rootObj.value(QStringLiteral("face_url")).toString();
+                    if (!faceUrl.isEmpty()) {
+                        qDebug() << "收到群组头像URL:" << faceUrl;
+                        // 头像URL会在群列表刷新时使用，这里只记录日志
+                        // 实际的头像显示会在 FriendGroupDialog 中处理
                     }
                     
                     // 显示成功消息
@@ -817,7 +830,64 @@ private:
         qDebug() << "创建班级群 - 班级唯一ID:" << classUniqueId << "，班级群唯一ID:" << classGroupUniqueId;
 
         // ========== 群组详细信息（可选） ==========
-        wsMessage["face_url"] = "/images/img_group.png";
+        // 读取默认头像文件并转换为base64编码
+        QString avatarBase64 = "";
+        QString avatarFileName = "com_ic_group@3x.png";
+        
+        // 尝试多种路径读取头像文件
+        QStringList possiblePaths;
+        // 1. 资源路径
+        possiblePaths << QString(":/res/img/%1").arg(avatarFileName);
+        // 2. 应用程序目录下的 res/img 目录
+        possiblePaths << QCoreApplication::applicationDirPath() + "/res/img/" + avatarFileName;
+        // 3. 应用程序目录的上级目录下的 res/img 目录（适用于 Debug/Release 子目录）
+        possiblePaths << QCoreApplication::applicationDirPath() + "/../res/img/" + avatarFileName;
+        // 4. 项目根目录下的 res/img 目录（适用于从源码目录运行）
+        QString appDir = QCoreApplication::applicationDirPath();
+        // 如果是在 Debug 或 Release 目录，向上查找两级
+        if (appDir.contains("/Debug/") || appDir.contains("/Release/") || 
+            appDir.contains("\\Debug\\") || appDir.contains("\\Release\\")) {
+            possiblePaths << appDir + "/../../res/img/" + avatarFileName;
+        }
+        // 5. 绝对路径（开发环境，根据实际路径调整）
+        possiblePaths << "E:/Agreement/TeacherAssistantClient/TeacherAssistantClient/res/img/" + avatarFileName;
+        
+        QPixmap defaultAvatar;
+        QString foundPath = "";
+        for (const QString& path : possiblePaths) {
+            QFileInfo fileInfo(path);
+            if (fileInfo.exists() || path.startsWith(":/")) {  // 资源路径或文件存在
+                defaultAvatar = QPixmap(path);
+                if (!defaultAvatar.isNull()) {
+                    foundPath = path;
+                    qDebug() << "成功读取默认头像文件:" << path;
+                    break;
+                }
+            }
+        }
+        
+        if (!defaultAvatar.isNull()) {
+            // 将图片转换为base64编码
+            QByteArray imageData;
+            QBuffer buffer(&imageData);
+            buffer.open(QIODevice::WriteOnly);
+            if (defaultAvatar.save(&buffer, "PNG")) {
+                buffer.close();
+                avatarBase64 = QString::fromLatin1(imageData.toBase64());
+                qDebug() << "头像base64编码成功，长度:" << avatarBase64.length() << "，文件路径:" << foundPath;
+            } else {
+                qWarning() << "保存头像到缓冲区失败，文件路径:" << foundPath;
+            }
+        } else {
+            qWarning() << "无法读取默认头像文件，尝试的所有路径都失败:";
+            for (const QString& path : possiblePaths) {
+                qWarning() << "  -" << path;
+            }
+        }
+        
+        // 将头像base64编码添加到消息中，服务器会上传到阿里云并返回URL
+        wsMessage["avatar_base64"] = avatarBase64;
+        wsMessage["face_url"] = ""; // 服务器会返回实际上传后的头像URL
         wsMessage["introduction"] = QString::fromUtf8(u8"班级群：%1").arg(normalizedName);
         wsMessage["notification"] = QString::fromUtf8(u8"欢迎加入%1").arg(normalizedName);
         wsMessage["max_member_num"] = 2000;
@@ -890,7 +960,10 @@ private:
         groupObj["group_id"] = groupId;
         groupObj["group_name"] = groupName;
         groupObj["group_type"] = kTIMGroup_Public; // 公开群（支持设置管理员）
-        groupObj["face_url"] = ""; // 创建时未设置头像
+        // 注意：face_url 字段由服务器处理
+        // 服务器需要将默认头像文件 com_ic_group@3x.png 上传到OSS，并返回上传后的完整URL
+        // 客户端统一按URL处理，不需要特殊判断
+        groupObj["face_url"] = ""; // 服务器会返回实际的头像URL
         groupObj["info_seq"] = 0;
         groupObj["latest_seq"] = 0;
         groupObj["is_shutup_all"] = false;
@@ -899,7 +972,7 @@ private:
         groupObj["detail_group_id"] = groupId;
         groupObj["detail_group_name"] = groupName;
         groupObj["detail_group_type"] = kTIMGroup_Private; // 私有群（只有私有群可以直接拉用户入群）
-        groupObj["detail_face_url"] = "";
+        groupObj["detail_face_url"] = ""; // 服务器会返回实际的头像URL
         groupObj["create_time"] = QDateTime::currentDateTime().toSecsSinceEpoch(); // 当前时间戳
         groupObj["detail_info_seq"] = 0;
         groupObj["introduction"] = QString("班级群：%1").arg(groupName);

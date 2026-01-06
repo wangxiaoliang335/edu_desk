@@ -32,6 +32,7 @@ class MemberKickDialog; // 前向声明
 #include <QEvent>
 #include <QIcon>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPaintEvent>
 #include <QPixmap>
 #include <QFont>
@@ -254,7 +255,7 @@ private:
     QGridLayout* m_memberGridLayout = nullptr;
 
     void renderNormalGroupMemberGrid(); // 普通群：渲染成员网格
-    QWidget* makeMemberTile(const QString& topText, const QString& bottomText, bool isActionTile);
+    QWidget* makeMemberTile(const QString& topText, const QString& bottomText, bool isActionTile, const QString& faceUrl = QString());
     void updateButtonStates(); // 根据当前用户角色更新按钮状态
     void onExitGroupClicked(); // 退出群聊按钮点击处理
     void onDismissGroupClicked(); // 解散群聊按钮点击处理

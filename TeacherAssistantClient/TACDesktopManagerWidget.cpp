@@ -54,12 +54,19 @@ TACDesktopManagerWidget::TACDesktopManagerWidget(QWidget *parent)
 			m_teacherCourseScheduleWindow->setObjectName(QStringLiteral("TACTeacherCourseScheduleWindow"));
 			m_teacherCourseScheduleWindow->setWindowTitle(QString::fromUtf8(u8"我的课表"));
 		}
-		// 尽量在桌面管理面板右侧弹出
-		const QPoint anchor = this->mapToGlobal(QPoint(this->width() + 10, 0));
-		m_teacherCourseScheduleWindow->move(anchor);
-		m_teacherCourseScheduleWindow->show();
-		m_teacherCourseScheduleWindow->raise();
-		m_teacherCourseScheduleWindow->activateWindow();
+		// 如果窗口已存在且隐藏，就显示它；否则保持显示
+		if (m_teacherCourseScheduleWindow->isHidden()) {
+			// 尽量在桌面管理面板右侧弹出
+			const QPoint anchor = this->mapToGlobal(QPoint(this->width() + 10, 0));
+			m_teacherCourseScheduleWindow->move(anchor);
+			m_teacherCourseScheduleWindow->show();
+			m_teacherCourseScheduleWindow->raise();
+			m_teacherCourseScheduleWindow->activateWindow();
+		} else {
+			// 如果窗口已显示，确保它在最前面
+			m_teacherCourseScheduleWindow->raise();
+			m_teacherCourseScheduleWindow->activateWindow();
+		}
 	});
 
 	QPushButton* tabelButton = new QPushButton("表格对话框", this);

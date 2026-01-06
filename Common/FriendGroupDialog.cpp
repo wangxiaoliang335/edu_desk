@@ -491,23 +491,28 @@ FriendGroupDialog::FriendGroupDialog(QWidget* parent, TaQTWebSocket* pWs)
                                 classid = groupObj["classid"].toString();
                             }
                             
-                            // 处理群组头像（如果有）
+                            // 处理群组头像（服务器会返回URL，包括默认头像的URL）
                             QString avatarPath = "";
                             QString faceUrl = groupObj["face_url"].toString();
                             if (!faceUrl.isEmpty()) {
-                                // 如果face_url包含阿里云地址，下载头像
-                                downloadGroupAvatar(faceUrl, groupId);
-                                
-                                // 从 face_url 中提取文件名
-                                QString fileName = faceUrl.section('/', -1);
-                                QString saveDir = QCoreApplication::applicationDirPath() + "/group_images/" + groupId;
-                                QDir().mkpath(saveDir);
-                                avatarPath = saveDir + "/" + fileName;
+                                // 如果face_url是URL（http://或https://开头），下载头像
+                                if (faceUrl.startsWith("http://") || faceUrl.startsWith("https://")) {
+                                    downloadGroupAvatar(faceUrl, groupId);
+                                    
+                                    // 从 face_url 中提取文件名
+                                    QString fileName = faceUrl.section('/', -1);
+                                    QString saveDir = QCoreApplication::applicationDirPath() + "/group_images/" + groupId;
+                                    QDir().mkpath(saveDir);
+                                    avatarPath = saveDir + "/" + fileName;
+                                } else {
+                                    // 其他情况（如本地文件路径），直接使用
+                                    avatarPath = faceUrl;
+                                }
                             }
                             
-                            // 如果没有头像，使用默认路径或空字符串
+                            // 如果没有头像URL（兜底情况），使用默认头像资源路径
                             if (avatarPath.isEmpty()) {
-                                avatarPath = ""; // 或者设置一个默认头像路径
+                                avatarPath = ":/res/img/com_ic_group@2x.png"; // 默认班级群头像（兜底）
                             }
                             
                             // 读取 is_class_group 字段（默认为1，表示班级群）
@@ -558,23 +563,28 @@ FriendGroupDialog::FriendGroupDialog(QWidget* parent, TaQTWebSocket* pWs)
                                 classid = groupObj["classid"].toString();
                             }
                             
-                            // 处理群组头像（如果有）
+                            // 处理群组头像（服务器会返回URL，包括默认头像的URL）
                             QString avatarPath = "";
                             QString faceUrl = groupObj["face_url"].toString();
                             if (!faceUrl.isEmpty()) {
-                                // 如果face_url包含阿里云地址，下载头像
-                                downloadGroupAvatar(faceUrl, groupId);
-                                
-                                // 从 face_url 中提取文件名
-                                QString fileName = faceUrl.section('/', -1);
-                                QString saveDir = QCoreApplication::applicationDirPath() + "/group_images/" + groupId;
-                                QDir().mkpath(saveDir);
-                                avatarPath = saveDir + "/" + fileName;
+                                // 如果face_url是URL（http://或https://开头），下载头像
+                                if (faceUrl.startsWith("http://") || faceUrl.startsWith("https://")) {
+                                    downloadGroupAvatar(faceUrl, groupId);
+                                    
+                                    // 从 face_url 中提取文件名
+                                    QString fileName = faceUrl.section('/', -1);
+                                    QString saveDir = QCoreApplication::applicationDirPath() + "/group_images/" + groupId;
+                                    QDir().mkpath(saveDir);
+                                    avatarPath = saveDir + "/" + fileName;
+                                } else {
+                                    // 其他情况（如本地文件路径），直接使用
+                                    avatarPath = faceUrl;
+                                }
                             }
                             
-                            // 如果没有头像，使用默认路径或空字符串
+                            // 如果没有头像URL（兜底情况），使用默认头像资源路径
                             if (avatarPath.isEmpty()) {
-                                avatarPath = ""; // 或者设置一个默认头像路径
+                                avatarPath = ":/res/img/com_ic_group@2x.png"; // 默认班级群头像（兜底）
                             }
                             
                             // 读取 is_class_group 字段（默认为1，表示班级群）
@@ -1096,11 +1106,34 @@ void FriendGroupDialog::connectGroupLeftSignal(ScheduleDialog* scheduleDlg, cons
     // 连接群聊退出信号，当用户退出群聊时刷新群列表
     connect(scheduleDlg, &ScheduleDialog::groupLeft, this, [this](const QString& leftGroupId) {
         qDebug() << "收到群聊退出信号，刷新群列表，群组ID:" << leftGroupId;
+        
+        // 判断是否是班级群（班级群ID格式：classid + "01"）
+        bool isClassGroup = false;
+        QString classId = "";
+        if (leftGroupId.length() >= 2 && leftGroupId.endsWith("01")) {
+            // 可能是班级群，提取班级ID
+            classId = leftGroupId.left(leftGroupId.length() - 2);
+            // 检查是否在已创建班级群的集合中
+            if (m_setClassId.contains(classId)) {
+                isClassGroup = true;
+                // 从集合中移除该班级ID
+                m_setClassId.remove(classId);
+                qDebug() << "检测到班级群解散，班级ID:" << classId << "，已从集合中移除";
+            }
+        }
+        
         // 从map中移除已关闭的群聊窗口
         if (m_scheduleDlg.contains(leftGroupId)) {
             m_scheduleDlg[leftGroupId]->deleteLater();
             m_scheduleDlg.remove(leftGroupId);
         }
+        
+        // 如果是班级群，刷新 ClassTeacherDialog 的班级列表
+        if (isClassGroup && addGroupWidget) {
+            qDebug() << "刷新 ClassTeacherDialog 的班级列表，班级ID:" << classId;
+            addGroupWidget->InitData(m_setClassId);
+        }
+        
         // 刷新群列表
         this->InitData();
     }, Qt::UniqueConnection); // 使用 UniqueConnection 避免重复连接
@@ -1283,18 +1316,29 @@ void FriendGroupDialog::GetGroupJoinedList() { // 已加入群列表
             QString baseFaceUrl = group[kTIMGroupBaseInfoFaceUrl].toString();
             QString faceUrl = !detailFaceUrl.isEmpty() ? detailFaceUrl : baseFaceUrl;
             
-            // 检查头像文件是否已存在
+            // 检查头像文件是否已存在（服务器会返回URL，包括默认头像的URL）
             QString avatarPath;
             if (!faceUrl.isEmpty()) {
-                QString fileName = faceUrl.section('/', -1);
-                QString saveDir = QCoreApplication::applicationDirPath() + "/group_images/" + groupid;
-                QString localPath = saveDir + "/" + fileName;
-                if (QFile::exists(localPath)) {
-                    avatarPath = localPath;
+                // 如果是URL（http://或https://开头），下载头像
+                if (faceUrl.startsWith("http://") || faceUrl.startsWith("https://")) {
+                    QString fileName = faceUrl.section('/', -1);
+                    QString saveDir = QCoreApplication::applicationDirPath() + "/group_images/" + groupid;
+                    QString localPath = saveDir + "/" + fileName;
+                    if (QFile::exists(localPath)) {
+                        avatarPath = localPath;
+                    } else {
+                        // 如果文件不存在，启动下载
+                        ths->downloadGroupAvatar(faceUrl, groupid);
+                    }
                 } else {
-                    // 如果文件不存在，启动下载
-                    ths->downloadGroupAvatar(faceUrl, groupid);
+                    // 其他情况（如本地文件路径），直接使用
+                    avatarPath = faceUrl;
                 }
+            }
+            
+            // 如果没有头像URL（兜底情况），使用默认头像资源路径
+            if (avatarPath.isEmpty()) {
+                avatarPath = ":/res/img/com_ic_group@2x.png"; // 默认班级群头像（兜底）
             }
             
             // 直接刷新到界面

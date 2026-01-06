@@ -917,7 +917,8 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, bool iGroupO
             // 保存头像标签的指针，以便后续更新头像
             m_groupAvatarLabel = lblAvatar;
             
-            QLabel* lblInfo = new QLabel(groupName + "\n" + groupNumberId, this);
+            // 如果有头像就显示头像，下面显示班级名字
+            QLabel* lblInfo = new QLabel(groupName, this);  // 只显示班级名字
             QPushButton* btnMore = new QPushButton("...", this);
             btnMore->setFixedSize(30, 30);
             topLayout->addWidget(lblAvatar);
@@ -940,20 +941,20 @@ void QGroupInfo::initData(QString groupName, QString groupNumberId, bool iGroupO
         QHBoxLayout* pHBoxLayut = new QHBoxLayout;
         pHBoxLayut->setSpacing(12);  // 增加按钮之间的间隔
         
-        // 班级课程表按钮
+        // 班级课程表按钮（比窗口背景深一些）
         QPushButton* btnSchedule = new QPushButton("班级课程表", this);
         btnSchedule->setMinimumHeight(40);  // 增加按钮高度
-        btnSchedule->setStyleSheet("background-color:green; color:white; font-weight:bold; font-size:14px; padding:8px 16px;");
+        btnSchedule->setStyleSheet("background-color:#4a4a4a; color:white; font-weight:bold; font-size:14px; padding:8px 16px;");
         
-        // 值日表按钮
+        // 值日表按钮（比窗口背景深一些）
         QPushButton* btnDuty = new QPushButton("值日表", this);
         btnDuty->setMinimumHeight(40);  // 增加按钮高度
-        btnDuty->setStyleSheet("background-color:green; color:white; font-weight:bold; font-size:14px; padding:8px 16px;");
+        btnDuty->setStyleSheet("background-color:#4a4a4a; color:white; font-weight:bold; font-size:14px; padding:8px 16px;");
         
-        // 壁纸按钮
+        // 壁纸按钮（比窗口背景深一些）
         QPushButton* btnWallpaper = new QPushButton("壁纸", this);
         btnWallpaper->setMinimumHeight(40);  // 增加按钮高度
-        btnWallpaper->setStyleSheet("background-color:red; color:white; font-weight:bold; font-size:14px; padding:8px 16px;");
+        btnWallpaper->setStyleSheet("background-color:#4a4a4a; color:white; font-weight:bold; font-size:14px; padding:8px 16px;");
 
         pHBoxLayut->addWidget(btnSchedule);
         pHBoxLayut->addWidget(btnDuty);
@@ -1570,24 +1571,38 @@ void QGroupInfo::setGroupFaceUrl(const QString& faceUrl)
 {
     m_groupFaceUrl = faceUrl;
     
-    if (m_groupAvatarLabel && !faceUrl.isEmpty()) {
-        // 使用网络管理器下载头像
-        QNetworkAccessManager* manager = new QNetworkAccessManager(this);
-        QUrl imageUrl(faceUrl);
-        QNetworkRequest request(imageUrl);
-        QNetworkReply* reply = manager->get(request);
-        
-        connect(reply, &QNetworkReply::finished, [this, reply, manager]() {
-            if (reply->error() == QNetworkReply::NoError) {
-                QPixmap pixmap;
-                pixmap.loadFromData(reply->readAll());
-                if (!pixmap.isNull()) {
-                    m_groupAvatarLabel->setPixmap(pixmap.scaled(50, 50, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-                }
+    if (m_groupAvatarLabel) {
+        if (faceUrl.isEmpty()) {
+            // 如果没有头像URL（兜底情况），使用默认头像资源路径
+            QPixmap defaultPixmap(":/res/img/com_ic_group@2x.png");
+            if (!defaultPixmap.isNull()) {
+                m_groupAvatarLabel->setPixmap(defaultPixmap.scaled(50, 50, Qt::KeepAspectRatio, Qt::SmoothTransformation));
             }
-            reply->deleteLater();
-            manager->deleteLater();
-        });
+        } else if (faceUrl.startsWith("http://") || faceUrl.startsWith("https://")) {
+            // 如果是URL（服务器会返回URL，包括默认头像的URL），使用网络管理器下载头像
+            QNetworkAccessManager* manager = new QNetworkAccessManager(this);
+            QUrl imageUrl(faceUrl);
+            QNetworkRequest request(imageUrl);
+            QNetworkReply* reply = manager->get(request);
+            
+            connect(reply, &QNetworkReply::finished, [this, reply, manager]() {
+                if (reply->error() == QNetworkReply::NoError) {
+                    QPixmap pixmap;
+                    pixmap.loadFromData(reply->readAll());
+                    if (!pixmap.isNull()) {
+                        m_groupAvatarLabel->setPixmap(pixmap.scaled(50, 50, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                    }
+                }
+                reply->deleteLater();
+                manager->deleteLater();
+            });
+        } else {
+            // 其他情况（如本地文件路径），直接加载
+            QPixmap pixmap(faceUrl);
+            if (!pixmap.isNull()) {
+                m_groupAvatarLabel->setPixmap(pixmap.scaled(50, 50, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            }
+        }
     }
 }
 
@@ -1996,7 +2011,7 @@ void QGroupInfo::InitGroupMember(QString group_id, QVector<GroupMemberInfo> grou
     m_lastRenderedGroupMemberInfo = groupMemberInfo;
 }
 
-QWidget* QGroupInfo::makeMemberTile(const QString& topText, const QString& bottomText, bool isActionTile)
+QWidget* QGroupInfo::makeMemberTile(const QString& topText, const QString& bottomText, bool isActionTile, const QString& faceUrl)
 {
     QWidget* tile = new QWidget(m_memberGridContainer ? m_memberGridContainer : this);
     QVBoxLayout* v = new QVBoxLayout(tile);
@@ -2012,6 +2027,37 @@ QWidget* QGroupInfo::makeMemberTile(const QString& topText, const QString& botto
         btn->setStyleSheet("background-color: rgba(255,255,255,0.06); border: 1px dashed rgba(255,255,255,0.20); border-radius:25px; color:white; font-weight:800;");
     } else {
         btn->setStyleSheet("background-color: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.10); border-radius:25px; color:white; font-weight:800;");
+    }
+
+    // 如果有头像URL，下载并显示头像
+    if (!faceUrl.isEmpty() && !isActionTile) {
+        QNetworkAccessManager* manager = new QNetworkAccessManager(tile);
+        QUrl imageUrl(faceUrl);
+        QNetworkRequest request(imageUrl);
+        QNetworkReply* reply = manager->get(request);
+        
+        connect(reply, &QNetworkReply::finished, [btn, reply, manager]() {
+            if (reply->error() == QNetworkReply::NoError) {
+                QPixmap pixmap;
+                pixmap.loadFromData(reply->readAll());
+                if (!pixmap.isNull()) {
+                    // 设置为圆形头像
+                    QPixmap rounded = QPixmap(50, 50);
+                    rounded.fill(Qt::transparent);
+                    QPainter painter(&rounded);
+                    painter.setRenderHint(QPainter::Antialiasing);
+                    QPainterPath path;
+                    path.addEllipse(0, 0, 50, 50);
+                    painter.setClipPath(path);
+                    painter.drawPixmap(0, 0, pixmap.scaled(50, 50, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                    btn->setIcon(QIcon(rounded));
+                    btn->setIconSize(QSize(50, 50));
+                    btn->setText("");  // 清除文本，只显示头像
+                }
+            }
+            reply->deleteLater();
+            manager->deleteLater();
+        });
     }
 
     QLabel* lbl = new QLabel(bottomText, tile);
@@ -2051,9 +2097,16 @@ void QGroupInfo::renderNormalGroupMemberGrid()
     const int columns = 6; // 视觉上接近微信：一行 6 个（含 + / -）
     int idx = 0;
 
-    // 成员 tile
+    // 成员 tile（显示头像，下面显示"名字+老师"）
     for (const auto& m : m_groupMemberInfo) {
-        QWidget* tile = makeMemberTile(firstChar(m.member_name), m.member_name, false);
+        // 底部文本：名字+老师
+        QString bottomText = m.member_name;
+        if (!m.member_role.isEmpty() && m.member_role != "成员") {
+            bottomText += "+" + m.member_role;
+        } else {
+            bottomText += "+老师";
+        }
+        QWidget* tile = makeMemberTile(firstChar(m.member_name), bottomText, false, m.face_url);
         // 让按钮点击可以显示成员信息（后续可扩展）
         if (FriendButton* btn = tile->findChild<FriendButton*>()) {
             btn->setProperty("member_id", m.member_id);
