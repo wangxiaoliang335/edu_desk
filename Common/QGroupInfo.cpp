@@ -3587,7 +3587,9 @@ CustomMessageBox::CustomMessageBox(QWidget* parent)
 {
     setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog | Qt::WindowStaysOnTopHint);
     setAttribute(Qt::WA_TranslucentBackground);
-    setFixedSize(400, 150);
+    setMinimumSize(400, 150);
+    setMaximumSize(400, 600);  // 设置最大高度，避免窗口过大
+    resize(400, 150);
     setupUI();
 }
 
@@ -3605,6 +3607,11 @@ void CustomMessageBox::setTitle(const QString& title)
 
 void CustomMessageBox::setText(const QString& text)
 {
+    // 只在文本真正改变时调整窗口大小
+    if (m_text == text && m_textLabel && m_textLabel->text() == text) {
+        return;  // 文本未改变，不需要调整
+    }
+    
     m_text = text;
     if (m_textLabel) {
         m_textLabel->setText(text);
@@ -3612,8 +3619,13 @@ void CustomMessageBox::setText(const QString& text)
         QFontMetrics fm(m_textLabel->font());
         QRect textRect = fm.boundingRect(QRect(0, 0, 360, 0), Qt::TextWordWrap, text);
         int textHeight = textRect.height();
-        int minHeight = 120 + qMax(0, textHeight - 30);
-        setFixedHeight(minHeight);
+        int newHeight = 120 + qMax(0, textHeight - 30);
+        // 只在高度真正需要改变时才调整，避免重复调整导致窗口闪烁
+        if (height() != newHeight) {
+            setMinimumHeight(newHeight);
+            setMaximumHeight(newHeight);
+            resize(width(), newHeight);
+        }
     }
 }
 
@@ -3851,7 +3863,10 @@ void CustomMessageBox::mousePressEvent(QMouseEvent* event)
 void CustomMessageBox::mouseMoveEvent(QMouseEvent* event)
 {
     if (m_dragging && (event->buttons() & Qt::LeftButton)) {
+        // 拖动时只移动位置，不改变窗口大小，避免窗口大小变化
         move(event->globalPos() - m_dragStartPos);
+        event->accept();
+        return;
     }
     QDialog::mouseMoveEvent(event);
 }
