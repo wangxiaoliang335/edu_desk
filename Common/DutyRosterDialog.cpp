@@ -1,4 +1,4 @@
-#include "DutyRosterDialog.h"
+﻿#include "DutyRosterDialog.h"
 #include <QFile>
 #include <QTextStream>
 #include <QDate>

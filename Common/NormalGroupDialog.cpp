@@ -1,4 +1,4 @@
-#include "NormalGroupDialog.h"
+﻿#include "NormalGroupDialog.h"
 #include "QGroupInfo.h"
 #include <QPainter>
 #include <QPainterPath>

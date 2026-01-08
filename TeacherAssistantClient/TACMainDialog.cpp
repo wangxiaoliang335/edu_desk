@@ -283,8 +283,8 @@ void TACMainDialog::Init(QString qPhone, int user_id)
         }
         else if (type == TACNavigationBarWidgetType::CLASS_GROUP)
         {
-            if (friendGrpDlg)
-                friendGrpDlg->show();
+            //if (friendGrpDlg)
+            //    friendGrpDlg->show();
         }
         else if (type == TACNavigationBarWidgetType::USER)
         {

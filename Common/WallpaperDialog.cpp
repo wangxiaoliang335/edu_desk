@@ -1,4 +1,4 @@
-#include "WallpaperDialog.h"
+﻿#include "WallpaperDialog.h"
 #include <QDebug>
 #include <QUrlQuery>
 #include <QDateTime>

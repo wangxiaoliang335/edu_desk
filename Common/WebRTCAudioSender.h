@@ -1,38 +1,5 @@
 #pragma once
 
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <winsock2.h>
-#include <ws2tcpip.h>
-
-// WebRTC 头文件优先，避免 Qt 宏干扰
-#ifdef slots
-#pragma push_macro("slots")
-#undef slots
-#define WEBRTC_AUDIO_SENDER_RESTORE_SLOTS 1
-#endif
-#ifdef signals
-#pragma push_macro("signals")
-#undef signals
-#define WEBRTC_AUDIO_SENDER_RESTORE_SIGNALS 1
-#endif
-#include "api/peer_connection_interface.h"
-#include "api/scoped_refptr.h"
-#ifdef WEBRTC_AUDIO_SENDER_RESTORE_SLOTS
-#pragma pop_macro("slots")
-#undef WEBRTC_AUDIO_SENDER_RESTORE_SLOTS
-#endif
-#ifdef WEBRTC_AUDIO_SENDER_RESTORE_SIGNALS
-#pragma pop_macro("signals")
-#undef WEBRTC_AUDIO_SENDER_RESTORE_SIGNALS
-#endif
-
-class OfferObserver;
-
 // Qt 头文件
 #include <QObject>
 #include <QString>
@@ -48,28 +15,15 @@ class OfferObserver;
 #include <memory>
 #include <vector>
 
-namespace rtc {
-template <class T>
-class scoped_refptr;
-class Thread;
-}  // namespace rtc
-
-namespace webrtc {
-class PeerConnectionFactoryInterface;
-class PeerConnectionInterface;
-class AudioTrackInterface;
-class AudioSourceInterface;
-class DataChannelInterface;
-class IceCandidateInterface;
-class RTCError;
-}  // namespace webrtc
-
 /**
  * WebRTC 音频发送器
  * 用于通过 WebRTC 协议将音频数据推送到 SRS 服务器
+ * 
+ * 注意：此功能已禁用。现在语音功能直接使用浏览器实现，不再需要本地 WebRTC 接口。
+ * 所有 WebRTC 相关方法已禁用，直接返回 false 或不执行任何操作。
+ * 所有 WebRTC 相关的头文件、类继承和成员变量已移除。
  */
-class WebRTCAudioSender : public QObject, 
-                          public webrtc::PeerConnectionObserver
+class WebRTCAudioSender : public QObject
 {
     Q_OBJECT
 
@@ -93,13 +47,7 @@ public:
      */
     bool isConnected() const { return m_isConnected; }
 
-    // PeerConnectionObserver 接口实现
-    void OnSignalingChange(webrtc::PeerConnectionInterface::SignalingState new_state) override;
-    void OnIceConnectionChange(webrtc::PeerConnectionInterface::IceConnectionState new_state) override;
-    void OnIceGatheringChange(webrtc::PeerConnectionInterface::IceGatheringState new_state) override;
-    void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) override;
-    void OnDataChannel(rtc::scoped_refptr<webrtc::DataChannelInterface> data_channel) override;
-    void OnRenegotiationNeeded() override;
+    // PeerConnectionObserver 接口实现已移除（WebRTC 功能已禁用）
 
 signals:
     /**
@@ -124,15 +72,13 @@ private slots:
     void onSrsApiReply(QNetworkReply* reply);
 
 private:
-    friend class OfferObserver;
-
     /**
-     * 初始化 WebRTC 连接
+     * 初始化 WebRTC 连接（已禁用）
      */
     bool initializeWebRTC();
 
     /**
-     * 清理 WebRTC 资源
+     * 清理 WebRTC 资源（已禁用）
      */
     void cleanupWebRTC();
 
@@ -188,24 +134,14 @@ private:
     int m_srsPort = 1985;
     QString m_streamName;
     
-    // 音频输入
+    // 音频输入（已禁用，保留用于兼容性）
     QAudioInput* m_audioInput = nullptr;
     QIODevice* m_audioInputDevice = nullptr;
     
-    // WebRTC 相关
-    rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> m_peerConnectionFactory;
-    rtc::scoped_refptr<webrtc::PeerConnectionInterface> m_peerConnection;
-    rtc::scoped_refptr<webrtc::AudioTrackInterface> m_audioTrack;
-    rtc::scoped_refptr<webrtc::AudioSourceInterface> m_audioSource;
+    // WebRTC 相关成员变量已移除（功能已禁用）
     
-    // WebRTC 线程
-    std::unique_ptr<rtc::Thread> m_networkThread;
-    std::unique_ptr<rtc::Thread> m_workerThread;
-    std::unique_ptr<rtc::Thread> m_signalingThread;
-    
-    // 网络管理器（用于 SRS API 调用）
+    // 网络管理器（用于 SRS API 调用，已禁用）
     QNetworkAccessManager* m_networkManager = nullptr;
 
-    void onCreateOfferSuccess(webrtc::SessionDescriptionInterface* desc);
-    void onCreateOfferFailure(const webrtc::RTCError& error);
+    // WebRTC 相关回调方法已移除（功能已禁用）
 };
