@@ -1,0 +1,103 @@
+import { useState } from "react";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import Login from "./components/Login";
+import Dashboard from "./components/Dashboard";
+import ClassChatWindow from "./components/ClassChatWindow";
+import ClassScheduleWindow from "./components/ClassScheduleWindow";
+
+import { invoke } from "@tauri-apps/api/core";
+
+// Main App Component handling Login/Dashboard flow
+function MainApp() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userInfo, setUserInfo] = useState<any>(null);
+
+  const handleLoginSuccess = async (data: any) => {
+    console.log('Login Success Data:', JSON.stringify(data));
+    // Save token for API calls
+    const token = data.token || data.data?.token || '';
+    if (token) localStorage.setItem('token', token);
+
+    try {
+      await invoke('resize_window');
+
+      // Fetch full user info
+      let phone = data.phone || data.data?.phone;
+      let userId = data.id || data.data?.id;
+
+      if (!phone && !userId && data.userinfo && Array.isArray(data.userinfo) && data.userinfo.length > 0) {
+        phone = data.userinfo[0].phone;
+        userId = data.userinfo[0].id;
+      }
+
+      if (phone || userId) {
+        try {
+          const infoResStr = await invoke<string>('get_user_info', {
+            phone: phone,
+            userId: userId ? String(userId) : null,
+            token: token
+          });
+          const infoRes = JSON.parse(infoResStr);
+          if (infoRes.data?.code === 200 && infoRes.data?.userinfo?.length > 0) {
+            const fullInfo = infoRes.data.userinfo[0];
+            console.log('Full User Info Fetched:', fullInfo);
+            setUserInfo(fullInfo);
+            setIsLoggedIn(true);
+
+            if (fullInfo.teacher_unique_id) localStorage.setItem('teacher_unique_id', fullInfo.teacher_unique_id);
+            if (fullInfo.id_number) localStorage.setItem('id_number', fullInfo.id_number);
+
+            // Fetch UserSig for TIM
+            if (fullInfo.teacher_unique_id) {
+              try {
+                const sig = await invoke<string>('get_user_sig', {
+                  userId: fullInfo.teacher_unique_id
+                });
+                if (sig) {
+                  console.log('UserSig fetched and saved');
+                  localStorage.setItem('userSig', sig);
+                }
+              } catch (e) {
+                console.error('Failed to fetch UserSig:', e);
+              }
+            }
+            return;
+          }
+        } catch (err) {
+          console.error('Failed to fetch user info:', err);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to resize window or fetch info:', e);
+    }
+
+    setUserInfo(data);
+    setIsLoggedIn(true);
+  };
+
+  return (
+    <div className="h-screen w-screen overflow-hidden text-white selection:bg-blue-500 selection:text-white">
+      {!isLoggedIn ? (
+        <Login onLoginSuccess={handleLoginSuccess} />
+      ) : (
+        <Dashboard userInfo={userInfo} />
+      )}
+    </div>
+  );
+}
+
+// Root App Component dealing with Routing
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<MainApp />} />
+        <Route path="/class/schedule/:groupclassId" element={<ClassScheduleWindow />} />
+        <Route path="/class/chat/:groupclassId" element={<ClassChatWindow />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+export default App;
+
