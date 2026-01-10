@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Bell, Send, Clock, Trash2 } from 'lucide-react';
+import { useDraggable } from '../../hooks/useDraggable';
 import { sendMessage, addMessageListener } from '../../utils/tim';
 
 interface Props {
@@ -17,6 +18,7 @@ interface Notice {
 }
 
 const NotificationModal = ({ isOpen, onClose, groupId }: Props) => {
+    const { style, handleMouseDown } = useDraggable();
     const [notices, setNotices] = useState<Notice[]>([
         {
             id: "1",
@@ -104,10 +106,13 @@ const NotificationModal = ({ isOpen, onClose, groupId }: Props) => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
             <div
                 className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
-                style={{ height: '650px' }}
+                style={{ ...style, height: '650px' }}
             >
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-gray-50/50">
+                <div
+                    onMouseDown={handleMouseDown}
+                    className="flex items-center justify-between p-4 border-b border-gray-100 bg-gray-50/50 cursor-move select-none"
+                >
                     <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
                         <span className="bg-red-100 text-red-600 p-1 rounded-md"><Bell size={18} /></span>
                         班级通知

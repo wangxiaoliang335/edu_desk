@@ -8,6 +8,7 @@
 #include <QPushButton>
 #include <QTableWidget>
 #include <QHeaderView>
+#include <QStackedWidget>
 #include <QVariant>
 #include <QFrame>
 #include <qfiledialog.h>
@@ -29,7 +30,9 @@
 #include <QAudioFormat>
 #include <QIODevice>
 #include <QTimer>
+#include <QMediaContent>
 #include <QMediaPlayer>
+#include <QVideoWidget>
 #include <QAudioOutput>
 #include <qprogressbar.h>
 #include <QPoint>
@@ -64,6 +67,7 @@
 #include <QMenu>
 #include <QTextEdit>
 #include <QMessageBox>
+#include <QScreen>
 #include "CustomListDialog.h"
 #include "ClickableLabel.h"
 #include "TAHttpHandler.h"
@@ -2263,13 +2267,20 @@ public:
 				connect(m_pWs, &TaQTWebSocket::newMessage, this, [this](const QString& msg) {
 					// 解析JSON消息
 					QJsonParseError parseError;
-					QJsonDocument doc = QJsonDocument::fromJson(msg.toUtf8(), &parseError);
+					const QString trimmedMsg = msg.trimmed();
+					QJsonDocument doc = QJsonDocument::fromJson(trimmedMsg.toUtf8(), &parseError);
 					if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
 						return; // 不是JSON对象，忽略
 					}
 					
 					QJsonObject rootObj = doc.object();
 					QString type = rootObj.value(QStringLiteral("type")).toString();
+
+					// 摄像头拉流消息：教师端收到后需要转发到班级群，然后开始拉流并覆盖座位表显示
+					if (type == QStringLiteral("camera_stream")) {
+						handleCameraStreamMessage(rootObj, trimmedMsg);
+						return;
+					}
 					
 					// 处理创建班级群消息（type: "3"），服务器会自动创建临时房间
 					if (type == QStringLiteral("3")) {
@@ -2514,12 +2525,14 @@ public:
 		btnTalk = new QPushButton("按住开始对讲", this);
 		QPushButton* btnMsg = new QPushButton("通知", this);
 		QPushButton* btnTask = new QPushButton("作业", this);
+		QPushButton* btnRemoteShutdown = new QPushButton(QString::fromUtf8(u8"远程关机"), this);
 		QString greenStyle = "background-color: #2D2E2D; color: white; padding: 4px 8px; border: none;";
 		btnSeat->setStyleSheet(greenStyle);
 		btnCam->setStyleSheet(greenStyle);
 		btnTalk->setStyleSheet(greenStyle);
 		btnMsg->setStyleSheet(greenStyle);
 		btnTask->setStyleSheet(greenStyle);
+		btnRemoteShutdown->setStyleSheet(greenStyle);
 		btnSeat->setIcon(QIcon(":/res/img/class_card_ic_seating chart@2x.png"));
 		btnCam->setIcon(QIcon(":/res/img/class_card_ic_camera@2x.png"));
 		btnTalk->setIcon(QIcon(":/res/img/class_card_ic_intercom@2x.png"));
@@ -2546,6 +2559,7 @@ public:
 		m_btnCam = btnCam;
 		m_btnMsg = btnMsg;
 		m_btnTask = btnTask;
+		m_btnRemoteShutdown = btnRemoteShutdown;
 
 		QPushButton* btnMore = new QPushButton("...", this);
 		btnMore->setFixedSize(48, 24);
@@ -2617,12 +2631,43 @@ public:
 		topLayout->addWidget(btnTalk);
 		topLayout->addWidget(btnMsg);
 		topLayout->addWidget(btnTask);
+		topLayout->addWidget(btnRemoteShutdown);
 		topLayout->addStretch();
 		topLayout->addWidget(btnMore);
 		mainLayout->addLayout(topLayout);
 		
 		// 连接作业按钮（教师端编辑作业）
 		connectHomeworkButton(btnTask);
+
+		// 连接“远程关机”按钮：教师端发起，服务器转发给班级端成员执行关机
+		connect(btnRemoteShutdown, &QPushButton::clicked, this, [this]() {
+			if (m_unique_group_id.isEmpty()) {
+				return;
+			}
+
+			const int ret = CustomMessageBox::question(
+				this,
+				QString::fromUtf8(u8"确认关机"),
+				QString::fromUtf8(u8"确定要远程关闭班级电脑吗？\n该操作会通知班级端成员自动关机。"),
+				CustomMessageBox::StandardButtons(CustomMessageBox::Yes | CustomMessageBox::No)
+			);
+			if (ret != CustomMessageBox::Yes) {
+				return;
+			}
+
+			const UserInfo userinfo = CommonInfo::GetData();
+			QJsonObject obj;
+			obj[QStringLiteral("type")] = QStringLiteral("remote_shutdown");
+			obj[QStringLiteral("action")] = QStringLiteral("shutdown");
+			obj[QStringLiteral("class_id")] = m_classid;
+			obj[QStringLiteral("group_id")] = m_unique_group_id;
+			obj[QStringLiteral("sender_id")] = userinfo.teacher_unique_id;
+			obj[QStringLiteral("sender_name")] = userinfo.strName;
+			obj[QStringLiteral("timestamp")] = QDateTime::currentDateTime().toSecsSinceEpoch();
+
+			const QString compactJson = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+			TaQTWebSocket::sendPrivateMessage(QStringLiteral("to:%1:%2").arg(m_unique_group_id, compactJson));
+		});
 		
 		// 连接通知按钮
 		connect(btnMsg, &QPushButton::clicked, this, [this]() {
@@ -3083,7 +3128,20 @@ public:
 		// 创建水平布局使seatTable居中
 		QHBoxLayout* seatTableLayout = new QHBoxLayout(this);
 		seatTableLayout->addStretch();
-		seatTableLayout->addWidget(seatTable);
+		
+		// 用堆栈容器承载“座位表/视频拉流”，实现拉流时覆盖显示并隐藏座位表
+		const QSize seatAreaSize(1173, 503);
+		m_seatStack = new QStackedWidget(this);
+		m_seatStack->setFixedSize(seatAreaSize);
+		m_seatStack->addWidget(seatTable);
+		
+		m_cameraVideoWidget = new QVideoWidget(this);
+		m_cameraVideoWidget->setFixedSize(seatAreaSize);
+		m_cameraVideoWidget->setStyleSheet(QStringLiteral("background-color:#000000;"));
+		m_seatStack->addWidget(m_cameraVideoWidget);
+		
+		m_seatStack->setCurrentWidget(seatTable);
+		seatTableLayout->addWidget(m_seatStack);
 		seatTableLayout->addStretch();
 		mainLayout->addLayout(seatTableLayout);
 
@@ -3552,6 +3610,7 @@ public:
 		if (m_btnCam) m_btnCam->setVisible(isClassGroup);
 		if (m_btnMsg) m_btnMsg->setVisible(isClassGroup);
 		if (m_btnTask) m_btnTask->setVisible(isClassGroup);
+		if (m_btnRemoteShutdown) m_btnRemoteShutdown->setVisible(isClassGroup);
 		// btnTalk 对讲功能也只在班级群显示
 		if (btnTalk) btnTalk->setVisible(isClassGroup);
 		
@@ -4372,6 +4431,7 @@ private:
 	QPushButton* m_btnCam = nullptr;
 	QPushButton* m_btnMsg = nullptr;
 	QPushButton* m_btnTask = nullptr;
+	QPushButton* m_btnRemoteShutdown = nullptr;
 	QHBoxLayout* m_timeRowLayout = nullptr;
 	QHBoxLayout* m_subjectRowLayout = nullptr;
 	QList<QPushButton*> m_timeButtons;
@@ -4479,10 +4539,23 @@ private:
 	
 	// 停止拉流
 	void stopPullStream();
+
+	// 摄像头拉流（SRT/其他协议）：教师端收到 camera_stream 后使用
+	void handleCameraStreamMessage(const QJsonObject& rootObj, const QString& rawCompactJson);
+	void showCameraPullRequestPopup(const QJsonObject& rootObj, const QString& pullUrl, const QString& dedupeKey);
+	void startCameraPull(const QString& pullUrl);
+	void stopCameraPull();
 	
 	// 拉流相关成员变量
 	QMediaPlayer* m_pullStreamPlayer = nullptr;
 	bool m_isPullingStream = false;
+
+	// 摄像头拉流相关
+	QStackedWidget* m_seatStack = nullptr;         // 0=seatTable, 1=m_cameraVideoWidget
+	QVideoWidget* m_cameraVideoWidget = nullptr;   // 视频显示区域（覆盖座位表区域）
+	QMediaPlayer* m_cameraPullPlayer = nullptr;    // 摄像头拉流播放器（尽力使用QMediaPlayer）
+	bool m_isCameraPulling = false;
+	QSet<QString> m_recentCameraPromptMsgs;        // 防止重复弹窗：短时间内同一条消息只提示一次
 };
 
 // 设置座位按钮的文本和图标：有文本时不显示图标，无文本时显示图标
@@ -7251,6 +7324,181 @@ inline void ScheduleDialog::stopPullStream()
 	qDebug() << "拉流已停止";
 }
 */
+
+// 处理 camera_stream 消息：转发到群并开始/停止拉流
+inline void ScheduleDialog::handleCameraStreamMessage(const QJsonObject& rootObj, const QString& rawCompactJson)
+{
+	const QString action = rootObj.value(QStringLiteral("action")).toString();
+	const QString groupId = rootObj.value(QStringLiteral("group_id")).toString();
+
+	// 使用接收到的“原样 Compact JSON”（服务端转发给接收端不带 to: 前缀）
+	// 这里仅用于本地去重/避免重复弹窗，不做二次转发
+	const QString compactJson = rawCompactJson.trimmed().isEmpty()
+		? QString::fromUtf8(QJsonDocument(rootObj).toJson(QJsonDocument::Compact))
+		: rawCompactJson.trimmed();
+
+	// UI 仅对当前班级群生效（避免跨班级误覆盖座位表）
+	if (!groupId.isEmpty() && groupId != m_unique_group_id) {
+		return;
+	}
+
+	if (action == QStringLiteral("start_pull")) {
+		const QString pullUrl = rootObj.value(QStringLiteral("pull_url")).toString();
+		// 先弹出同意/拒绝；同意才开始拉流覆盖座位表
+		showCameraPullRequestPopup(rootObj, pullUrl, compactJson);
+	} else if (action == QStringLiteral("stop_pull")) {
+		stopCameraPull();
+	}
+}
+
+// 右下角弹出“同意/拒绝”对话框：同意才开始拉流；拒绝则不拉流
+inline void ScheduleDialog::showCameraPullRequestPopup(const QJsonObject& rootObj, const QString& pullUrl, const QString& dedupeKey)
+{
+	const QString key = dedupeKey.trimmed();
+	if (!key.isEmpty() && m_recentCameraPromptMsgs.contains(key)) {
+		return;
+	}
+	if (!key.isEmpty()) {
+		m_recentCameraPromptMsgs.insert(key);
+		QTimer::singleShot(30000, this, [this, key]() { m_recentCameraPromptMsgs.remove(key); });
+	}
+
+	const QString url = pullUrl.trimmed();
+	if (url.isEmpty()) {
+		return;
+	}
+
+	const QString senderName = rootObj.value(QStringLiteral("sender_name")).toString().trimmed();
+	const QString senderId = rootObj.value(QStringLiteral("sender_id")).toString().trimmed();
+	const QString streamName = rootObj.value(QStringLiteral("stream_name")).toString().trimmed();
+
+	QDialog* dlg = new QDialog(this);
+	dlg->setAttribute(Qt::WA_DeleteOnClose);
+	dlg->setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+	dlg->setFixedSize(340, 140);
+	dlg->setStyleSheet(QStringLiteral(
+		"QDialog{background-color:#2b2b2b;border:1px solid #3a3a3a;border-radius:10px;}"
+		"QLabel{color:white;font-size:14px;}"
+		"QPushButton{min-width:90px;min-height:30px;border-radius:6px;font-size:14px;}"
+		"QPushButton#agree{background-color:#2563eb;color:white;}"
+		"QPushButton#agree:hover{background-color:#1d4ed8;}"
+		"QPushButton#reject{background-color:#444444;color:white;}"
+		"QPushButton#reject:hover{background-color:#555555;}"
+	));
+
+	QVBoxLayout* v = new QVBoxLayout(dlg);
+	v->setContentsMargins(14, 12, 14, 12);
+	v->setSpacing(10);
+
+	QString title = QStringLiteral("收到摄像头画面请求");
+	if (!senderName.isEmpty()) {
+		title = QStringLiteral("收到 %1 的摄像头画面请求").arg(senderName);
+	} else if (!senderId.isEmpty()) {
+		title = QStringLiteral("收到 %1 的摄像头画面请求").arg(senderId);
+	}
+	QLabel* lblTitle = new QLabel(title, dlg);
+	lblTitle->setWordWrap(true);
+	v->addWidget(lblTitle);
+
+	QString sub = QStringLiteral("是否同意开始拉流显示并隐藏座位表？");
+	if (!streamName.isEmpty()) {
+		sub = QStringLiteral("流：%1\n是否同意开始拉流显示并隐藏座位表？").arg(streamName);
+	}
+	QLabel* lblSub = new QLabel(sub, dlg);
+	lblSub->setWordWrap(true);
+	v->addWidget(lblSub);
+
+	QHBoxLayout* h = new QHBoxLayout();
+	h->addStretch();
+	QPushButton* btnReject = new QPushButton(QStringLiteral("拒绝"), dlg);
+	btnReject->setObjectName(QStringLiteral("reject"));
+	QPushButton* btnAgree = new QPushButton(QStringLiteral("同意"), dlg);
+	btnAgree->setObjectName(QStringLiteral("agree"));
+	h->addWidget(btnReject);
+	h->addSpacing(10);
+	h->addWidget(btnAgree);
+	v->addLayout(h);
+
+	connect(btnReject, &QPushButton::clicked, dlg, &QDialog::close);
+	connect(btnAgree, &QPushButton::clicked, this, [this, url, dlg]() {
+		if (dlg) dlg->close();
+		startCameraPull(url);
+	});
+
+	// 定位到当前屏幕右下角
+	QScreen* s = this->screen();
+	if (!s) s = QApplication::primaryScreen();
+	const QRect avail = s ? s->availableGeometry() : QRect(0, 0, 1920, 1080);
+	const int margin = 12;
+	dlg->move(avail.right() - dlg->width() - margin, avail.bottom() - dlg->height() - margin);
+
+	dlg->show();
+}
+
+// 开始摄像头拉流：覆盖座位表区域显示；若拉流失败/断流会自动恢复座位表
+inline void ScheduleDialog::startCameraPull(const QString& pullUrl)
+{
+	if (!m_seatStack || !seatTable || !m_cameraVideoWidget) {
+		qWarning() << "startCameraPull: seat UI not ready";
+		return;
+	}
+
+	const QString url = pullUrl.trimmed();
+	if (url.isEmpty()) {
+		qWarning() << "startCameraPull: pull_url is empty";
+		stopCameraPull();
+		return;
+	}
+
+	if (!m_cameraPullPlayer) {
+		m_cameraPullPlayer = new QMediaPlayer(this);
+		m_cameraPullPlayer->setVideoOutput(m_cameraVideoWidget);
+
+		connect(m_cameraPullPlayer, &QMediaPlayer::mediaStatusChanged, this, [this](QMediaPlayer::MediaStatus status) {
+			if (status == QMediaPlayer::InvalidMedia) {
+				qWarning() << "camera stream invalid, restore seat table";
+				stopCameraPull();
+			} else if (status == QMediaPlayer::EndOfMedia) {
+				qWarning() << "camera stream ended, restore seat table";
+				stopCameraPull();
+			}
+		});
+
+		connect(m_cameraPullPlayer, QOverload<QMediaPlayer::Error>::of(&QMediaPlayer::error),
+			this, [this](QMediaPlayer::Error error) {
+				qWarning() << "camera stream play error:" << error << (m_cameraPullPlayer ? m_cameraPullPlayer->errorString() : QString());
+				stopCameraPull();
+			});
+	}
+
+	m_seatStack->setCurrentWidget(m_cameraVideoWidget);
+	m_isCameraPulling = true;
+
+	m_cameraPullPlayer->stop();
+	m_cameraPullPlayer->setMedia(QMediaContent(QUrl(url)));
+	m_cameraPullPlayer->play();
+
+	// 看门狗：若一段时间仍无法进入可播放状态，视为“收不到流”，恢复座位表
+	QTimer::singleShot(8000, this, [this]() {
+		if (!m_isCameraPulling || !m_cameraPullPlayer) return;
+		const auto st = m_cameraPullPlayer->mediaStatus();
+		if (st == QMediaPlayer::NoMedia || st == QMediaPlayer::InvalidMedia) {
+			qWarning() << "camera stream watchdog triggered, restore seat table";
+			stopCameraPull();
+		}
+	});
+}
+
+inline void ScheduleDialog::stopCameraPull()
+{
+	m_isCameraPulling = false;
+	if (m_cameraPullPlayer) {
+		m_cameraPullPlayer->stop();
+	}
+	if (m_seatStack && seatTable) {
+		m_seatStack->setCurrentWidget(seatTable);
+	}
+}
 
 
 // 热力图相关方法的实现在 ScheduleDialog_Heatmap.cpp 中

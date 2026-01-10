@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Clock, Calendar as CalendarIcon, Save } from 'lucide-react';
+import { useDraggable } from '../../hooks/useDraggable';
 
 interface CountdownModalProps {
     isOpen: boolean;
@@ -12,6 +13,7 @@ const CountdownModal = ({ isOpen, onClose, initialDate, initialTitle }: Countdow
     const [targetDate, setTargetDate] = useState(initialDate || new Date(new Date().getFullYear(), 5, 7).toISOString().split('T')[0]); // Default to June 7th (Gaokao)
     const [title, setTitle] = useState(initialTitle || "距高考还有");
     const [daysLeft, setDaysLeft] = useState(0);
+    const { style, handleMouseDown } = useDraggable();
 
     useEffect(() => {
         const calculateDays = () => {
@@ -36,9 +38,15 @@ const CountdownModal = ({ isOpen, onClose, initialDate, initialTitle }: Countdow
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl shadow-2xl w-[450px] overflow-hidden border border-gray-100 flex flex-col">
+            <div
+                style={style}
+                className="bg-white rounded-2xl shadow-2xl w-[450px] overflow-hidden border border-gray-100 flex flex-col"
+            >
                 {/* Header */}
-                <div className="bg-gradient-to-r from-red-500 to-rose-600 p-4 flex items-center justify-between text-white">
+                <div
+                    onMouseDown={handleMouseDown}
+                    className="bg-gradient-to-r from-red-500 to-rose-600 p-4 flex items-center justify-between text-white cursor-move select-none"
+                >
                     <div className="flex items-center gap-2 font-bold text-lg">
                         <Clock size={20} />
                         <span>倒计时设置</span>

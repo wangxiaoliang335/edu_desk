@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { X, Users, Award, TrendingUp, Plus, Minus } from 'lucide-react';
+import { useDraggable } from '../../hooks/useDraggable';
 
 interface GroupScoreModalProps {
     isOpen: boolean;
@@ -23,6 +24,7 @@ const GroupScoreModal = ({ isOpen, onClose }: GroupScoreModalProps) => {
         { id: 5, name: '第五组', score: 95, members: ['施二七', '张二八', '孔二九', '曹三十', '严三一', '华三二'] },
         { id: 6, name: '第六组', score: 82, members: ['金三三', '魏三四', '陶三五', '姜三六', '戚三七', '谢三八'] },
     ]);
+    const { style, handleMouseDown } = useDraggable();
 
     const handleScoreChange = (id: number, delta: number) => {
         setGroups(groups.map(g => {
@@ -37,9 +39,15 @@ const GroupScoreModal = ({ isOpen, onClose }: GroupScoreModalProps) => {
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl shadow-2xl w-[900px] h-[600px] flex flex-col overflow-hidden border border-gray-100">
+            <div
+                style={style}
+                className="bg-white rounded-2xl shadow-2xl w-[900px] h-[600px] flex flex-col overflow-hidden border border-gray-100"
+            >
                 {/* Header */}
-                <div className="bg-gradient-to-r from-violet-500 to-purple-600 p-4 flex items-center justify-between text-white flex-shrink-0">
+                <div
+                    onMouseDown={handleMouseDown}
+                    className="bg-gradient-to-r from-violet-500 to-purple-600 p-4 flex items-center justify-between text-white flex-shrink-0 cursor-move select-none"
+                >
                     <div className="flex items-center gap-2 font-bold text-lg">
                         <Award size={20} />
                         <span>小组评价</span>

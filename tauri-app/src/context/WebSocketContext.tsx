@@ -38,7 +38,8 @@ export const WebSocketProvider = ({ children }: { children: React.ReactNode }) =
             if (storedUser) {
                 try {
                     const u = JSON.parse(storedUser);
-                    teacherId = u.teacher_unique_id;
+                    // console.log("WS: User Info from Storage:", u);
+                    teacherId = u.teacher_unique_id || u.unique_id || u.id; // Try multiple fields
                 } catch (e) { }
             }
 

@@ -4,6 +4,7 @@ import Login from "./components/Login";
 import Dashboard from "./components/Dashboard";
 import ClassChatWindow from "./components/ClassChatWindow";
 import ClassScheduleWindow from "./components/ClassScheduleWindow";
+import IntercomWindow from "./components/IntercomWindow";
 
 import { invoke } from "@tauri-apps/api/core";
 
@@ -94,6 +95,7 @@ function App() {
         <Route path="/" element={<MainApp />} />
         <Route path="/class/schedule/:groupclassId" element={<ClassScheduleWindow />} />
         <Route path="/class/chat/:groupclassId" element={<ClassChatWindow />} />
+        <Route path="/intercom/:groupId" element={<IntercomWindow />} />
       </Routes>
     </BrowserRouter>
   );

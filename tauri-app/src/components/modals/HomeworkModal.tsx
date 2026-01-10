@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { X, BookOpen, Calendar, Send } from 'lucide-react';
+import { useDraggable } from '../../hooks/useDraggable';
 
 interface HomeworkModalProps {
     isOpen: boolean;
@@ -16,6 +17,7 @@ const HomeworkModal = ({ isOpen, onClose, onPublish }: HomeworkModalProps) => {
     // Default to today
     const today = new Date().toISOString().split('T')[0];
     const [date, setDate] = useState(today);
+    const { style, handleMouseDown } = useDraggable();
 
     if (!isOpen) return null;
 
@@ -28,9 +30,15 @@ const HomeworkModal = ({ isOpen, onClose, onPublish }: HomeworkModalProps) => {
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl shadow-2xl w-[500px] overflow-hidden border border-gray-100 flex flex-col">
+            <div
+                style={style}
+                className="bg-white rounded-2xl shadow-2xl w-[500px] overflow-hidden border border-gray-100 flex flex-col"
+            >
                 {/* Header */}
-                <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-4 flex items-center justify-between text-white">
+                <div
+                    onMouseDown={handleMouseDown}
+                    className="bg-gradient-to-r from-green-500 to-emerald-600 p-4 flex items-center justify-between text-white cursor-move select-none"
+                >
                     <div className="flex items-center gap-2 font-bold text-lg">
                         <BookOpen size={20} />
                         <span>发布作业</span>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Shuffle, RotateCcw } from 'lucide-react';
+import { useDraggable } from '../../hooks/useDraggable';
 
 interface RandomCallModalProps {
     isOpen: boolean;
@@ -18,6 +19,7 @@ const RandomCallModal = ({ isOpen, onClose, students = MOCK_STUDENTS }: RandomCa
     const [isRunning, setIsRunning] = useState(false);
     const [history, setHistory] = useState<string[]>([]);
     const intervalRef = useRef<any>(null);
+    const { style, handleMouseDown } = useDraggable();
 
     useEffect(() => {
         if (!isOpen) {
@@ -50,9 +52,15 @@ const RandomCallModal = ({ isOpen, onClose, students = MOCK_STUDENTS }: RandomCa
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden border border-gray-100 flex flex-col">
+            <div
+                style={style}
+                className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden border border-gray-100 flex flex-col"
+            >
                 {/* Header */}
-                <div className="bg-gradient-to-r from-blue-500 to-indigo-600 p-4 flex items-center justify-between text-white">
+                <div
+                    onMouseDown={handleMouseDown}
+                    className="bg-gradient-to-r from-blue-500 to-indigo-600 p-4 flex items-center justify-between text-white cursor-move select-none"
+                >
                     <div className="flex items-center gap-2 font-bold text-lg">
                         <Shuffle size={20} />
                         <span>随机点名</span>

@@ -31,6 +31,27 @@ const Login = ({ onLoginSuccess }: { onLoginSuccess: (data: any) => void }) => {
         }
     }, [countdown]);
 
+    useEffect(() => {
+        const prefsStr = localStorage.getItem('login_prefs');
+        if (prefsStr) {
+            try {
+                const prefs = JSON.parse(prefsStr);
+                setPhone(prefs.phone || '');
+                if (prefs.rememberPwd) {
+                    setPassword(prefs.password || '');
+                    setRememberPwd(true);
+                }
+                if (prefs.autoLogin) {
+                    setAutoLogin(true);
+                    // Attempt auto login
+                    if (prefs.phone && prefs.password && prefs.rememberPwd) {
+                        performLogin(prefs.phone, prefs.password);
+                    }
+                }
+            } catch (e) { console.error(e); }
+        }
+    }, []);
+
     const handleMinimize = () => {
         getCurrentWindow().minimize();
     };
@@ -49,19 +70,10 @@ const Login = ({ onLoginSuccess }: { onLoginSuccess: (data: any) => void }) => {
         // TODO: Call backend to send code
     };
 
-    const handleLogin = async () => {
-        if (!phone) {
-            setStatus('请输入账号');
-            return;
-        }
-        if (!password) {
-            setStatus(loginMode === 'code' ? '请输入验证码' : '请输入密码');
-            return;
-        }
-
+    const performLogin = async (currentPhone: string, currentPassword: string) => {
         try {
             setStatus('正在登录...');
-            const response = await invoke('login', { phone, password }) as string;
+            const response = await invoke('login', { phone: currentPhone, password: currentPassword }) as string;
 
             let json;
             try {
@@ -74,10 +86,30 @@ const Login = ({ onLoginSuccess }: { onLoginSuccess: (data: any) => void }) => {
             if (json.data && json.data.code === 200) {
                 setStatus('登录成功');
                 // Save Info for WebSocket
-                localStorage.setItem('user_info', JSON.stringify({ ...json.data, phone }));
+                console.log("Login Response Data:", json.data);
+                localStorage.setItem('user_info', JSON.stringify({ ...json.data, phone: currentPhone }));
+
+                // Save Prefs
+                // Note: We use the state variables for prefs, but need to be careful if this runs from Effect where state might not be updated yet?
+                // Actually if auto-login runs, we want to save what was loaded. 
+                // But performLogin arguments are reliable.
+                // We'll use the current state values for flags, but if coming from auto-login hook, state might be outdated in closure? 
+                // In useEffect, we set state then call performLogin. React batching might mean state isn't ready if we called it immediately.
+                // But we used prefs values.
+                // Let's passed flags as args or rely on localStorage flow.
+                // Simplified: On manual login, we use current state. On auto login, we update localStorage if needed?
+                // Let's just update localStorage on manual interaction success. 
+                // But for auto-login, we don't need to re-save if nothing changed.
+                // However, we can just save based on current state (or passed prefs).
+                // Issue: accessing `autoLogin` state inside `performLogin` which is called from `useEffect`.
+                // If defined inside component, it closes over initial `autoLogin` (false).
+                // So AutoLogin will save `false` if re-saved.
+                // We should pass flags to performLogin or use refs.
+                // I'll stick to updating `handleLogin` wrapper for manual which saves.
+                // `performLogin` just logs in.
 
                 // Inject the phone number used for login
-                setTimeout(() => onLoginSuccess({ ...json.data, phone }), 200);
+                setTimeout(() => onLoginSuccess({ ...json.data, phone: currentPhone }), 200);
             } else {
                 setStatus(json.data?.message || '登录失败');
             }
@@ -86,11 +118,44 @@ const Login = ({ onLoginSuccess }: { onLoginSuccess: (data: any) => void }) => {
         }
     };
 
+    const handleLogin = async () => {
+        if (!phone) {
+            setStatus('请输入账号');
+            return;
+        }
+        if (!password) {
+            setStatus(loginMode === 'code' ? '请输入验证码' : '请输入密码');
+            return;
+        }
+
+        // Save prefs on manual login attempt (or success?)
+        // Usually save on success.
+        // But here I'll save on attempt to keep logic simple or do it inside performLogin?
+        // Let's do it here.
+        if (rememberPwd) {
+            localStorage.setItem('login_prefs', JSON.stringify({
+                phone,
+                password,
+                rememberPwd,
+                autoLogin
+            }));
+        } else {
+            localStorage.setItem('login_prefs', JSON.stringify({
+                phone,
+                password: "",
+                rememberPwd: false,
+                autoLogin: false
+            }));
+        }
+
+        await performLogin(phone, password);
+    };
+
     const getTitle = () => {
         switch (view) {
             case 'register': return '注册账号';
             case 'reset': return '重置密码';
-            default: return 'Teacher Assistant';
+            default: return '教师助手';
         }
     };
 
@@ -124,7 +189,7 @@ const Login = ({ onLoginSuccess }: { onLoginSuccess: (data: any) => void }) => {
                                 <div className="w-3 h-3 bg-white rounded-full shadow-[0_0_10px_rgba(255,255,255,0.8)]"></div>
                             </div>
                             <div className="flex flex-col">
-                                <span className="text-white text-sm font-bold tracking-wider shadow-sm leading-tight">Teacher Assistant</span>
+                                <span className="text-white text-sm font-bold tracking-wider shadow-sm leading-tight">教师助手</span>
                                 <span className="text-blue-100 text-[10px] font-medium tracking-wide">智慧课堂助手</span>
                             </div>
                         </div>

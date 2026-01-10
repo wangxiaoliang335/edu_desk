@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
-import { X, Users, Search, Plus, Minus } from "lucide-react"; // Updated imports
+import { X, Users, Search, Plus, Minus } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import DutyRosterModal from "./DutyRosterModal";
+import WallpaperModal from "./WallpaperModal";
+import CourseScheduleModal from "./CourseScheduleModal";
 
 interface Props {
     isOpen: boolean;
@@ -20,11 +23,7 @@ interface GroupMember {
 }
 
 const getRoleFromSelfRole = (role?: number): 'owner' | 'manager' | 'member' => {
-    // 400: Owner, 300: Admin, 200: Member (based on logs: 400=owner? logs show 王晓露 self_role:400 is owner in Qt logic?)
-    // Actually from logs: 
-    // "110003" role:400 -> Role Stats: 1 Owner.
-    // "110012" role:300 -> Role Stats: 1 Admin.
-    // "000011002" role:200 -> Role Stats: 1 Member.
+    // 400: Owner, 300: Admin, 200: Member
     if (role === 400) return 'owner';
     if (role === 300) return 'manager';
     return 'member';
@@ -39,6 +38,12 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
     const [teachSubjects, setTeachSubjects] = useState<string[]>([]);
     const [newSubject, setNewSubject] = useState("");
     const [showAddSubject, setShowAddSubject] = useState(false);
+    const [intercomEnabled, setIntercomEnabled] = useState(false);
+
+    // Modal States
+    const [showDutyRoster, setShowDutyRoster] = useState(false);
+    const [showWallpaper, setShowWallpaper] = useState(false);
+    const [showCourseSchedule, setShowCourseSchedule] = useState(false);
 
     useEffect(() => {
         if (isOpen && groupId) {
@@ -65,7 +70,6 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
         setLoading(true);
         setError("");
         try {
-            // Token is stored in user_info JSON
             const userInfoStr = localStorage.getItem('user_info');
             let token = "";
             let currentUserId = "0";
@@ -84,23 +88,20 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
                 groupId: groupId,
                 token
             });
-            console.log("get_group_members raw response:", resStr);
             const res = JSON.parse(resStr);
-            console.log("get_group_members parsed:", res);
 
             if (res.code === 200 || (res.data && res.data.code === 200)) {
                 const list = res.data?.members || res.data || [];
-                console.log("Member list to map:", list);
 
                 const mappedMembers: GroupMember[] = Array.isArray(list) ? list.map((m: any) => ({
                     user_id: m.user_id || m.id || m.Member_Account,
-                    name: m.user_name || m.name || m.student_name || m.NameCard || m.Nick || "未知用户", // Added user_name
-                    role: m.role || getRoleFromSelfRole(m.self_role) || 'member', // added helper if needed, or simple fallback
-                    avatar: m.face_url || m.avatar, // Added face_url
+                    name: m.user_name || m.name || m.student_name || m.NameCard || m.Nick || "未知用户",
+                    role: m.role || getRoleFromSelfRole(m.self_role) || 'member',
+                    avatar: m.face_url || m.avatar,
                     phone: m.phone,
                     teach_subjects: m.teach_subjects || []
                 })) : [];
-                // Sort: Owner first, then "Class" (name=='班级'), then others
+
                 mappedMembers.sort((a, b) => {
                     const getScore = (m: GroupMember) => {
                         if (m.role === 'owner') return 4;
@@ -111,22 +112,19 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
                     return getScore(b) - getScore(a);
                 });
 
-                console.log("Mapped members:", mappedMembers);
                 setMembers(mappedMembers);
 
-                // Find current user's teach subjects from the list if not locally modified
-                // Note: QGroupInfo logic says "if not dirty, use server data"
-                // We'll trust the server data on load.
+                if (res.data?.group_info) {
+                    setIntercomEnabled(!!res.data.group_info.enable_intercom);
+                }
+
                 const currentUser = mappedMembers.find(m => String(m.user_id) === currentUserId);
                 if (currentUser && currentUser.teach_subjects && Array.isArray(currentUser.teach_subjects)) {
                     setTeachSubjects(currentUser.teach_subjects);
-                    // Update cache
                     localStorage.setItem(`teach_subjects_${groupId}`, JSON.stringify(currentUser.teach_subjects));
                 }
 
             } else {
-                // throw new Error(res.message || res.msg || "获取成员失败");
-                // Fallback for demo
                 setMembers([
                     { user_id: 1, name: "张老师", role: 'owner', phone: "13800000001" },
                     { user_id: 2, name: "李小明", role: 'member', phone: "13800000002" },
@@ -142,12 +140,7 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
 
     const handleOpenSchedule = async () => {
         if (groupId) {
-            try {
-                await invoke('open_class_window', { groupclassId: groupId });
-            } catch (e) {
-                console.error("Failed to open schedule", e);
-                alert("无法打开课程表窗口");
-            }
+            setShowCourseSchedule(true);
         }
     };
 
@@ -168,7 +161,6 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
     };
 
     const saveTeachSubjects = async (subjects: string[]) => {
-        // Cache locally first
         localStorage.setItem(`teach_subjects_${groupId}`, JSON.stringify(subjects));
 
         if (!groupId) return;
@@ -177,7 +169,7 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
             let userId = "";
             if (userInfoStr) {
                 const u = JSON.parse(userInfoStr);
-                userId = u.teacher_unique_id || ""; // Backend expects 'user_id' which is teacher_unique_id
+                userId = u.teacher_unique_id || "";
             }
 
             await invoke('save_teach_subjects', {
@@ -187,9 +179,24 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
             });
         } catch (e) {
             console.error("Failed to save subjects", e);
-            // Revert state if needed, or just alert
         }
     }
+
+    const handleToggleIntercom = async () => {
+        if (!groupId) return;
+        const newState = !intercomEnabled;
+        setIntercomEnabled(newState);
+        try {
+            await invoke('toggle_group_intercom', {
+                groupId,
+                enable: newState
+            });
+        } catch (e) {
+            console.error("Failed to toggle intercom", e);
+            setIntercomEnabled(!newState);
+            alert("切换对讲状态失败");
+        }
+    };
 
     if (!isOpen) return null;
 
@@ -235,17 +242,18 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
                             班级课程表
                         </button>
                         <button
-                            onClick={() => alert("功能开发中...")}
+                            onClick={() => setShowDutyRoster(true)}
                             className="flex-1 bg-gray-800 hover:bg-gray-700 text-white text-xs py-2 rounded-md transition-colors font-medium"
                         >
                             值日表
                         </button>
                         <button
-                            onClick={() => alert("功能开发中...")}
+                            onClick={() => setShowWallpaper(true)}
                             className="flex-1 bg-gray-800 hover:bg-gray-700 text-white text-xs py-2 rounded-md transition-colors font-medium"
                         >
                             壁纸
                         </button>
+                        {/* More Import Removed */}
                     </div>
                 )}
 
@@ -269,12 +277,17 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
                         />
                     </div>
 
+                    {/* Error Message */}
+                    {error && (
+                        <div className="mb-3 px-3 py-2 bg-red-50 text-red-600 text-xs rounded-md border border-red-100">
+                            {error}
+                        </div>
+                    )}
+
                     {loading ? (
                         <div className="flex justify-center py-4"><span className="loading loading-spinner loading-sm"></span></div>
                     ) : (
                         <div className="grid grid-cols-6 gap-2">
-                            {/* Add/Remove buttons mimicking Qt - Always at the end in Qt, but here we can put them first for visibility or last to match. Qt puts them at the end. */}
-
                             {filteredMembers.map(member => (
                                 <div key={member.user_id} className="flex flex-col items-center gap-1 group cursor-pointer" title={member.name}>
                                     <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold overflow-hidden border border-gray-100 group-hover:border-blue-300 transition-colors">
@@ -288,7 +301,6 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
                                 </div>
                             ))}
 
-                            {/* Add/Remove buttons at the end like Qt */}
                             <button className="flex flex-col items-center gap-1 group">
                                 <div className="w-10 h-10 rounded-full border border-dashed border-gray-300 flex items-center justify-center text-gray-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 transition-colors">
                                     <Plus size={16} />
@@ -347,7 +359,41 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
                         )}
                     </div>
                 )}
+
+                {/* Intercom Toggle (Class Groups Only) - Qt Style */}
+                {isClassGroup && (
+                    <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+                        <div className="flex flex-col">
+                            <span className="text-sm font-bold text-gray-700">开启对讲</span>
+                            <span className="text-[10px] text-gray-400">允许老师使用对讲功能</span>
+                        </div>
+                        <button
+                            onClick={handleToggleIntercom}
+                            className={`w-10 h-5 rounded-full flex items-center px-0.5 transition-colors duration-300 ${intercomEnabled ? 'bg-blue-500' : 'bg-gray-300'}`}
+                        >
+                            <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-300 ${intercomEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                        </button>
+                    </div>
+                )}
             </div>
+
+            {/* Sub Modals */}
+            <DutyRosterModal
+                isOpen={showDutyRoster}
+                onClose={() => setShowDutyRoster(false)}
+                groupId={groupId}
+            />
+            <WallpaperModal
+                isOpen={showWallpaper}
+                onClose={() => setShowWallpaper(false)}
+                groupId={groupId}
+            />
+            <CourseScheduleModal
+                isOpen={showCourseSchedule}
+                onClose={() => setShowCourseSchedule(false)}
+                classId={groupId}
+            />
+            {/* CustomListModal Removed */}
         </div>
     );
 };

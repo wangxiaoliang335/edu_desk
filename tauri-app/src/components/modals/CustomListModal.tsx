@@ -1,164 +1,183 @@
 import { useState, useRef } from 'react';
-import { X, FileSpreadsheet, Upload, AlertCircle, CheckCircle, Info } from 'lucide-react';
-// import { invoke } from '@tauri-apps/api/core';
+import { X, FileSpreadsheet, Plus, Trash2 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import MidtermGradeModal from './MidtermGradeModal';
+import StudentPhysiqueModal from './StudentPhysiqueModal';
 
-interface Props {
+// Define the shape of the data rows we might parse (generic)
+type SheetRow = (string | number | undefined)[];
+
+interface CustomListModalProps {
     isOpen: boolean;
     onClose: () => void;
+    classId?: string;
 }
 
-const CustomListModal = ({ isOpen, onClose }: Props) => {
-    const [dragActive, setDragActive] = useState(false);
-    const [file, setFile] = useState<File | null>(null);
-    const [importing, setImporting] = useState(false);
-    const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle');
-    const inputRef = useRef<HTMLInputElement>(null);
+interface ImportedFile {
+    id: string;
+    name: string; // Filename
+    type: 'midterm_grade' | 'student_physique' | 'unknown';
+    data: any[]; // Raw JSON data from xlsx
+    headers: string[];
+}
 
-    const handleDrag = (e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.type === "dragenter" || e.type === "dragover") {
-            setDragActive(true);
-        } else if (e.type === "dragleave") {
-            setDragActive(false);
-        }
-    };
+const CustomListModal = ({ isOpen, onClose, classId }: CustomListModalProps) => {
+    const [importedFiles, setImportedFiles] = useState<ImportedFile[]>([]);
+    const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const handleDrop = (e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setDragActive(false);
-        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-            handleFile(e.dataTransfer.files[0]);
-        }
-    };
+    // Sub-modal states
+    const [showMidtermModal, setShowMidtermModal] = useState(false);
+    const [showPhysiqueModal, setShowPhysiqueModal] = useState(false);
+    const [currentData, setCurrentData] = useState<ImportedFile | null>(null);
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        e.preventDefault();
-        if (e.target.files && e.target.files[0]) {
-            handleFile(e.target.files[0]);
-        }
-    };
 
-    const handleFile = (file: File) => {
-        // Simple validation
-        if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.name.endsWith('.csv')) {
-            setFile(file);
-            setImportStatus('idle');
-        } else {
-            alert("请选择 Excel (.xlsx, .xls) 或 CSV 文件");
-        }
-    };
-
-    const handleImport = async () => {
+    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
         if (!file) return;
-        setImporting(true);
 
-        // Mock Import Process
-        setTimeout(() => {
-            setImporting(false);
-            setImportStatus('success');
-            // Here we would parse excel and call backend or update state
-            console.log("Importing file:", file.name);
-        }, 1500);
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            const bstr = evt.target?.result;
+            const wb = XLSX.read(bstr, { type: 'binary' });
+
+            // Assume first sheet
+            const wsname = wb.SheetNames[0];
+            const ws = wb.Sheets[wsname];
+
+            // Get raw data as array of arrays to check headers
+            const rawData = XLSX.utils.sheet_to_json<any>(ws, { header: 1 });
+            if (rawData.length === 0) return;
+
+            const headers = (rawData[0] as string[]).map(h => String(h).trim());
+            const dataRows = rawData.slice(1); // Not used for type detection but stored
+
+            // Determine type
+            let fileType: ImportedFile['type'] = 'unknown';
+
+            const hasId = headers.includes('学号');
+            const hasName = headers.includes('姓名');
+            const hasGroup = headers.includes('小组');
+
+            if (hasGroup) {
+                // Student Group Attribute Table -> StudentPhysiqueModal
+                fileType = 'student_physique';
+            } else if (hasId && hasName) {
+                // Student Attribute Table (No Group) -> MidtermGradeModal
+                fileType = 'midterm_grade';
+            }
+
+            const newFile: ImportedFile = {
+                id: Date.now().toString(),
+                name: file.name.replace(/\.[^/.]+$/, ""), // Remove extension
+                type: fileType,
+                data: rawData, // Store all raw data including header for now, or just dataRows? 
+                // Let's store rawData (AoA) to be flexible
+                headers: headers
+            };
+
+            setImportedFiles(prev => [...prev, newFile]);
+        };
+        reader.readAsBinaryString(file);
+
+        // Reset input
+        if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+
+    const handleFileClick = (file: ImportedFile) => {
+        setCurrentData(file);
+        if (file.type === 'midterm_grade') {
+            setShowMidtermModal(true);
+        } else if (file.type === 'student_physique') {
+            setShowPhysiqueModal(true);
+        } else {
+            alert("无法识别的表格类型，或者是未知格式");
+        }
+    };
+
+    const deleteFile = (e: React.MouseEvent, id: string) => {
+        e.stopPropagation();
+        setImportedFiles(prev => prev.filter(f => f.id !== id));
     };
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-[#808080] rounded shadow-2xl w-[600px] h-[400px] flex flex-col overflow-hidden text-sm">
+
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-gray-50/50">
-                    <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
-                        <FileSpreadsheet className="text-green-600" size={20} />
+                <div className="flex items-center justify-between p-2">
+                    <div className="bg-[#d3d3d3] text-black px-4 py-2 rounded font-bold text-base">
                         学生统计表导入
-                    </h3>
-                    <button onClick={onClose} className="p-1.5 hover:bg-gray-200 rounded-full text-gray-500 transition-colors">
-                        <X size={20} />
+                    </div>
+                    <button onClick={onClose} className="w-8 h-8 flex items-center justify-center bg-[#666666] text-white rounded hover:bg-[#777777] font-bold">
+                        X
                     </button>
                 </div>
 
                 {/* Content */}
-                <div className="p-8">
-                    {/* Drag & Drop Zone */}
-                    <div
-                        className={`border-2 border-dashed rounded-xl p-10 flex flex-col items-center justify-center transition-all cursor-pointer bg-gray-50/50 ${dragActive ? 'border-blue-500 bg-blue-50/20' : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50'}`}
-                        onDragEnter={handleDrag}
-                        onDragLeave={handleDrag}
-                        onDragOver={handleDrag}
-                        onDrop={handleDrop}
-                        onClick={() => inputRef.current?.click()}
-                    >
-                        <input
-                            ref={inputRef}
-                            type="file"
-                            className="hidden"
-                            accept=".xlsx,.xls,.csv"
-                            onChange={handleChange}
-                        />
+                <div className="flex-1 p-4 flex flex-wrap content-start gap-4 overflow-y-auto">
+                    {importedFiles.map(file => (
+                        <div
+                            key={file.id}
+                            onClick={() => handleFileClick(file)}
+                            className="relative group w-24 h-24 bg-green-600 rounded flex flex-col items-center justify-center cursor-pointer hover:bg-green-700 transition-colors shadow-md border-2 border-transparent hover:border-yellow-300"
+                        >
+                            <FileSpreadsheet className="text-white mb-2" size={32} />
+                            <span className="text-white text-xs px-1 text-center line-clamp-2 break-all font-bold">
+                                {file.name}
+                            </span>
 
-                        {file ? (
-                            <div className="text-center">
-                                <FileSpreadsheet size={48} className="text-green-600 mx-auto mb-4" />
-                                <h4 className="font-bold text-gray-800 mb-1">{file.name}</h4>
-                                <p className="text-sm text-gray-500">{(file.size / 1024).toFixed(1)} KB</p>
-                            </div>
-                        ) : (
-                            <div className="text-center">
-                                <Upload size={48} className="text-gray-400 mx-auto mb-4" />
-                                <h4 className="font-bold text-gray-700 mb-2">点击或拖拽上传文件</h4>
-                                <p className="text-sm text-gray-500 max-w-xs mx-auto">
-                                    支持期中成绩单、学生体质表、小组管理表<br />
-                                    <span className="text-xs text-gray-400">(.xlsx, .xls, .csv)</span>
-                                </p>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Status & Actions */}
-                    <div className="mt-8 flex items-center justify-center">
-                        {importStatus === 'success' ? (
-                            <div className="text-center animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-2">
-                                    <CheckCircle size={24} />
-                                </div>
-                                <h4 className="font-bold text-gray-800">导入成功</h4>
-                                <p className="text-sm text-gray-500 mt-1">数据已同步并更新</p>
-                                <button
-                                    onClick={onClose}
-                                    className="mt-4 px-6 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
-                                >
-                                    关闭
-                                </button>
-                            </div>
-                        ) : importStatus === 'error' ? (
-                            <div className="text-center text-red-500">
-                                <AlertCircle size={32} className="mx-auto mb-2" />
-                                <p>导入失败，请检查文件格式</p>
-                            </div>
-                        ) : (
+                            {/* Delete Button (Hover) */}
                             <button
-                                onClick={handleImport}
-                                disabled={!file || importing}
-                                className={`w-full py-3 rounded-lg font-bold text-white transition-all transform active:scale-95 ${!file || importing ? 'bg-gray-300 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 shadow-md hover:shadow-lg'}`}
+                                onClick={(e) => deleteFile(e, file.id)}
+                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
                             >
-                                {importing ? (
-                                    <span className="flex items-center justify-center gap-2">
-                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                        处理中...
-                                    </span>
-                                ) : "开始导入"}
+                                <Trash2 size={12} />
                             </button>
-                        )}
-                    </div>
+                        </div>
+                    ))}
+
+                    {/* Add Button */}
+                    <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-24 h-24 bg-[#a9a9a9] rounded flex flex-col items-center justify-center cursor-pointer hover:bg-[#b0b0b0] transition-colors border-2 border-dashed border-[#666666] text-[#444444]"
+                    >
+                        <Plus size={32} />
+                        <span className="text-xs font-bold mt-1">导入表格</span>
+                    </button>
                 </div>
 
-                {/* Templates Hint */}
-                <div className="bg-amber-50 p-3 text-xs text-amber-800 text-center border-t border-amber-100">
-                    <Info size={12} className="inline mr-1" />
-                    请确保表格包含“学号”和“姓名”列以正确匹配学生数据
-                </div>
+                {/* Hidden Input */}
+                <input
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
+                    accept=".xlsx, .xls, .csv"
+                    onChange={handleFileSelect}
+                />
+
+                {/* Sub Modals */}
+                {/* We need to pass data to these modals. Since they don't exist yet, we will just comment/placeholder them or implement props in them later. */}
+                {currentData && (
+                    <>
+                        <MidtermGradeModal
+                            isOpen={showMidtermModal}
+                            onClose={() => setShowMidtermModal(false)}
+                            fileName={currentData.name}
+                            data={currentData.data}
+                            classId={classId}
+                        />
+                        <StudentPhysiqueModal
+                            isOpen={showPhysiqueModal}
+                            onClose={() => setShowPhysiqueModal(false)}
+                            fileName={currentData.name}
+                            data={currentData.data}
+                            classId={classId}
+                        />
+                    </>
+                )}
             </div>
         </div>
     );

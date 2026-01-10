@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
-import { Minus, X, Square, Copy, MessageCircle, Calendar, Users, BookOpen, Shuffle, Clock, Grid, LayoutDashboard, Layers, Award, Power } from 'lucide-react';
+import { Minus, X, Square, Copy, MessageCircle, Calendar, Users, BookOpen, Shuffle, Clock, Grid, LayoutDashboard, Layers, Award, Power, Mic, FileSpreadsheet } from 'lucide-react';
 import { useWebSocket } from '../context/WebSocketContext';
 import RandomCallModal from './modals/RandomCallModal';
 import HomeworkModal from './modals/HomeworkModal';
@@ -68,6 +68,12 @@ const ClassScheduleWindow = () => {
 
     const handleOpenChat = () => {
         invoke('open_chat_window', { groupclassId });
+    };
+
+    const handleOpenIntercom = () => {
+        if (groupclassId) {
+            invoke('open_intercom_window', { groupId: groupclassId });
+        }
     };
 
     const handlePublishHomework = async (data: { subject: string; content: string; date: string }) => {
@@ -264,11 +270,25 @@ const ClassScheduleWindow = () => {
                                 <Layers size={16} /> 快捷工具
                             </h3>
                             <div className="grid grid-cols-2 gap-3 flex-1 content-start">
-                                <button onClick={() => setIsHomeworkOpen(true)} className="h-24 bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md hover:border-orange-200 transition-all flex flex-col items-center justify-center gap-2 group">
-                                    <div className="p-2.5 rounded-full bg-orange-50 text-orange-500 group-hover:scale-110 group-hover:bg-orange-100 transition-all">
+                                <button onClick={() => setIsHomeworkOpen(true)} className="h-24 bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md hover:border-purple-200 transition-all flex flex-col items-center justify-center gap-2 group">
+                                    <div className="p-2.5 rounded-full bg-purple-50 text-purple-500 group-hover:scale-110 group-hover:bg-purple-100 transition-all">
                                         <BookOpen size={20} />
                                     </div>
-                                    <span className="text-xs font-medium text-gray-600">布置作业</span>
+                                    <span className="text-xs font-medium text-gray-600">作业管理</span>
+                                </button>
+
+                                <button onClick={handleOpenIntercom} className="h-24 bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md hover:border-red-200 transition-all flex flex-col items-center justify-center gap-2 group">
+                                    <div className="p-2.5 rounded-full bg-red-50 text-red-500 group-hover:scale-110 group-hover:bg-red-100 transition-all">
+                                        <Mic size={20} />
+                                    </div>
+                                    <span className="text-xs font-medium text-gray-600">语音对讲</span>
+                                </button>
+
+                                <button onClick={() => setIsCustomListOpen(true)} className="h-24 bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md hover:border-orange-200 transition-all flex flex-col items-center justify-center gap-2 group">
+                                    <div className="p-2.5 rounded-full bg-orange-50 text-orange-500 group-hover:scale-110 group-hover:bg-orange-100 transition-all">
+                                        <FileSpreadsheet size={20} />
+                                    </div>
+                                    <span className="text-xs font-medium text-gray-600">更多导入</span>
                                 </button>
 
                                 <button onClick={() => setIsRandomCallOpen(true)} className="h-24 bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md hover:border-cyan-200 transition-all flex flex-col items-center justify-center gap-2 group">
@@ -285,13 +305,6 @@ const ClassScheduleWindow = () => {
                                     <span className="text-xs font-medium text-gray-600">倒计时</span>
                                 </button>
 
-                                <button onClick={() => setIsDutyRosterOpen(true)} className="h-24 bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md hover:border-emerald-200 transition-all flex flex-col items-center justify-center gap-2 group">
-                                    <div className="p-2.5 rounded-full bg-emerald-50 text-emerald-500 group-hover:scale-110 group-hover:bg-emerald-100 transition-all">
-                                        <Calendar size={20} />
-                                    </div>
-                                    <span className="text-xs font-medium text-gray-600">值日表</span>
-                                </button>
-
                                 <button onClick={() => setIsGroupScoreOpen(true)} className="h-24 bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md hover:border-violet-200 transition-all flex flex-col items-center justify-center gap-2 group">
                                     <div className="p-2.5 rounded-full bg-violet-50 text-violet-500 group-hover:scale-110 group-hover:bg-violet-100 transition-all">
                                         <Award size={20} />
@@ -299,21 +312,14 @@ const ClassScheduleWindow = () => {
                                     <span className="text-xs font-medium text-gray-600">小组评价</span>
                                 </button>
 
-                                <button onClick={() => setIsCustomListOpen(true)} className="h-24 bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md hover:border-gray-300 transition-all flex flex-col items-center justify-center gap-2 group">
-                                    <div className="p-2.5 rounded-full bg-gray-100 text-gray-500 group-hover:scale-110 group-hover:bg-gray-200 transition-all font-serif font-black flex items-center justify-center">
-                                        ...
+                                <button onClick={handleRemoteShutdown} className="h-24 bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md hover:border-red-200 transition-all flex flex-col items-center justify-center gap-2 group relative">
+                                    <div className="absolute top-2 right-2">
+                                        <div className={`w-2 h-2 rounded-full ${isWSConnected ? 'bg-green-500' : 'bg-red-400'}`}></div>
                                     </div>
-                                    <span className="text-xs font-medium text-gray-600">更多导入</span>
-                                </button>
-
-                                <button onClick={handleRemoteShutdown} className="w-20 h-auto bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md hover:border-red-200 transition-all flex flex-col items-center justify-center gap-1 group relative py-2">
-                                    <div className="absolute top-1 right-1">
-                                        <div className={`w-1.5 h-1.5 rounded-full ${isWSConnected ? 'bg-green-500' : 'bg-red-400'}`}></div>
+                                    <div className="p-2.5 rounded-full bg-red-50 text-red-500 group-hover:scale-110 group-hover:bg-red-100 transition-all">
+                                        <Power size={20} />
                                     </div>
-                                    <div className="p-1.5 rounded-full bg-red-50 text-red-500 group-hover:scale-105 group-hover:bg-red-100 transition-all">
-                                        <Power size={18} />
-                                    </div>
-                                    <span className="text-[11px] font-medium text-gray-600 whitespace-nowrap">远程开机</span>
+                                    <span className="text-xs font-medium text-gray-600">远程开机</span>
                                 </button>
                             </div>
                         </div>

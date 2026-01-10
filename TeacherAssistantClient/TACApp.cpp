@@ -22,8 +22,8 @@ static void ui_task_handler(void* param, bool wait)
 class MyWidget : public QDialog {
 public:
 	MyWidget(QWidget* parent = nullptr) : QDialog(parent) {
-		setWindowTitle("Ä£Ì¬´°¿Ú");
-		setModal(true);  // »òÕß setWindowModality(Qt::ApplicationModal);
+		setWindowTitle(QStringLiteral("æ¨¡æ€çª—å£"));
+		setModal(true);  // æˆ– setWindowModality(Qt::ApplicationModal);
 	}
 };
 
@@ -42,7 +42,7 @@ bool TACApp::AppInit()
 	QString qPhone;
 	loginWidget = new ModalDialog();
 	int user_id = 0;
-	//loginWidget->setTitleName("Ê¾ÀýÄ£Ì¬¶Ô»°¿ò");
+	//loginWidget->setTitleName("Ê¾ï¿½ï¿½Ä£Ì¬ï¿½Ô»ï¿½ï¿½ï¿½");
 	loginWidget->setBackgroundColor(QColor(30, 60, 90));
 	loginWidget->setBorderColor(Qt::yellow);
 	loginWidget->setBorderWidth(4);
@@ -141,7 +141,7 @@ bool TACApp::AppInit()
 		}
 		else
 		{
-			qDebug("ÓÃ»§¹Ø±Õ»òÈ¡Ïû");
+			qDebug("ï¿½Ã»ï¿½ï¿½Ø±Õ»ï¿½È¡ï¿½ï¿½");
 			bLoginSucceeded = false;
 			return false;
 		}
@@ -171,7 +171,7 @@ bool TACApp::AppInit()
 		}
 		else
 		{
-			qDebug("ÓÃ»§¹Ø±Õ»òÈ¡Ïû");
+			qDebug("ï¿½Ã»ï¿½ï¿½Ø±Õ»ï¿½È¡ï¿½ï¿½");
 			bLoginSucceeded = false;
 			return false;
 		}
@@ -194,7 +194,7 @@ bool TACApp::AppInit()
 		}
 		else
 		{
-			qDebug("ÓÃ»§¹Ø±Õ»òÈ¡Ïû");
+			qDebug("ï¿½Ã»ï¿½ï¿½Ø±Õ»ï¿½È¡ï¿½ï¿½");
 			bLoginSucceeded = false;
 			return false;
 		}
@@ -202,9 +202,9 @@ bool TACApp::AppInit()
 	
 	int logRes = loginWidget->exec();
 	
-	// ×èÈûÖ´ÐÐ£¬Ö±µ½ÓÃ»§¹Ø±Õ
+	// ï¿½ï¿½ï¿½ï¿½Ö´ï¿½Ð£ï¿½Ö±ï¿½ï¿½ï¿½Ã»ï¿½ï¿½Ø±ï¿½
 	if (logRes == QDialog::Accepted) {
-		qDebug("ÓÃ»§µã»÷ÁËÈ·ÈÏ");
+		qDebug("ï¿½Ã»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È·ï¿½ï¿½");
 		if (loginWidget->getIsPwdLogin() == true)
 		{
 			loginWidget->InitData();
@@ -228,7 +228,7 @@ bool TACApp::AppInit()
 		}
 	}
 	else if(logRes == QDialog::Rejected) {
-		qDebug("ÓÃ»§¹Ø±Õ»òÈ¡Ïû");
+		qDebug("ï¿½Ã»ï¿½ï¿½Ø±Õ»ï¿½È¡ï¿½ï¿½");
 		return false;
 	}
 

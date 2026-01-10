@@ -1,40 +1,227 @@
-import { useState } from 'react';
-import { X, Calendar, Download, RefreshCw } from 'lucide-react';
+import { useRef, useState, useEffect, Fragment } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { X, Calendar, Download, RefreshCw, FileSpreadsheet } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { useDraggable } from '../../hooks/useDraggable';
 
 interface CourseScheduleModalProps {
     isOpen: boolean;
     onClose: () => void;
+    classId?: string;
 }
 
-// Mock Schedule Data
-const SCHEDULE_DATA = [
-    { time: '08:00 - 08:45', mon: '语文', tue: '英语', wed: '数学', thu: '语文', fri: '英语' },
-    { time: '08:55 - 09:40', mon: '数学', tue: '语文', wed: '英语', thu: '数学', fri: '物理' },
-    { time: '09:50 - 10:35', mon: '英语', tue: '物理', wed: '语文', thu: '英语', fri: '化学' },
-    { time: '10:50 - 11:35', mon: '物理', tue: '化学', wed: '物理', thu: '化学', fri: '生物' },
-    { time: 'lunch', label: '午休' },
-    { time: '14:00 - 14:45', mon: '化学', tue: '生物', wed: '化学', thu: '生物', fri: '历史' },
-    { time: '14:55 - 15:40', mon: '生物', tue: '历史', wed: '生物', thu: '历史', fri: '地理' },
-    { time: '15:50 - 16:35', mon: '历史', tue: '地理', wed: '历史', thu: '地理', fri: '班会' },
-    { time: '16:45 - 17:30', mon: '地理', tue: '体育', wed: '体育', thu: '美术', fri: '自习' },
-];
+// Mock Schedule Data removed
 
-const CourseScheduleModal = ({ isOpen, onClose }: CourseScheduleModalProps) => {
+const CURRENT_TERM = "2023-2024 第二学期";
+
+const CourseScheduleModal = ({ isOpen, onClose, classId }: CourseScheduleModalProps) => {
+    const { style, handleMouseDown } = useDraggable();
+    const [scheduleData, setScheduleData] = useState<any[]>([]); // Initialize empty
+    const [loading, setLoading] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (isOpen && classId) {
+            fetchSchedule();
+        }
+    }, [isOpen, classId]);
+
+    const fetchSchedule = async () => {
+        if (!classId) return;
+        setLoading(true);
+        try {
+            // Get token
+            const userInfoStr = localStorage.getItem('user_info');
+            let token = "";
+            if (userInfoStr) {
+                try {
+                    const u = JSON.parse(userInfoStr);
+                    token = u.token || "";
+                } catch (e) {
+                    console.error("Failed to parse user info", e);
+                }
+            }
+
+            const res = await invoke<string>('get_course_schedule', {
+                classId,
+                term: CURRENT_TERM,
+                token
+            });
+            console.log("Course Schedule Response:", res);
+            try {
+                const parsed = JSON.parse(res);
+                if (parsed.code === 200 && parsed.data) {
+                    // Check for new structure { schedule: ..., cells: ... }
+                    if (parsed.data.schedule && parsed.data.cells) {
+                        const { times, days } = parsed.data.schedule;
+                        const cells = parsed.data.cells;
+
+                        // Reconstruct rows
+                        // Reconstruct rows
+                        // times is ["08:00..", ..]
+                        const rows = times.map((t: string, i: number) => {
+                            const row: any = { time: t };
+
+                            // cells have row_index, col_index
+                            // days array is ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+                            days.forEach((d: string, j: number) => {
+                                // Find cell by indices matching row i and col j
+                                const cell = cells.find((c: any) => c.row_index === i && c.col_index === j);
+                                row[d] = cell ? (cell.course_name || cell.subject || "") : "";
+                            });
+
+                            // Label handling (lunch)
+                            // Robust check for "lunch" or "午"
+                            if (t && (t.includes("午") || t.toLowerCase().includes("lunch"))) {
+                                row.label = t;
+                                row.time = "lunch";
+                            }
+
+                            return row;
+                        });
+                        setScheduleData(rows);
+                    } else {
+                        // Old fallback
+                        const list = Array.isArray(parsed.data) ? parsed.data : (parsed.data.courses || []);
+                        if (Array.isArray(list)) {
+                            setScheduleData(list);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("Parse error", e);
+            }
+        } catch (e) {
+            console.error("Fetch schedule error:", e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleImportClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !classId) return;
+
+        try {
+            setLoading(true);
+            const data = await file.arrayBuffer();
+            const workbook = XLSX.read(data);
+            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+            // Use header:1 to get array of arrays (index based)
+            // This is robust against mismatched header strings
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+
+            // Filter logic:
+            // 1. Skip completely empty rows
+            // 2. Skip header row (heuristic: contains "周一" or "Mon")
+            const mappedData = jsonData
+                .filter(row => row && row.length > 0)
+                .filter(row => {
+                    const str = JSON.stringify(row);
+                    return !str.includes("周一") && !str.includes("Mon");
+                })
+                .map((row) => ({
+                    time: row[0] ? String(row[0]) : '', // Col 0 is Time
+                    label: (row[0] && String(row[0]).includes('午')) ? String(row[0]) : '', // Heuristic for lunch
+                    mon: row[1] ? String(row[1]) : '',
+                    tue: row[2] ? String(row[2]) : '',
+                    wed: row[3] ? String(row[3]) : '',
+                    thu: row[4] ? String(row[4]) : '',
+                    fri: row[5] ? String(row[5]) : '',
+                    sat: row[6] ? String(row[6]) : '',
+                    sun: row[7] ? String(row[7]) : ''
+                }));
+
+            // Save to backend
+            const userInfoStr = localStorage.getItem('user_info');
+            let token = "";
+            if (userInfoStr) {
+                try {
+                    const u = JSON.parse(userInfoStr);
+                    token = u.token || "";
+                } catch (e) { }
+            }
+
+            // Derive metadata
+            const times = mappedData.map((d: any) => d.time || "");
+            const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+            // Convert rows to flat cells
+            const cells: any[] = [];
+            mappedData.forEach((row: any, rowIndex: number) => {
+                days.forEach((day, colIndex) => {
+                    if (row[day]) {
+                        cells.push({
+                            row_index: rowIndex, // Send index
+                            col_index: colIndex,
+                            course_name: row[day], // specific field name
+                            day: day, // keep for debug/robustness?
+                            time: row.time
+                        });
+                    }
+                });
+            });
+
+            const saveRes = await invoke<string>('save_course_schedule', {
+                classId,
+                term: CURRENT_TERM,
+                days,
+                times,
+                cells: cells,
+                token
+            });
+            console.log("Save Course Schedule Response:", saveRes);
+
+            setScheduleData(mappedData);
+            alert("导入并同步成功！");
+
+            fetchSchedule();
+
+        } catch (e) {
+            console.error("Import failed", e);
+            alert("导入失败");
+        } finally {
+            setLoading(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+
     if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl shadow-2xl w-[900px] h-[650px] flex flex-col overflow-hidden border border-gray-100">
+            <div
+                style={style}
+                className="bg-white rounded-2xl shadow-2xl w-[900px] h-[650px] flex flex-col overflow-hidden border border-gray-100"
+            >
                 {/* Header */}
-                <div className="bg-gradient-to-r from-blue-500 to-indigo-600 p-4 flex items-center justify-between text-white flex-shrink-0">
+                <div
+                    onMouseDown={handleMouseDown}
+                    className="bg-gradient-to-r from-blue-500 to-indigo-600 p-4 flex items-center justify-between text-white flex-shrink-0 cursor-move select-none"
+                >
                     <div className="flex items-center gap-2 font-bold text-lg">
                         <Calendar size={20} />
                         <span>班级课程表</span>
-                        <span className="text-sm font-normal opacity-80 bg-white/20 px-2 py-0.5 rounded ml-2">2023-2024 第二学期</span>
+                        <span className="text-sm font-normal opacity-80 bg-white/20 px-2 py-0.5 rounded ml-2">{CURRENT_TERM}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                        <button className="p-1.5 hover:bg-white/20 rounded-lg transition-colors text-white/90">
-                            <RefreshCw size={18} />
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            className="hidden"
+                            accept=".xlsx, .xls"
+                            onChange={handleFileChange}
+                        />
+                        <button onClick={handleImportClick} className="p-1.5 hover:bg-white/20 rounded-lg transition-colors text-white/90" title="导入Excel">
+                            <FileSpreadsheet size={18} />
+                        </button>
+                        <button onClick={fetchSchedule} className="p-1.5 hover:bg-white/20 rounded-lg transition-colors text-white/90">
+                            <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
                         </button>
                         <button className="p-1.5 hover:bg-white/20 rounded-lg transition-colors text-white/90">
                             <Download size={18} />
@@ -59,7 +246,7 @@ const CourseScheduleModal = ({ isOpen, onClose }: CourseScheduleModalProps) => {
                             ))}
 
                             {/* Schedule Rows */}
-                            {SCHEDULE_DATA.map((row, index) => {
+                            {scheduleData.map((row, index) => {
                                 if (row.time === 'lunch') {
                                     return (
                                         <div key={index} className="col-span-6 bg-orange-50/50 p-2 text-center text-orange-400 font-medium text-xs border-b border-gray-200">
@@ -68,7 +255,7 @@ const CourseScheduleModal = ({ isOpen, onClose }: CourseScheduleModalProps) => {
                                     );
                                 }
                                 return (
-                                    <>
+                                    <Fragment key={index}>
                                         {/* Time Column */}
                                         <div className="p-4 flex items-center justify-center text-gray-500 font-medium border-b border-r border-gray-100 text-xs bg-gray-50/30">
                                             {row.time}
@@ -86,12 +273,12 @@ const CourseScheduleModal = ({ isOpen, onClose }: CourseScheduleModalProps) => {
                                                                         course === '体育' ? 'bg-green-100 text-green-700' :
                                                                             'bg-gray-100 text-gray-600'}
                                                 `}>
-                                                    <span className="font-bold">{course}</span>
-                                                    <span className="text-[10px] opacity-70">A-302</span>
+                                                    <span className="font-bold">{course || '-'}</span>
+                                                    {course && <span className="text-[10px] opacity-70">A-302</span>}
                                                 </div>
                                             </div>
                                         ))}
-                                    </>
+                                    </Fragment>
                                 );
                             })}
                         </div>

@@ -170,7 +170,7 @@ const SeatMap: React.FC<SeatProps> = ({ classId, onViewChange }) => {
     };
 
     const handleClear = () => {
-        if (confirm("确定要清空座位表吗？(Clear Seat Map?)")) {
+        if (confirm("确定要清空座位表吗？")) {
             setSeatData([]);
         }
     };
@@ -273,7 +273,7 @@ const SeatMap: React.FC<SeatProps> = ({ classId, onViewChange }) => {
                                             relative rounded-md border shadow-sm flex flex-col items-center justify-center p-1 cursor-pointer transition-all hover:scale-105 active:scale-95
                                             ${data ? 'bg-white border-blue-200 hover:border-blue-400 hover:shadow-md' : 'bg-gray-100 border-gray-200 text-gray-400'}
                                         `}
-                                        title={data ? `${data.student_name || data.name} (${data.row + 1},${data.col + 1})` : `Empty Seat (${rIndex + 1},${cIndex + 1})`}
+                                        title={data ? `${data.student_name || data.name} (${data.row + 1},${data.col + 1})` : `空座位 (${rIndex + 1},${cIndex + 1})`}
                                     >
                                         {data ? (
                                             <>

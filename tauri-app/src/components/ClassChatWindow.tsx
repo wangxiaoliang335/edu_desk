@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Minus, X, Square, Copy, MessageCircle, MoreHorizontal, Image, Paperclip, Smile, Clock } from 'lucide-react';
 import { sendMessage, getMessageList, loginTIM, isSDKReady, getGroupMemberList } from '../utils/tim';
+import CustomListModal from './modals/CustomListModal';
 
 const ClassChatWindow = () => {
     const { groupclassId } = useParams();
@@ -12,6 +13,7 @@ const ClassChatWindow = () => {
     const [isReady, setIsReady] = useState(false);
 
     const [members, setMembers] = useState<any[]>([]);
+    const [showCustomList, setShowCustomList] = useState(false);
 
     useEffect(() => {
         const checkMaximized = async () => {
@@ -116,6 +118,15 @@ const ClassChatWindow = () => {
                     </div>
                 </div>
                 <div className="flex items-center gap-1">
+                    {/* More Import Trigger */}
+                    <button
+                        onClick={() => setShowCustomList(true)}
+                        className="p-1.5 hover:bg-gray-200 rounded-md text-gray-500 mr-2"
+                        title="更多导入"
+                    >
+                        <MoreHorizontal size={16} />
+                    </button>
+
                     <button onClick={handleMinimize} className="p-1.5 hover:bg-gray-200 rounded-md text-gray-500"><Minus size={16} /></button>
                     <button onClick={handleMaximize} className="p-1.5 hover:bg-gray-200 rounded-md text-gray-500">{isMaximized ? <Copy size={16} /> : <Square size={16} />}</button>
                     <button onClick={handleClose} className="p-1.5 hover:bg-red-500 hover:text-white rounded-md text-gray-500"><X size={16} /></button>
@@ -197,6 +208,13 @@ const ClassChatWindow = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Modals */}
+            <CustomListModal
+                isOpen={showCustomList}
+                onClose={() => setShowCustomList(false)}
+                classId={groupclassId}
+            />
         </div>
     );
 };
