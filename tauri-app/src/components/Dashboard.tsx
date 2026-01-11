@@ -4,7 +4,12 @@ import { Minus, X, Square, Copy } from 'lucide-react'; // Square for Maximize, C
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import TeacherSchedule from './TeacherSchedule';
 import ClassManagement from './ClassManagement';
+import CreateClassGroupModal from './modals/CreateClassGroupModal';
+import CreateNormalGroupModal from './modals/CreateNormalGroupModal';
+import SearchAddModal from './modals/SearchAddModal';
 
+
+import { invoke } from '@tauri-apps/api/core';
 
 interface DashboardProps {
     userInfo: any;
@@ -14,8 +19,13 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
     const [activeApp, setActiveApp] = useState<TaskbarItemType | null>(null);
     const [isMaximized, setIsMaximized] = useState(false);
 
+    // Modal States
+    const [showCreateClassGroup, setShowCreateClassGroup] = useState(false);
+    const [showCreateNormalGroup, setShowCreateNormalGroup] = useState(false);
+    const [showSearchAdd, setShowSearchAdd] = useState(false);
+
     const handleMinimize = () => getCurrentWindow().minimize();
-    const handleClose = () => getCurrentWindow().close();
+    const handleClose = () => invoke('exit_app');
     const handleMaximize = async () => {
         const win = getCurrentWindow();
         const max = await win.isMaximized();
@@ -33,6 +43,12 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
             setActiveApp('schedule');
         } else if (toolId === 'class_mgr') {
             setActiveApp('class');
+        } else if (toolId === 'create_class_group') {
+            setShowCreateClassGroup(true);
+        } else if (toolId === 'create_normal_group') {
+            setShowCreateNormalGroup(true);
+        } else if (toolId === 'search_add') {
+            setShowSearchAdd(true);
         } else {
             console.log('Tool clicked:', toolId);
         }
@@ -88,6 +104,10 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
                                     { id: 'table', name: '表格', icon: '📊', color: 'bg-gray-100 text-gray-600' },
                                     { id: 'text', name: '文本', icon: '📝', color: 'bg-indigo-100 text-indigo-600' },
                                     { id: 'image', name: '图片', icon: '🏞️', color: 'bg-rose-100 text-rose-600' },
+                                    // New Tools
+                                    { id: 'create_class_group', name: '创建班级群', icon: '🎓', color: 'bg-blue-100 text-blue-600' },
+                                    { id: 'create_normal_group', name: '创建讨论组', icon: '💬', color: 'bg-green-100 text-green-600' },
+                                    { id: 'search_add', name: '查找添加', icon: '🔍', color: 'bg-purple-100 text-purple-600' },
                                 ].map((tool) => (
                                     <button
                                         key={tool.id}
@@ -189,6 +209,24 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
 
             {/* Taskbar */}
             <Taskbar activeItem={activeApp} onItemClick={setActiveApp} />
+
+            {/* Modals */}
+            <CreateClassGroupModal
+                isOpen={showCreateClassGroup}
+                onClose={() => setShowCreateClassGroup(false)}
+                userInfo={userInfo}
+                onSuccess={() => window.dispatchEvent(new CustomEvent('refresh-class-list'))}
+            />
+            <CreateNormalGroupModal
+                isOpen={showCreateNormalGroup}
+                onClose={() => setShowCreateNormalGroup(false)}
+                userInfo={userInfo}
+                onSuccess={() => window.dispatchEvent(new CustomEvent('refresh-class-list'))}
+            />
+            <SearchAddModal
+                isOpen={showSearchAdd}
+                onClose={() => setShowSearchAdd(false)}
+            />
         </div>
     );
 };

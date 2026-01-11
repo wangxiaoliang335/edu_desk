@@ -1,10 +1,14 @@
 import TencentCloudChat from '@tencentcloud/chat';
+import TIMUploadPlugin from 'tim-upload-plugin';
 
 const SDKAppID = 1600111046;
 
 export const tim = TencentCloudChat.create({
     SDKAppID
 });
+
+// Register Upload Plugin
+tim.registerPlugin({ 'tim-upload-plugin': TIMUploadPlugin });
 
 // Set log level
 tim.setLogLevel(1);
@@ -85,19 +89,82 @@ export const loginTIM = (userID: string, userSig: string) => {
     });
 };
 
+// Helper function to wait for SDK ready
+const waitForSDKReady = (timeoutMs: number = 5000): Promise<boolean> => {
+    return new Promise((resolve) => {
+        if (isSDKReady) {
+            resolve(true);
+            return;
+        }
+
+        const startTime = Date.now();
+        const checkInterval = setInterval(() => {
+            if (isSDKReady) {
+                clearInterval(checkInterval);
+                resolve(true);
+            } else if (Date.now() - startTime > timeoutMs) {
+                clearInterval(checkInterval);
+                console.warn('TIM SDK ready timeout after', timeoutMs, 'ms');
+                resolve(false);
+            }
+        }, 100);
+    });
+};
+
+// Cache for TIM groups - used when SDK isn't ready yet but groups were fetched earlier
+let cachedTIMGroups: any[] = [];
+
 export const getTIMGroups = async () => {
-    if (!isSDKReady) {
-        console.warn('getTIMGroups called but SDK is NOT READY. Returning [].');
-        return [];
+    // If SDK is ready, fetch fresh data
+    if (isSDKReady) {
+        try {
+            const res = await tim.getGroupList();
+            console.log('TIM getGroupList success. Count:', res.data.groupList.length);
+            // Update cache
+            cachedTIMGroups = res.data.groupList;
+            return res.data.groupList;
+        } catch (error) {
+            console.error('TIM getGroupList failed', error);
+            // Return cached data if available
+            if (cachedTIMGroups.length > 0) {
+                console.log('Returning cached TIM groups:', cachedTIMGroups.length);
+                return cachedTIMGroups;
+            }
+            return [];
+        }
     }
-    try {
-        const res = await tim.getGroupList();
-        console.log('TIM getGroupList success. Count:', res.data.groupList.length);
-        return res.data.groupList;
-    } catch (error) {
-        console.error('TIM getGroupList failed', error);
-        return [];
+
+    // SDK not ready - try to wait
+    console.log('getTIMGroups: SDK not ready, waiting...');
+    const ready = await waitForSDKReady(5000);
+
+    if (ready) {
+        console.log('getTIMGroups: SDK is now ready');
+        try {
+            const res = await tim.getGroupList();
+            console.log('TIM getGroupList success. Count:', res.data.groupList.length);
+            cachedTIMGroups = res.data.groupList;
+            return res.data.groupList;
+        } catch (error) {
+            console.error('TIM getGroupList failed', error);
+            return cachedTIMGroups.length > 0 ? cachedTIMGroups : [];
+        }
     }
+
+    // SDK still not ready - return cached data if available
+    if (cachedTIMGroups.length > 0) {
+        console.log('getTIMGroups: SDK not ready, returning cached groups:', cachedTIMGroups.length);
+        return cachedTIMGroups;
+    }
+
+    console.warn('getTIMGroups: SDK still not ready and no cache. Returning [].');
+    return [];
+};
+
+// Export function to update cache from outside (e.g., ClassManagement)
+export const setCachedTIMGroups = (groups: any[]) => {
+    cachedTIMGroups = groups;
+    console.log('TIM groups cache updated:', groups.length);
 };
 
 export const sendMessage = async (to: string, text: string, type: 'C2C' | 'GROUP' = 'GROUP') => {
@@ -143,5 +210,94 @@ export const getGroupMemberList = async (groupID: string) => {
     } catch (error) {
         console.error('TIM getGroupMemberList failed:', error);
         return [];
+    }
+};
+
+export const sendImageMessage = async (to: string, file: HTMLInputElement | File, type: 'C2C' | 'GROUP' = 'GROUP') => {
+    if (!isSDKReady) {
+        console.error('sendImageMessage failed: SDK not ready');
+        return null;
+    }
+    try {
+        const message = tim.createImageMessage({
+            to: to,
+            conversationType: type === 'GROUP' ? TencentCloudChat.TYPES.CONV_GROUP : TencentCloudChat.TYPES.CONV_C2C,
+            payload: {
+                file: file
+            },
+            onProgress: (percent: number) => {
+                console.log('Image upload progress:', percent);
+            }
+        });
+        const res = await tim.sendMessage(message);
+        console.log('TIM sendImageMessage success:', res);
+        return res.data.message;
+    } catch (error) {
+        console.error('TIM sendImageMessage failed:', error);
+        throw error;
+    }
+};
+
+export const sendFileMessage = async (to: string, file: HTMLInputElement | File, type: 'C2C' | 'GROUP' = 'GROUP') => {
+    if (!isSDKReady) {
+        console.error('sendFileMessage failed: SDK not ready');
+        return null;
+    }
+    try {
+        const message = tim.createFileMessage({
+            to: to,
+            conversationType: type === 'GROUP' ? TencentCloudChat.TYPES.CONV_GROUP : TencentCloudChat.TYPES.CONV_C2C,
+            payload: {
+                file: file
+            },
+            onProgress: (percent: number) => {
+                console.log('File upload progress:', percent);
+            }
+        });
+        const res = await tim.sendMessage(message);
+        console.log('TIM sendFileMessage success:', res);
+        return res.data.message;
+    } catch (error) {
+        console.error('TIM sendFileMessage failed:', error);
+        throw error;
+    }
+};
+
+export const dismissGroup = async (groupID: string) => {
+    if (!isSDKReady) throw new Error('SDK not ready');
+    try {
+        const res = await tim.dismissGroup(groupID);
+        console.log('TIM dismissGroup success:', res);
+        return res;
+    } catch (error) {
+        console.error('TIM dismissGroup failed:', error);
+        throw error;
+    }
+};
+
+export const quitGroup = async (groupID: string) => {
+    if (!isSDKReady) throw new Error('SDK not ready');
+    try {
+        const res = await tim.quitGroup(groupID);
+        console.log('TIM quitGroup success:', res);
+        return res;
+    } catch (error) {
+        console.error('TIM quitGroup failed:', error);
+        throw error;
+    }
+};
+
+export const changeGroupOwner = async (groupID: string, newOwnerID: string) => {
+    if (!isSDKReady) throw new Error('SDK not ready');
+    try {
+        const res = await tim.changeGroupOwner({
+            groupID: groupID,
+            newOwnerID: newOwnerID
+        });
+        console.log('TIM changeGroupOwner success:', res);
+        return res;
+    } catch (error) {
+        console.error('TIM changeGroupOwner failed:', error);
+        throw error;
     }
 };

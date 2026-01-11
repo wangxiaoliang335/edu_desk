@@ -7,6 +7,7 @@ import ClassScheduleWindow from "./components/ClassScheduleWindow";
 import IntercomWindow from "./components/IntercomWindow";
 
 import { invoke } from "@tauri-apps/api/core";
+import { loginTIM, getTIMGroups, setCachedTIMGroups } from "./utils/tim";
 
 // Main App Component handling Login/Dashboard flow
 function MainApp() {
@@ -16,7 +17,7 @@ function MainApp() {
   const handleLoginSuccess = async (data: any) => {
     console.log('Login Success Data:', JSON.stringify(data));
     // Save token for API calls
-    const token = data.token || data.data?.token || '';
+    const token = data.token || data.data?.token || data.access_token || data.data?.access_token || '';
     if (token) localStorage.setItem('token', token);
 
     try {
@@ -45,11 +46,16 @@ function MainApp() {
             setUserInfo(fullInfo);
             setIsLoggedIn(true);
 
-            if (fullInfo.teacher_unique_id) localStorage.setItem('teacher_unique_id', fullInfo.teacher_unique_id);
-            if (fullInfo.id_number) localStorage.setItem('id_number', fullInfo.id_number);
-
-            // Fetch UserSig for TIM
             if (fullInfo.teacher_unique_id) {
+              // Connect to WebSocket System
+              import('./utils/websocket').then(({ connectWS }) => {
+                connectWS(fullInfo.teacher_unique_id);
+              });
+
+              localStorage.setItem('teacher_unique_id', fullInfo.teacher_unique_id);
+              if (fullInfo.id_number) localStorage.setItem('id_number', fullInfo.id_number);
+
+              // Fetch UserSig for TIM
               try {
                 const sig = await invoke<string>('get_user_sig', {
                   userId: fullInfo.teacher_unique_id
@@ -57,12 +63,22 @@ function MainApp() {
                 if (sig) {
                   console.log('UserSig fetched and saved');
                   localStorage.setItem('userSig', sig);
+
+                  // Login to TIM and cache groups early so CreateClassGroupModal can use them
+                  console.log('[App] Logging into TIM early...');
+                  const timLoginSuccess = await loginTIM(fullInfo.teacher_unique_id, sig);
+                  if (timLoginSuccess) {
+                    console.log('[App] TIM login success, fetching groups for cache...');
+                    const timGroups = await getTIMGroups();
+                    setCachedTIMGroups(timGroups);
+                    console.log('[App] TIM groups cached:', timGroups.length);
+                  }
                 }
               } catch (e) {
-                console.error('Failed to fetch UserSig:', e);
+                console.error('Failed to fetch UserSig or login TIM:', e);
               }
+              return;
             }
-            return;
           }
         } catch (err) {
           console.error('Failed to fetch user info:', err);

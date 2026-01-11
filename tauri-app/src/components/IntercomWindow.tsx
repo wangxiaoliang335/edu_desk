@@ -35,6 +35,7 @@ const IntercomWindow = () => {
     const publishStreamRef = useRef<MediaStream | null>(null);
     const subscribeStreamRef = useRef<MediaStream | null>(null);
     const statusLogRef = useRef<HTMLDivElement>(null);
+    const isTalkingRef = useRef(false); // Track active talking intent to handle async races
 
     const log = (msg: string, type: 'info' | 'success' | 'date' | 'error' | 'warn' = 'info') => {
         const time = new Date().toLocaleTimeString();
@@ -55,7 +56,7 @@ const IntercomWindow = () => {
                 if (uStr) {
                     const u = JSON.parse(uStr);
                     setCurrentUser({
-                        id: u.teacher_unique_id,
+                        id: localStorage.getItem('teacher_unique_id') || u.teacher_unique_id,
                         name: u.name || u.strName || "我",
                         avatar: u.icon || u.face_url
                     });
@@ -68,15 +69,22 @@ const IntercomWindow = () => {
 
                 // Get Members
                 invoke<string>('get_group_members', { groupId, token })
-                    .then(resStr => {
+                    .then(async (resStr) => {
                         const res = JSON.parse(resStr);
                         if (res.data?.members) {
-                            const mList = Array.isArray(res.data.members) ? res.data.members : [];
-                            setMembers(mList.map((m: any) => ({
-                                id: m.user_id || m.id || m.Member_Account,
-                                name: m.user_name || m.name || m.student_name || "未知",
-                                avatar: m.face_url || m.avatar
-                            })));
+                            let mList = Array.isArray(res.data.members) ? res.data.members : [];
+
+                            // Simplified Mapping - Use Backend Data Only
+                            mList = mList.map((m: any) => {
+                                console.log("[Debug] Raw Member:", m);
+                                return {
+                                    id: String(m.user_id || m.id || m.Member_Account),
+                                    name: m.user_name || m.name || m.student_name || "未知",
+                                    avatar: m.face_url || m.avatar || ""
+                                };
+                            });
+
+                            setMembers(mList);
 
                             // Check initial room info from group_info if present
                             if (res.data.group_info?.temp_room) {
@@ -94,21 +102,83 @@ const IntercomWindow = () => {
                     .catch(err => log(`获取成员失败: ${err}`, 'error'));
 
                 // Fetch Temp Room explicit call (fallback/update)
-                invoke<string>('fetch_temp_room', { groupId })
-                    .then(resStr => {
+                log(`[Debug] Calling fetch_temp_room with group_id: ${groupId}`, 'info');
+                invoke<string>('fetch_temp_room', { groupId: groupId })
+                    .then(async (resStr) => {
+                        console.log("fetch_temp_room raw:", resStr);
                         const res = JSON.parse(resStr);
-                        // Logic here depends on API output. Assuming standard response format.
-                        // Usually it returns a list of rooms or a single room object.
-                        // From logs, C++ looks at data["temp_room"] or root object.
 
-                        // If res.code != 200, log error.
-                        // Let's assume standard {code, data: { ... }}
-                        if (res.data && res.data[0]) { // response key "rooms"? or just array?
-                            // TODO: refine parsing based on actual response if needed
-                            // For now rely on WS 'room_created' mostly if this fails
+                        let tr = null;
+                        if (res.code === 200) {
+                            if (res.data) {
+                                if (Array.isArray(res.data.rooms) && res.data.rooms.length > 0) {
+                                    // Structure: { data: { rooms: [...] } }
+                                    tr = res.data.rooms[0];
+                                } else if (!Array.isArray(res.data) && res.data.room_id) {
+                                    // Structure: { data: { room_id: ... } }
+                                    tr = res.data;
+                                } else if (Array.isArray(res.data) && res.data.length > 0) {
+                                    // Structure: { data: [...] }
+                                    tr = res.data[0];
+                                }
+                            }
+                        }
+
+                        if (tr) {
+                            log(`获取房间信息成功: ${tr.room_id}`, 'success');
+                            setRoomInfo({
+                                room_id: tr.room_id,
+                                whip_url: tr.whip_url || tr.publish_url,
+                                whep_url: tr.whep_url || tr.play_url,
+                                stream_name: tr.stream_name || tr.room_id,
+                                group_id: groupId
+                            });
+                        } else {
+                            log('未找到活跃房间，尝试开启对讲...', 'warn');
+
+                            // Try to enable intercom (create room)
+                            try {
+                                log(`[Debug] Enabling intercom (creating room) for group_id: ${groupId}`, 'info');
+                                const toggleResStr = await invoke<string>('toggle_group_intercom', {
+                                    groupId: groupId,
+                                    enable: true
+                                });
+                                console.log("toggle_group_intercom res:", toggleResStr);
+                                const toggleRes = JSON.parse(toggleResStr);
+
+                                if (toggleRes.code === 200) {
+                                    log('对讲已开启，重新获取房间...', 'info');
+                                    // Fetch again
+                                    setTimeout(async () => {
+                                        const retryResStr = await invoke<string>('fetch_temp_room', { groupId: groupId });
+                                        const retryRes = JSON.parse(retryResStr);
+                                        let r = null;
+                                        if (retryRes.data?.rooms && retryRes.data.rooms.length > 0) {
+                                            r = retryRes.data.rooms[0];
+                                        } else if (retryRes.data && retryRes.data[0]) {
+                                            r = retryRes.data[0];
+                                        }
+
+                                        if (r) {
+                                            log(`房间创建成功 ID: ${r.room_id}`, 'success');
+                                            setRoomInfo({
+                                                room_id: r.room_id,
+                                                whip_url: r.whip_url,
+                                                whep_url: r.whep_url,
+                                                stream_name: r.stream_name || r.room_id,
+                                                group_id: groupId
+                                            });
+                                        }
+                                    }, 500);
+                                } else {
+                                    log(`开启对讲失败: ${toggleRes.msg}`, 'error');
+                                }
+                            } catch (e: any) {
+                                log(`开启对讲请求错误: ${e}`, 'error');
+                            }
                         }
                     })
-                    .catch(err => console.error("Fetch temp room error", err));
+                    .catch(err => log(`获取房间失败: ${err}`, 'error'));
 
             } catch (e) {
                 log(`初始化数据失败: ${e}`, 'error');
@@ -120,24 +190,62 @@ const IntercomWindow = () => {
 
         init();
 
+
+
         return () => {
             // Cleanup
-            if (wsRef.current) wsRef.current.close();
-            if (publishPcRef.current) publishPcRef.current.close();
-            if (subscribePcRef.current) subscribePcRef.current.close();
-            if (publishStreamRef.current) publishStreamRef.current.getTracks().forEach(t => t.stop());
+            if (wsRef.current) {
+                wsRef.current.close();
+                wsRef.current = null;
+            }
+            if (publishPcRef.current) {
+                publishPcRef.current.close();
+                publishPcRef.current = null;
+            }
+            if (subscribePcRef.current) {
+                subscribePcRef.current.close();
+                subscribePcRef.current = null;
+            }
+            if (publishStreamRef.current) {
+                publishStreamRef.current.getTracks().forEach(t => t.stop());
+                publishStreamRef.current = null;
+            }
             // subscribeStreamRef tracks are remote, handled by PC close usually
         };
     }, [groupId]);
 
+    // 4. Auto-pull stream when ready (Top Level)
+    useEffect(() => {
+        if (roomInfo?.whep_url && wsRef.current && wsRef.current.readyState === WebSocket.OPEN && !subscribePcRef.current) {
+            log('检测到房间信息且WS已连接，自动拉流...', 'info');
+            startPullStream(roomInfo.whep_url, roomInfo);
+        }
+    }, [roomInfo]); // Depends on roomInfo change (which happens after fetch)
+
     const connectWebSocket = () => {
-        const uStr = localStorage.getItem('user_info');
-        if (!uStr) {
-            log('无法连接WS: 未登录', 'error');
+        if (wsRef.current) {
+            console.log('WS: Already connected or connecting');
             return;
         }
-        const u = JSON.parse(uStr);
-        const userId = u.teacher_unique_id;
+
+        let userId = localStorage.getItem('teacher_unique_id');
+
+        if (!userId) {
+            const uStr = localStorage.getItem('user_info');
+            if (uStr) {
+                try {
+                    const u = JSON.parse(uStr);
+                    userId = u.teacher_unique_id;
+                } catch (e) {
+                    console.error("Parse user_info failed", e);
+                }
+            }
+        }
+
+        if (!userId) {
+            log('无法连接WS: 未获取到用户ID', 'error');
+            return;
+        }
 
         const url = `ws://47.100.126.194:5000/ws/${userId}`;
         log(`连接WebSocket: ${url}`, 'info');
@@ -146,12 +254,14 @@ const IntercomWindow = () => {
         wsRef.current = ws;
 
         ws.onopen = () => {
+            if (ws !== wsRef.current) return;
             log('WebSocket 已连接', 'success');
             // Request Mic Permission preemptively
             requestMicPermission();
         };
 
         ws.onmessage = (event) => {
+            if (ws !== wsRef.current) return;
             try {
                 if (event.data === 'pong') return;
                 const msg = JSON.parse(event.data);
@@ -162,10 +272,13 @@ const IntercomWindow = () => {
         };
 
         ws.onclose = () => {
+            if (ws !== wsRef.current) return;
             log('WebSocket 已断开', 'error');
         };
 
         ws.onerror = (e) => {
+            if (ws !== wsRef.current) return;
+            // Only log genuine errors from the active socket
             log('WebSocket 错误', 'error');
         };
     };
@@ -266,6 +379,10 @@ const IntercomWindow = () => {
             return;
         }
 
+        // Prevent multiple starts
+        if (isTalkingRef.current) return;
+        isTalkingRef.current = true;
+
         try {
             log('开始推流...', 'info');
             setIsPublishing(true);
@@ -281,10 +398,31 @@ const IntercomWindow = () => {
                 publishStreamRef.current = stream;
             }
 
+            // Check if user released button during await
+            if (!isTalkingRef.current) {
+                log('推流已取消 (释放太快)', 'warn');
+                pc.close();
+                publishPcRef.current = null;
+                setIsPublishing(false);
+                return;
+            }
+
             stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
+
+            // Check again
+            if (!isTalkingRef.current) {
+                log('推流已取消', 'warn');
+                // Send nothing? or cleanup?
+                // If we don't send offer, server state is fine.
+                // Just cleanup PC
+                pc.close();
+                publishPcRef.current = null;
+                setIsPublishing(false);
+                return;
+            }
 
             const streamName = roomInfo.stream_name || roomInfo.room_id;
             const msg = {
@@ -299,12 +437,17 @@ const IntercomWindow = () => {
         } catch (e: any) {
             log(`推流失败: ${e.message}`, 'error');
             setIsPublishing(false);
+            isTalkingRef.current = false;
         }
     };
 
     const stopPublishing = () => {
+        if (!isTalkingRef.current) return; // Ignore redundant stops
+
         log('停止推流', 'info');
         setIsPublishing(false);
+        isTalkingRef.current = false;
+
         if (publishPcRef.current) {
             publishPcRef.current.close();
             publishPcRef.current = null;
@@ -374,7 +517,7 @@ const IntercomWindow = () => {
             {/* Footer Push-to-Talk */}
             <div className="w-full max-w-4xl bg-[#2C2C2C] rounded-b-xl p-6 flex flex-col items-center gap-4 border-t border-[#4C4C4C]">
                 <button
-                    disabled={!intercomEnabled}
+                    disabled={!intercomEnabled || !roomInfo}
                     onMouseDown={startPublishing}
                     onMouseUp={stopPublishing}
                     onMouseLeave={stopPublishing}
@@ -382,7 +525,7 @@ const IntercomWindow = () => {
                     onTouchEnd={stopPublishing}
                     className={`
                         w-20 h-20 rounded-full flex items-center justify-center text-3xl shadow-xl transition-all select-none
-                        ${!intercomEnabled ? 'bg-gray-600 text-gray-400 cursor-not-allowed' :
+                        ${!intercomEnabled || !roomInfo ? 'bg-gray-600 text-gray-400 cursor-not-allowed' :
                             isPublishing ? 'bg-red-500 text-white scale-110 ring-4 ring-red-500/30' : 'bg-blue-600 text-white hover:bg-blue-500 hover:scale-105 active:scale-95'}
                     `}
                 >

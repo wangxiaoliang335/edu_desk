@@ -4,6 +4,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import { Minus, X, Square, Copy, MessageCircle, Calendar, Users, BookOpen, Shuffle, Clock, Grid, LayoutDashboard, Layers, Award, Power, Mic, FileSpreadsheet } from 'lucide-react';
 import { useWebSocket } from '../context/WebSocketContext';
+import { sendMessage, getTIMGroups, isSDKReady, loginTIM } from '../utils/tim';
 import RandomCallModal from './modals/RandomCallModal';
 import HomeworkModal from './modals/HomeworkModal';
 import CountdownModal from './modals/CountdownModal';
@@ -14,7 +15,7 @@ import ClassInfoModal from './modals/ClassInfoModal';
 import CustomListModal from './modals/CustomListModal';
 import NotificationModal from './modals/NotificationModal';
 import SeatMap from './SeatMap';
-import { sendMessage } from '../utils/tim';
+
 
 const ClassScheduleWindow = () => {
     const { groupclassId } = useParams();
@@ -26,6 +27,10 @@ const ClassScheduleWindow = () => {
     // View State
     const [currentView, setCurrentView] = useState<'overview' | 'seatmap'>('overview');
     const [heatmapMode, setHeatmapMode] = useState<'none' | 'score' | 'attendance'>('none');
+
+    // Data State
+    const [className, setClassName] = useState("");
+    const [studentCount, setStudentCount] = useState(0);
 
     // Modal State
     const [isRandomCallOpen, setIsRandomCallOpen] = useState(false);
@@ -50,10 +55,130 @@ const ClassScheduleWindow = () => {
             setIsMaximized(await win.isMaximized());
         });
 
+        // Fetch Class Info
+        fetchClassInfo();
+
         return () => {
             unlisten.then(f => f());
         }
-    }, []);
+    }, [groupclassId]);
+
+    const fetchClassInfo = async () => {
+        if (!groupclassId) return;
+
+        // Initial fallback
+        setClassName(prev => prev || groupclassId || "未知班级");
+
+        try {
+            const userInfoStr = localStorage.getItem('user_info');
+            let token = "";
+            let idCard = "";
+            let teacherId = "";
+
+            if (userInfoStr) {
+                try {
+                    const u = JSON.parse(userInfoStr);
+                    token = u.token || "";
+                    idCard = u.id_number || u.data?.id_number || u.strIdNumber || localStorage.getItem('id_number') || "";
+                    teacherId = u.teacher_unique_id || u.data?.teacher_unique_id || localStorage.getItem('teacher_unique_id') || "";
+                } catch (e) { }
+            }
+
+            console.log(`[ClassSchedule] Fetching Info for ID: ${groupclassId}, Teacher: ${teacherId}`);
+
+            // Parallel requests to try to find the name
+            const p1 = invoke<string>('get_group_members', { groupId: groupclassId, token })
+                .then(resStr => {
+                    const res = JSON.parse(resStr);
+                    if (res.code === 200 || (res.data && res.data.code === 200)) {
+                        const data = res.data || {};
+                        const list = data.members || [];
+                        setStudentCount(list.length || data.group_info?.MemberNum || 0);
+                        const name = data.group_info?.Name || data.group_info?.GroupName;
+                        console.log("[ClassSchedule] p1 (Members) found:", name);
+                        return name;
+                    }
+                    return null;
+                })
+                .catch(e => { console.error("[ClassSchedule] p1 error:", e); return null; });
+
+            const p2 = idCard ? invoke<string>('get_user_friends', { idCard, token })
+                .then(resStr => {
+                    const res = JSON.parse(resStr);
+                    if (res.data) {
+                        const allGroups = [...(res.data.owner_groups || []), ...(res.data.member_groups || [])];
+                        // Fuzzy match because string ID from URL vs maybe formatted ID from server
+                        const target = allGroups.find((g: any) => g.group_id == groupclassId);
+                        console.log("[ClassSchedule] p2 (Friends) found:", target?.group_name);
+                        return target?.group_name;
+                    }
+                    return null;
+                })
+                .catch(e => { console.error("[ClassSchedule] p2 error:", e); return null; }) : Promise.resolve(null);
+
+            const p3 = teacherId ? invoke<string>('get_teacher_classes', { teacherUniqueId: teacherId, token })
+                .then(resStr => {
+                    const res = JSON.parse(resStr);
+                    const classes = res.data?.classes || ((Array.isArray(res.data)) ? res.data : []);
+                    const target = classes.find((c: any) => c.class_code == groupclassId);
+                    console.log("[ClassSchedule] p3 (Classes) found:", target?.class_name);
+                    return target?.class_name;
+                })
+                .catch(e => { console.error("[ClassSchedule] p3 error:", e); return null; }) : Promise.resolve(null);
+
+            // 4. TIM SDK Groups (Most accurate for "Group Chats")
+            const p4 = (async () => {
+                if (!teacherId) return null;
+                try {
+                    // We must login because this is a new window/context
+                    let ready = isSDKReady;
+                    if (!ready) {
+                        console.log("[ClassSchedule] TIM Login required. Fetching Sig...");
+                        const userSig = await invoke<string>('get_user_sig', { userId: teacherId });
+                        if (userSig) {
+                            ready = await loginTIM(teacherId, userSig) as boolean;
+                            console.log("[ClassSchedule] TIM Login Result:", ready);
+                        }
+                    }
+
+                    if (ready) {
+                        const groups = await getTIMGroups();
+                        console.log(`[ClassSchedule] TIM Groups fetched: ${groups.length}`);
+                        const target = groups.find((g: any) => g.groupID == groupclassId);
+                        if (target) {
+                            console.log("[ClassSchedule] TIM Match Found:", target.name, target.groupID);
+                        } else {
+                            console.log("[ClassSchedule] TIM No Match for:", groupclassId);
+                        }
+                        return target?.name;
+                    } else {
+                        console.warn("[ClassSchedule] TIM SDK not ready after login attempt");
+                    }
+                } catch (e) {
+                    console.error("[ClassSchedule] TIM Fetch failed in Window:", e);
+                }
+                return null;
+            })();
+
+            // Wait for results and pick the best name
+            const [nameFromGroup, nameFromFriends, nameFromClasses, nameFromTIM] = await Promise.all([p1, p2, p3, p4]);
+
+            console.log("[ClassSchedule] Final Candidates:", { nameFromGroup, nameFromFriends, nameFromClasses, nameFromTIM });
+
+            // Priority: TIM Name > Server Group Name > Teacher Classes Name > Group Info Name
+            const finalName = nameFromTIM || nameFromFriends || nameFromClasses || nameFromGroup;
+            if (finalName) {
+                setClassName(finalName);
+            } else {
+                // If we still found nothing, keep showing ID or default, but remove "Loading..." logic if any
+                setClassName(prev => prev || groupclassId || "未命名班级");
+            }
+
+        } catch (e) {
+            console.error("Failed to fetch class info:", e);
+            setClassName(prev => prev || groupclassId || "网络错误");
+        }
+    };
 
     const handleMinimize = () => getCurrentWindow().minimize();
     const handleMaximize = async () => {
@@ -140,7 +265,7 @@ const ClassScheduleWindow = () => {
                 <div className="flex items-center gap-4">
                     <div className="font-bold text-gray-700 flex items-center gap-2">
                         <div className="bg-blue-500 text-white p-1 rounded-md shadow-sm shadow-blue-200"><Users size={12} /></div>
-                        <span className="text-sm tracking-wide">班级空间 - {groupclassId}</span>
+                        <span className="text-sm tracking-wide">班级空间 - {className || groupclassId}</span>
                     </div>
                     {/* View Switcher */}
                     <div className="flex bg-gray-100/80 p-0.5 rounded-lg border border-gray-200/50">
@@ -176,10 +301,10 @@ const ClassScheduleWindow = () => {
                             <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden flex-shrink-0">
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-bl-full -mr-8 -mt-8 opacity-50 pointer-events-none"></div>
                                 <div className="relative z-10">
-                                    <h1 className="text-xl font-bold text-gray-800 mb-1">高二 (3) 班</h1>
+                                    <h1 className="text-xl font-bold text-gray-800 mb-1">{className}</h1>
                                     <p className="text-sm text-gray-500 font-medium">数学</p>
                                     <div className="mt-4 flex items-center gap-3 text-xs text-gray-400">
-                                        <span className="flex items-center gap-1"><Users size={12} /> 45 人</span>
+                                        <span className="flex items-center gap-1"><Users size={12} /> {studentCount} 人</span>
                                         <span className="w-px h-3 bg-gray-200"></span>
                                         <span className="flex items-center gap-1"><Calendar size={12} /> 2023-2024</span>
                                     </div>
@@ -418,6 +543,7 @@ const ClassScheduleWindow = () => {
             <CustomListModal
                 isOpen={isCustomListOpen}
                 onClose={() => setIsCustomListOpen(false)}
+                classId={groupclassId}
             />
             <NotificationModal
                 isOpen={isNotificationOpen}

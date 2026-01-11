@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 
 interface MidtermGradeModalProps {
     isOpen: boolean;
@@ -6,6 +7,10 @@ interface MidtermGradeModalProps {
     fileName: string;
     data: any[]; // Array of Arrays
     classId?: string;
+    file?: File;
+    autoPrompt?: boolean;
+    onAutoPromptComplete?: () => void;
+    onDataChange?: (newData: any[]) => void;
 }
 
 interface TableRow {
@@ -13,31 +18,81 @@ interface TableRow {
     [key: string]: any;
 }
 
-const MidtermGradeModal = ({ isOpen, onClose, fileName, data, classId }: MidtermGradeModalProps) => {
+const MidtermGradeModal = ({ isOpen, onClose, fileName, data, classId, file, autoPrompt, onAutoPromptComplete, onDataChange }: MidtermGradeModalProps) => {
     const [headers, setHeaders] = useState<string[]>([]);
     const [rows, setRows] = useState<TableRow[]>([]);
+    const [selectedRowId, setSelectedRowId] = useState<number | null>(null);
+    const [selectedCol, setSelectedCol] = useState<string | null>(null);
+
+    // Helper to sync with parent
+    const notifyParent = (currentRows: TableRow[], currentHeaders: string[]) => {
+        if (!onDataChange) return;
+        const aoa = [
+            currentHeaders,
+            ...currentRows.map(r => {
+                const rowArr: any = currentHeaders.map(h => r[h]);
+                // Re-attach comment properties to the array object
+                Object.keys(r).forEach(k => {
+                    if (k.startsWith('_comment_')) {
+                        rowArr[k] = r[k];
+                    }
+                });
+                return rowArr;
+            })
+        ];
+        onDataChange(aoa);
+    };
 
     useEffect(() => {
         if (data && data.length > 0) {
             const rawHeaders = (data[0] as any[]).map(h => String(h).trim());
-            console.log("Raw Headers:", rawHeaders);
 
-            // Should valid headers exist? Yes.
-            // If "总分" is missing, should we add it? 
-            // QT logic seems to just read. But let's add it if missing for completeness of 'Student Attribute Table' concept.
+            // Only re-process if headers or length mismatches to avoid loop if object ref changes but content is same?
+            // But 'data' prop WILL change reference on every parent update.
+            // We need to break the loop. 
+            // The loop is: Parent Data Change -> Prop Data Change -> useEffect -> setRows. 
+            // If we notify parent inside the actions, parent updates Data, Prop updates.
+            // useEffect will fire again.
+            // We can prevent unnecessary setRows if we compare deep equality, but that's expensive.
+            // OR, we can use a ref to track if the update came from self?
+            // Actually, if we just setRows here, it is fine. The user action triggered the change, parent updated, passed back. 
+            // The key is: Does `setRows` cause a re-render/re-effect that triggers `notifyParent`? 
+            // NO, `notifyParent` is only called on user actions, not in useEffect.
+            // So the Flow: User Action -> setRows + notifyParent -> Parent Update -> Prop Update -> useEffect -> setRows.
+            // Ideally currentRows and newPropRows are identical. 
+            // We just need to make sure we don't notifyParent inside the useEffect!
 
             let processedHeaders = [...rawHeaders];
             if (!processedHeaders.includes('总分')) {
                 processedHeaders.push('总分');
             }
 
-            // Process rows
-            const processedRows = data.slice(1).map((row, idx) => {
+            let processedRows = data.slice(1).map((row, idx) => {
                 const rowObj: TableRow = { _id: idx };
                 rawHeaders.forEach((h, i) => {
                     rowObj[h] = row[i];
                 });
+
+                Object.keys(row).forEach(key => {
+                    if (key.startsWith('_comment_')) {
+                        rowObj[key] = (row as any)[key];
+                    }
+                });
                 return rowObj;
+            });
+
+            // Auto-calculate Totals upon import
+            processedRows = processedRows.map(r => {
+                let sum = 0;
+                processedHeaders.forEach(h => {
+                    if (!['学号', '姓名', '总分'].includes(h)) {
+                        const val = parseFloat(r[h]);
+                        if (!isNaN(val)) {
+                            sum += val;
+                        }
+                    }
+                });
+                return { ...r, '总分': sum };
             });
 
             setHeaders(processedHeaders);
@@ -45,27 +100,422 @@ const MidtermGradeModal = ({ isOpen, onClose, fileName, data, classId }: Midterm
         }
     }, [data]);
 
-    if (!isOpen) return null;
-
-    const handleValueClick = (rowId: number, colKey: string, currentValue: any) => {
-        // Prevent editing Name/ID/Total directly via this simple prompt if desired, 
-        // though QT sometimes allows. QT: Total is read-only.
-        if (colKey === '总分') return;
-
-        const newValue = prompt(`请输入 ${colKey} 的新值:`, currentValue || '');
-        if (newValue !== null) {
-            setRows(prev => prev.map(r => {
-                if (r._id === rowId) {
-                    return { ...r, [colKey]: newValue };
+    // Auto Prompt for Upload
+    useEffect(() => {
+        if (isOpen && autoPrompt && rows.length > 0) { // Wait for rows to populate
+            const timer = setTimeout(() => {
+                if (window.confirm("导入成功！是否立即上传到服务器？")) {
+                    handleUpload();
                 }
-                return r;
-            }));
-            // TODO: Recalculate total if needed?
+                if (onAutoPromptComplete) onAutoPromptComplete();
+            }, 300); // 300ms delay for smooth UI transition
+            return () => clearTimeout(timer);
+        }
+    }, [isOpen, autoPrompt, rows, onAutoPromptComplete]);
+
+    const calculateTerm = () => {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth() + 1; // 1-12
+        // Sep(9) to Jan(1) is first term of (year)-(year+1)
+        // Else is second term of (year-1)-(year)
+        if (month >= 9 || month <= 1) {
+            const startYear = month >= 9 ? year : year - 1;
+            return `${startYear}-${startYear + 1}-1`;
+        } else {
+            return `${year - 1}-${year}-2`;
         }
     };
 
+    const handleUpload = async () => {
+        let targetClassId = classId;
+        if (!targetClassId) {
+            // Fallback: try to get from URL
+            // Supports: /class/chat/:id and /class/schedule/:id
+            const match = window.location.pathname.match(/\/class\/(?:chat|schedule)\/([^/]+)/);
+            if (match && match[1]) {
+                targetClassId = match[1];
+                console.log("Recovered classId from URL:", targetClassId);
+            }
+        }
+
+        if (!targetClassId) {
+            alert(`缺少班级ID，无法上传！\n当前路径: ${window.location.pathname}`);
+            return;
+        }
+
+        // Fix Class ID: Remove suffix '01' if present (e.g. 00001100601 -> 000011006)
+        if (targetClassId && targetClassId.length === 11) {
+            targetClassId = targetClassId.substring(0, 9);
+        }
+
+        const term = calculateTerm();
+        const scores = rows.map(r => {
+            const scoreObj: any = {
+                student_name: r['姓名'],
+                student_id: r['学号'],
+            };
+            // Add dynamic fields
+            headers.forEach(h => {
+                if (!['学号', '姓名'].includes(h)) {
+                    scoreObj[h] = r[h];
+                }
+            });
+            // Total is already in headers loop if we include it
+            // distinct handling for Total is not needed if it's in headers
+            // BUT backend might expect 'total_score' key explicitly for the main column
+            if (r['总分']) {
+                scoreObj['total_score'] = r['总分'];
+            }
+            return scoreObj;
+        });
+
+        const fieldStrings = headers.filter(h => !['学号', '姓名'].includes(h));
+        // Server expects objects for fields, based on "str object has no attribute get" error.
+        const fields = fieldStrings.map((h, idx) => ({
+            field_name: h,
+            field_type: "number", // Defaulting to number
+            field_order: idx + 1,
+            is_total: h === '总分' ? 1 : 0
+        }));
+
+        const description = `说明:该表为统计表。包含以下科目/属性: ${fieldStrings.filter(f => f !== '总分').join('、')}`;
+
+        const payload = {
+            class_id: targetClassId,
+            exam_name: fileName,
+            remark: description, // Matches QT 'remark'
+            excel_file_description: description, // Matches QT
+            term: term,
+            operation_mode: "replace",
+            excel_file_name: file?.name || fileName,
+            fields: fields, // Objects
+            excel_files: [
+                {
+                    filename: file?.name || fileName,
+                    description: description,
+                    url: "",
+                    fields: fieldStrings // Strings: ["总分", "数学", ...] - Note: QT example puts '总分' first usually
+                }
+            ],
+            scores: scores
+        };
+        console.log("Upload Payload:", JSON.stringify(payload, null, 2));
+
+        const formData = new FormData();
+        formData.append('data', JSON.stringify(payload));
+        if (file) {
+            formData.append('excel_file', file);
+        }
+
+        try {
+            const response = await fetch('/api/student-scores/save', {
+                method: 'POST',
+                body: formData
+            });
+            const resData = await response.json();
+            if (resData.code === 200) {
+                alert(`上传成功！\n${resData.message}`);
+                // onClose(); // Optional: close on success?
+            } else {
+                alert(`上传失败: ${resData.message}`);
+            }
+        } catch (error) {
+            console.error("Upload error:", error);
+            alert("上传出错，请检查网络或服务器状态");
+        }
+    };
+
+    const [contextMenu, setContextMenu] = useState<{ x: number, y: number, rowId: number, colKey: string } | null>(null);
+
+    // Close context menu on click elsewhere
+    useEffect(() => {
+        const handleClick = () => setContextMenu(null);
+        window.addEventListener('click', handleClick);
+        return () => window.removeEventListener('click', handleClick);
+    }, []);
+
+    const setScoreToServer = async (rowId: number, colKey: string, newValue: string, studentName: string, studentId: string) => {
+        let cleanClassId = classId;
+        if (!cleanClassId) {
+            const match = window.location.pathname.match(/\/class\/(?:chat|schedule)\/([^/]+)/);
+            if (match && match[1]) cleanClassId = match[1];
+        }
+        if (cleanClassId && cleanClassId.length === 11) cleanClassId = cleanClassId.substring(0, 9);
+
+        if (!cleanClassId) {
+            console.error("Missing Class ID for set-score");
+            return;
+        }
+
+        const scoreVal = newValue.trim() === "" ? null : parseFloat(newValue);
+        if (scoreVal !== null && isNaN(scoreVal)) {
+            alert("必须输入数字 (或留空表示删除)!");
+            return;
+        }
+
+        const payload = {
+            class_id: cleanClassId,
+            term: calculateTerm(),
+            student_name: studentName,
+            student_id: studentId,
+            field_name: colKey,
+            excel_filename: fileName,
+            score: scoreVal
+        };
+
+        try {
+            const res = await fetch('/api/student-scores/set-score', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (data.code === 200) {
+                // Update Row with server returned Total Score if available
+                const serverData = data.data;
+                let newTotal = null;
+                if (serverData.excel_total !== undefined && serverData.excel_total !== null) newTotal = serverData.excel_total;
+                else if (serverData.excel_total_score !== undefined && serverData.excel_total_score !== null) newTotal = serverData.excel_total_score;
+                else if (serverData.total_score !== undefined && serverData.total_score !== null) newTotal = serverData.total_score;
+
+                if (newTotal !== null) {
+                    setRows(prev => prev.map(r => {
+                        if (r._id === rowId) {
+                            return { ...r, '总分': newTotal };
+                        }
+                        return r;
+                    }));
+                }
+            } else {
+                console.error("Set Score Failed:", data.message);
+                alert(`设置分数失败: ${data.message}`);
+            }
+        } catch (e) {
+            console.error("Set Score Error:", e);
+        }
+    };
+
+    const setCommentToServer = async (rowId: number, colKey: string, comment: string, studentName: string, studentId: string) => {
+        let cleanClassId = classId;
+        if (!cleanClassId) {
+            const match = window.location.pathname.match(/\/class\/(?:chat|schedule)\/([^/]+)/);
+            if (match && match[1]) cleanClassId = match[1];
+        }
+        if (cleanClassId && cleanClassId.length === 11) cleanClassId = cleanClassId.substring(0, 9);
+
+        const payload = {
+            class_id: cleanClassId,
+            term: calculateTerm(),
+            student_name: studentName,
+            student_id: studentId,
+            field_name: colKey,
+            excel_filename: fileName,
+            comment: comment
+        };
+
+        try {
+            const res = await fetch('/api/student-scores/set-comment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (data.code === 200) {
+                // Update local state to show comment indicator?
+                // We can store comments in a separate state or special field in row like `_comment_${colKey}`
+                setRows(prev => {
+                    const newRows = prev.map(r => {
+                        if (r._id === rowId) {
+                            return { ...r, [`_comment_${colKey}`]: comment };
+                        }
+                        return r;
+                    });
+                    notifyParent(newRows, headers);
+                    return newRows;
+                });
+            } else {
+                alert(`设置注释失败: ${data.message}`);
+            }
+        } catch (e) {
+            console.error("Set Comment Error:", e);
+        }
+    };
+
+    const handleValueClick = (rowId: number, colKey: string, currentValue: any, studentName: string, studentId: string) => {
+        if (['总分'].includes(colKey)) return;
+
+        const newValue = prompt(`请输入 ${colKey} 的新值:`, currentValue || '');
+        if (newValue !== null) {
+            // 1. Optimistic Update
+            setRows(prev => {
+                const updatedRows = prev.map(r => {
+                    if (r._id === rowId) {
+                        const newRow = { ...r, [colKey]: newValue };
+                        newRow['总分'] = calculateRowTotal(newRow, headers);
+                        return newRow;
+                    }
+                    return r;
+                });
+                notifyParent(updatedRows, headers);
+                return updatedRows;
+            });
+
+            // 2. Server Update
+            setScoreToServer(rowId, colKey, newValue, studentName, studentId);
+        }
+    };
+
+    const handleContextMenu = (e: React.MouseEvent, rowId: number, colKey: string) => {
+        e.preventDefault();
+        setContextMenu({ x: e.pageX, y: e.pageY, rowId, colKey });
+    };
+
+    const handleAddComment = () => {
+        if (!contextMenu) return;
+        const { rowId, colKey } = contextMenu;
+        const row = rows.find(r => r._id === rowId);
+        if (!row) return;
+
+        const currentComment = row[`_comment_${colKey}`] || "";
+        const newComment = prompt("请输入注释:", currentComment);
+
+        if (newComment !== null) {
+            setCommentToServer(rowId, colKey, newComment, row['姓名'], row['学号']);
+        }
+        setContextMenu(null); // Close menu
+    };
+    // Recalculate Total for a single row object
+    const calculateRowTotal = (row: TableRow, currentHeaders: string[]) => {
+        let sum = 0;
+        currentHeaders.forEach(h => {
+            if (!['学号', '姓名', '总分'].includes(h)) {
+                const val = parseFloat(row[h]);
+                if (!isNaN(val)) {
+                    sum += val;
+                }
+            }
+        });
+        return sum;
+    };
+
+    const handleAddRow = () => {
+        const newId = rows.length > 0 ? Math.max(...rows.map(r => r._id)) + 1 : 0;
+        const newRow: TableRow = { _id: newId, '学号': '', '姓名': '', '总分': 0 };
+        headers.forEach(h => {
+            if (!newRow[h]) newRow[h] = "";
+        });
+        setRows(prev => {
+            const newRows = [...prev, newRow];
+            notifyParent(newRows, headers);
+            return newRows;
+        });
+    };
+
+    const handleDeleteRow = () => {
+        if (selectedRowId === null) {
+            if (confirm("未选择行，是否删除最后一行？")) {
+                setRows(prev => {
+                    if (prev.length === 0) return prev;
+                    const newRows = prev.slice(0, prev.length - 1);
+                    notifyParent(newRows, headers);
+                    return newRows;
+                });
+            }
+            return;
+        }
+        if (confirm("确定删除选中行吗？")) {
+            setRows(prev => {
+                const newRows = prev.filter(r => r._id !== selectedRowId);
+                notifyParent(newRows, headers);
+                return newRows;
+            });
+            setSelectedRowId(null);
+        }
+    };
+
+    const handleAddColumn = () => {
+        const name = prompt("请输入新列名:");
+        if (name && !headers.includes(name)) {
+            const newHeaders = [...headers];
+            const totalIdx = newHeaders.indexOf('总分');
+            if (totalIdx > -1) {
+                newHeaders.splice(totalIdx, 0, name);
+            } else {
+                newHeaders.push(name);
+            }
+            setHeaders(newHeaders);
+            setRows(prev => {
+                const newRows = prev.map(r => ({ ...r, [name]: '' }));
+                notifyParent(newRows, newHeaders);
+                return newRows;
+            });
+        } else if (name) {
+            alert("列名已存在!");
+        }
+    };
+
+    const handleDeleteColumn = () => {
+        const colName = selectedCol || prompt("请输入要删除的列名:");
+        if (!colName) return;
+        if (['学号', '姓名', '总分'].includes(colName)) {
+            alert("该列不可删除!");
+            return;
+        }
+        if (headers.includes(colName)) {
+            if (confirm(`确定删除列 "${colName}" 吗？`)) {
+                const newHeaders = headers.filter(h => h !== colName);
+                setHeaders(newHeaders);
+                setRows(prev => {
+                    const newRows = prev.map(r => {
+                        const newR = { ...r };
+                        delete newR[colName];
+                        newR['总分'] = calculateRowTotal(newR, newHeaders);
+                        return newR;
+                    });
+                    notifyParent(newRows, newHeaders);
+                    return newRows;
+                });
+                setSelectedCol(null);
+            }
+        } else {
+            alert("未找到该列");
+        }
+    };
+
+    const handleExport = () => {
+        const aoa = [
+            headers,
+            ...rows.map(r => headers.map(h => r[h]))
+        ];
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+        XLSX.writeFile(wb, `${fileName || "export"}.xlsx`);
+    };
+
+
+
+    if (!isOpen) return null;
+
     return (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+            {/* Context Menu */}
+            {contextMenu && (
+                <div
+                    className="fixed bg-white border border-gray-300 shadow-lg rounded py-1 z-[80]"
+                    style={{ top: contextMenu.y, left: contextMenu.x }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <button
+                        className="block w-full text-left px-4 py-2 hover:bg-gray-100 text-sm"
+                        onClick={handleAddComment}
+                    >
+                        编辑注释
+                    </button>
+                </div>
+            )}
+
             <div className="bg-[#808080] rounded shadow-2xl w-[1200px] h-[800px] flex flex-col overflow-hidden text-sm select-none relative">
 
                 {/* Close Button (Absolute like QT) */}
@@ -85,18 +535,31 @@ const MidtermGradeModal = ({ isOpen, onClose, fileName, data, classId }: Midterm
 
                 {/* Controls (Green Buttons) */}
                 <div className="px-4 py-2 flex gap-2 overflow-x-auto justify-start border-b border-gray-600 pb-4">
-                    {['添加行', '删除行', '删除列', '添加列', '导出', '上传服务器'].map(btn => (
-                        <button key={btn} className={`px-4 py-1.5 rounded text-white text-xs font-bold whitespace-nowrap shadow-sm ${btn === '上传服务器' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-700 hover:bg-green-800'}`}>
-                            {btn}
-                        </button>
-                    ))}
+                    <button onClick={handleAddRow} className="px-4 py-1.5 rounded text-white text-xs font-bold whitespace-nowrap shadow-sm bg-green-700 hover:bg-green-800">
+                        添加行
+                    </button>
+                    <button onClick={handleDeleteRow} className={`px-4 py-1.5 rounded text-white text-xs font-bold whitespace-nowrap shadow-sm ${selectedRowId !== null ? 'bg-red-600 hover:bg-red-700' : 'bg-green-700 hover:bg-green-800'}`}>
+                        {selectedRowId !== null ? '删除选中行' : '删除行'}
+                    </button>
+                    <button onClick={handleDeleteColumn} className={`px-4 py-1.5 rounded text-white text-xs font-bold whitespace-nowrap shadow-sm ${selectedCol ? 'bg-red-600 hover:bg-red-700' : 'bg-green-700 hover:bg-green-800'}`}>
+                        {selectedCol ? `删除列(${selectedCol})` : '删除列'}
+                    </button>
+                    <button onClick={handleAddColumn} className="px-4 py-1.5 rounded text-white text-xs font-bold whitespace-nowrap shadow-sm bg-green-700 hover:bg-green-800">
+                        添加列
+                    </button>
+                    <button onClick={handleExport} className="px-4 py-1.5 rounded text-white text-xs font-bold whitespace-nowrap shadow-sm bg-green-700 hover:bg-green-800">
+                        导出
+                    </button>
+                    <button onClick={handleUpload} className="px-4 py-1.5 rounded text-white text-xs font-bold whitespace-nowrap shadow-sm bg-blue-600 hover:bg-blue-700">
+                        上传服务器
+                    </button>
                 </div>
 
                 {/* Description */}
                 <div className="px-4 py-2">
                     <div className="font-bold text-black mb-1">说明:</div>
                     <div className="bg-[#ffa500] text-black p-2 border border-gray-500 text-xs shadow-inner">
-                        说明:该表为统计表。包含以下科目/属性: {headers.filter(h => !['学号', '姓名', '总分'].includes(h)).join('、')}
+                        说明:该表为学生属性表。包含以下评分项: {headers.filter(h => !['学号', '姓名', '总分'].includes(h)).join('、')}
                     </div>
                 </div>
 
@@ -107,7 +570,11 @@ const MidtermGradeModal = ({ isOpen, onClose, fileName, data, classId }: Midterm
                             <tr>
                                 <th className="w-10 border border-gray-400 p-1 bg-[#e0e0e0]"></th>
                                 {headers.map(h => (
-                                    <th key={h} className="border border-gray-400 p-2 text-gray-800 min-w-[80px] font-bold bg-[#e0e0e0]">
+                                    <th
+                                        key={h}
+                                        onClick={() => !['学号', '姓名', '总分'].includes(h) && setSelectedCol(h === selectedCol ? null : h)}
+                                        className={`border border-gray-400 p-2 text-gray-800 min-w-[80px] font-bold cursor-pointer transition-colors ${selectedCol === h ? 'bg-blue-200' : 'bg-[#e0e0e0] hover:bg-[#d0d0d0]'}`}
+                                    >
                                         {h}
                                     </th>
                                 ))}
@@ -115,33 +582,37 @@ const MidtermGradeModal = ({ isOpen, onClose, fileName, data, classId }: Midterm
                         </thead>
                         <tbody>
                             {rows.map((row, idx) => (
-                                <tr key={row._id} className="hover:bg-blue-50">
+                                <tr
+                                    key={row._id}
+                                    onClick={() => setSelectedRowId(row._id)}
+                                    className={`cursor-pointer transition-colors ${selectedRowId === row._id ? 'bg-blue-100' : 'hover:bg-blue-50'}`}
+                                >
                                     <td className="border border-gray-300 bg-[#f8f8f8] text-center text-gray-500 text-xs font-mono select-none">{idx + 1}</td>
                                     {headers.map(col => {
+                                        const isScore = !['学号', '姓名', '总分'].includes(col);
                                         const val = row[col];
-                                        const isFixed = ['学号', '姓名'].includes(col);
-                                        const isScore = !isFixed && col !== '总分';
+                                        const hasComment = row[`_comment_${col}`] ? true : false;
 
                                         return (
-                                            <td key={col} className="border border-gray-300 p-1 text-center">
+                                            <td
+                                                key={col}
+                                                className={`border border-gray-300 p-1 text-center ${selectedCol === col ? 'bg-blue-50' : ''} ${hasComment ? 'bg-yellow-100' : ''}`}
+                                                onContextMenu={(e) => {
+                                                    if (isScore) handleContextMenu(e, row._id, col);
+                                                }}
+                                            >
                                                 {isScore ? (
-                                                    <div className="flex items-center justify-center gap-1">
-                                                        <button
-                                                            onClick={() => handleValueClick(row._id, col, val)}
-                                                            className="min-w-[40px] px-2 py-1 bg-green-600 text-white rounded hover:bg-green-500 transition-colors font-medium cursor-pointer border-2 border-yellow-300 shadow-sm"
-                                                        >
-                                                            {val || '0'}
-                                                        </button>
-                                                        <button className="px-1.5 py-1 bg-green-600 text-white rounded hover:bg-green-500 text-[10px] border-none shadow-sm">
-                                                            注
-                                                        </button>
-                                                    </div>
-                                                ) : col === '总分' ? (
-                                                    <div className="min-w-[40px] px-2 py-1 bg-[#4a4a4a] text-[#dddddd] rounded border border-yellow-400 font-medium inline-block shadow-sm">
-                                                        {val || '0'}
-                                                    </div>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); setSelectedRowId(row._id); handleValueClick(row._id, col, val, row['姓名'], row['学号']); }}
+                                                        className={`w-full h-full px-2 py-1 text-gray-800 hover:bg-gray-200 rounded text-sm text-left ${hasComment ? 'bg-yellow-100' : ''}`}
+                                                        title={row[`_comment_${col}`]} // Tooltip for comment
+                                                    >
+                                                        {val || ''}
+                                                    </button>
                                                 ) : (
-                                                    <span className="text-gray-800 font-medium">{val}</span>
+                                                    <span className={`text-gray-800 font-medium px-2 ${col === '总分' ? 'text-blue-600' : ''}`}>
+                                                        {val}
+                                                    </span>
                                                 )}
                                             </td>
                                         );

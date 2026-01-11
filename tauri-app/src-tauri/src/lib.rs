@@ -595,6 +595,260 @@ async fn save_course_schedule(class_id: String, term: String, days: Vec<String>,
     Ok(text)
 }
 
+#[tauri::command]
+async fn get_classes_by_prefix(prefix: String) -> Result<String, String> {
+    println!("Backend: get_classes_by_prefix called with prefix: {}", prefix);
+    let client = reqwest::Client::new();
+    let url = format!("{}{}", API_BASE_URL, "getClassesByPrefix");
+
+    let response = client.post(&url)
+        .json(&serde_json::json!({
+            "prefix": prefix
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
+#[tauri::command]
+async fn search_classes(keyword: String, school_id: Option<String>) -> Result<String, String> {
+    println!("Backend: search_classes called with keyword: {}, school_id: {:?}", keyword, school_id);
+    let client = reqwest::Client::new();
+    let mut url = format!("{}classes/search?class_code={}", API_BASE_URL, keyword);
+
+    if let Some(sid) = school_id {
+        if !sid.is_empty() {
+            url.push_str(&format!("&schoolid={}", sid));
+        }
+    }
+
+    let response = client.get(&url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
+#[tauri::command]
+async fn search_teachers(keyword: String) -> Result<String, String> {
+    println!("Backend: search_teachers called with keyword: {}", keyword);
+    let client = reqwest::Client::new();
+    let url = format!("{}teachers/search", API_BASE_URL);
+    
+    // Determine if keyword looks like ID or Name (Simple logic: check if purely numeric/alphanumeric with special chars vs chinese)
+    // Rust doesn't have easy "containsChinese" regex without crate, but we can pass generic params or just try one.
+    // The python API likely handles query params manually.
+    // Logic from SearchDialog.h: if looksLikeId -> teacher_unique_id else name.
+    
+    let is_id = keyword.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    
+    let query_param = if is_id {
+        format!("teacher_unique_id={}", keyword)
+    } else {
+        format!("name={}", keyword)
+    };
+    
+    let full_url = format!("{}?{}", url, query_param);
+
+    let response = client.get(&full_url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
+#[tauri::command]
+async fn search_class_groups(keyword: String) -> Result<String, String> {
+    println!("Backend: search_class_groups called with keyword: {}", keyword);
+    let client = reqwest::Client::new();
+    let url = format!("{}groups/search", API_BASE_URL);
+    
+    let is_id = keyword.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    
+    let query_param = if is_id {
+        format!("group_id={}", keyword)
+    } else {
+        format!("group_name={}", keyword)
+    };
+    
+    let full_url = format!("{}?{}", url, query_param);
+
+    let response = client.get(&full_url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
+#[tauri::command]
+async fn join_class_group_request(group_id: String, user_id: String, user_name: String, reason: String) -> Result<String, String> {
+    println!("Backend: join_class_group_request called. Group: {}, User: {}", group_id, user_id);
+    let client = reqwest::Client::new();
+    let url = format!("{}groups/join", API_BASE_URL); 
+
+    let response = client.post(&url)
+        .json(&serde_json::json!({
+            "group_id": group_id,
+            "user_id": user_id,
+            "user_name": user_name,
+            "reason": reason
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
+#[tauri::command]
+async fn join_class(teacher_unique_id: String, class_code: String) -> Result<String, String> {
+    println!("Backend: join_class called. Teacher: {}, ClassCode: {}", teacher_unique_id, class_code);
+    let client = reqwest::Client::new();
+    let url = format!("{}teachers/classes/add", API_BASE_URL);
+
+    let response = client.post(&url)
+        .json(&serde_json::json!({
+            "teacher_unique_id": teacher_unique_id,
+            "class_code": class_code,
+            "role": "teacher"
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
+// Helper to fetch UserSig internally
+async fn fetch_user_sig_internal(user_id: &str) -> Result<String, String> {
+    let client = reqwest::Client::new();
+    let url = format!("{}getUserSig", API_BASE_URL);
+    let res = client.post(&url)
+        .form(&serde_json::json!({ "user_id": user_id }))
+        .send().await.map_err(|e| e.to_string())?;
+
+    if res.status().is_success() {
+        let text = res.text().await.map_err(|e| e.to_string())?;
+        let json: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+        let sig = json["data"]["user_sig"].as_str()
+            .or_else(|| json["data"]["usersig"].as_str())
+            .or_else(|| json["data"]["sig"].as_str())
+            .or_else(|| json["user_sig"].as_str())
+            .or_else(|| json["usersig"].as_str())
+            .or_else(|| json["sig"].as_str());
+        
+        if let Some(s) = sig {
+            Ok(s.to_string())
+        } else {
+            Err("UserSig not found".to_string())
+        }
+    } else {
+        Err(format!("Request failed: {}", res.status()))
+    }
+}
+
+#[tauri::command]
+async fn create_group_tim(owner_id: String, group_name: String, group_type: String) -> Result<String, String> {
+    println!("Backend: create_group_tim called. Owner: {}, Name: {}, Type: {}", owner_id, group_name, group_type);
+    
+    // 1. Get UserSig
+    let sig = fetch_user_sig_internal(&owner_id).await?;
+    
+    // 2. Construct TIM URL
+    let sdk_app_id = 1600111046;
+    let random = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    let url = format!("https://console.tim.qq.com/v4/group_open_http_svc/create_group?sdkappid={}&identifier={}&usersig={}&random={}&contenttype=json", 
+        sdk_app_id, owner_id, sig, random);
+
+    // 3. Construct Body
+    let client = reqwest::Client::new();
+    let response = client.post(&url)
+        .json(&serde_json::json!({
+            "Name": group_name,
+            "Type": group_type, 
+            "Owner_Account": owner_id,
+            "GroupConfig": {
+                "MaxMemberCount": 2000,
+                "ApplyJoinOption": "FreeAccess"
+            },
+            "MemberList": [
+                { "Member_Account": owner_id }
+            ]
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+        
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
+#[tauri::command]
+async fn remove_friend(teacher_unique_id: String, friend_teacher_unique_id: String) -> Result<String, String> {
+    println!("Backend: remove_friend called. userId: {}, friendId: {}", teacher_unique_id, friend_teacher_unique_id);
+    let client = reqwest::Client::new();
+    let url = "http://47.100.126.194:5000/friends/remove";
+    
+    let res = client.post(url)
+        .json(&serde_json::json!({
+             "teacher_unique_id": teacher_unique_id,
+             "friend_teacher_unique_id": friend_teacher_unique_id
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let status = res.status();
+    let text = res.text().await.map_err(|e| e.to_string())?;
+
+    if status.is_success() {
+        Ok(text)
+    } else {
+        Err(format!("Request failed with status: {}. Body: {}", status, text))
+    }
+}
+
+#[tauri::command]
+async fn leave_class(teacher_unique_id: String, class_code: String) -> Result<String, String> {
+    println!("Backend: leave_class called. userId: {}, classCode: {}", teacher_unique_id, class_code);
+    let client = reqwest::Client::new();
+    let url = "http://47.100.126.194:5000/teachers/classes/remove";
+    
+    let res = client.post(url)
+        .json(&serde_json::json!({
+             "teacher_unique_id": teacher_unique_id,
+             "class_code": class_code
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let status = res.status();
+    let text = res.text().await.map_err(|e| e.to_string())?;
+
+    if status.is_success() {
+        Ok(text)
+    } else {
+        Err(format!("Request failed with status: {}. Body: {}", status, text))
+    }
+}
+
+#[tauri::command]
+async fn exit_app() {
+    std::process::exit(0);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -628,7 +882,18 @@ pub fn run() {
             set_class_wallpaper,
             download_wallpaper,
             upload_wallpaper,
-            save_student_score_sheet
+            save_student_score_sheet,
+            get_classes_by_prefix,
+            search_classes,
+            search_teachers,
+            search_class_groups,
+            join_class_group_request,
+            create_group_tim,
+
+            join_class,
+            remove_friend,
+            leave_class,
+            exit_app
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

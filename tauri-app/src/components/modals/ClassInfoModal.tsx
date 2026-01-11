@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { X, Users, Search, Plus, Minus } from "lucide-react";
+import { X, Users, Search, Plus, Minus, LogOut, Trash2, UserCheck } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import { getGroupMemberList, isSDKReady, dismissGroup, quitGroup, changeGroupOwner } from '../../utils/tim';
 import DutyRosterModal from "./DutyRosterModal";
 import WallpaperModal from "./WallpaperModal";
 import CourseScheduleModal from "./CourseScheduleModal";
@@ -44,6 +45,11 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
     const [showDutyRoster, setShowDutyRoster] = useState(false);
     const [showWallpaper, setShowWallpaper] = useState(false);
     const [showCourseSchedule, setShowCourseSchedule] = useState(false);
+    const [showTransferModal, setShowTransferModal] = useState(false);
+
+    // Owner state for Exit/Disband logic
+    const [isOwner, setIsOwner] = useState(false);
+    const [currentUserId, setCurrentUserId] = useState("");
 
     useEffect(() => {
         if (isOpen && groupId) {
@@ -72,13 +78,17 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
         try {
             const userInfoStr = localStorage.getItem('user_info');
             let token = "";
-            let currentUserId = "0";
+            // Try multiple sources for teacher_unique_id
+            let currentUserId = localStorage.getItem('teacher_unique_id') || "0";
 
             if (userInfoStr) {
                 try {
                     const u = JSON.parse(userInfoStr);
                     token = u.token || "";
-                    currentUserId = u.teacher_unique_id ? String(u.teacher_unique_id) : "0";
+                    // Also check user_info for teacher_unique_id if not found
+                    if (currentUserId === "0" && u.teacher_unique_id) {
+                        currentUserId = String(u.teacher_unique_id);
+                    }
                 } catch (e) {
                     console.error("Failed to parse user_info", e);
                 }
@@ -90,17 +100,43 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
             });
             const res = JSON.parse(resStr);
 
+            // Fetch TIM members reliably - Wait for SDK if needed
+            let timMembers: any[] = [];
+
+            // Wait up to 2 seconds for SDK to be ready
+            let retries = 0;
+            while (!isSDKReady && retries < 10) {
+                await new Promise(r => setTimeout(r, 200));
+                retries++;
+            }
+
+            if (isSDKReady) {
+                try {
+                    timMembers = await getGroupMemberList(groupId);
+                    console.log(`[ClassInfoModal] Fetched ${timMembers.length} TIM members`);
+                } catch (e) {
+                    console.error("[ClassInfoModal] Failed to fetch TIM members", e);
+                }
+            } else {
+                console.warn("[ClassInfoModal] SDK still not ready after waiting, skipping TIM fetch");
+            }
+
             if (res.code === 200 || (res.data && res.data.code === 200)) {
                 const list = res.data?.members || res.data || [];
 
-                const mappedMembers: GroupMember[] = Array.isArray(list) ? list.map((m: any) => ({
-                    user_id: m.user_id || m.id || m.Member_Account,
-                    name: m.user_name || m.name || m.student_name || m.NameCard || m.Nick || "未知用户",
-                    role: m.role || getRoleFromSelfRole(m.self_role) || 'member',
-                    avatar: m.face_url || m.avatar,
-                    phone: m.phone,
-                    teach_subjects: m.teach_subjects || []
-                })) : [];
+                const mappedMembers: GroupMember[] = Array.isArray(list) ? list.map((m: any) => {
+                    const userIdStr = String(m.user_id || m.id || m.Member_Account);
+                    const timMember = timMembers.find((tm: any) => tm.userID == userIdStr);
+
+                    return {
+                        user_id: m.user_id || m.id || m.Member_Account,
+                        name: m.user_name || m.name || m.student_name || m.NameCard || m.Nick || timMember?.nick || "未知用户",
+                        role: m.role || getRoleFromSelfRole(m.self_role) || 'member',
+                        avatar: timMember?.avatar || m.face_url || m.avatar,
+                        phone: m.phone,
+                        teach_subjects: m.teach_subjects || []
+                    };
+                }) : [];
 
                 mappedMembers.sort((a, b) => {
                     const getScore = (m: GroupMember) => {
@@ -114,21 +150,39 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
 
                 setMembers(mappedMembers);
 
+                // Detect owner status from TIM member list (more reliable)
+                const currentUserIdLocal = currentUserId;
+                const selfInTim = timMembers.find((tm: any) => tm.userID === currentUserIdLocal);
+                console.log("[ClassInfoModal] Current User ID:", currentUserIdLocal);
+                console.log("[ClassInfoModal] Self in TIM:", selfInTim);
+                console.log("[ClassInfoModal] TIM Role:", selfInTim?.role);
+
+                if (selfInTim && selfInTim.role === 'Owner') {
+                    console.log("[ClassInfoModal] User is OWNER");
+                    setIsOwner(true);
+                } else {
+                    // Fallback: check backend member data
+                    const currentUserObj = mappedMembers.find(m => String(m.user_id) === currentUserIdLocal);
+                    const isOwnerBackend = currentUserObj?.role === 'owner' ||
+                        (currentUserObj as any)?.self_role === 400;
+                    console.log("[ClassInfoModal] Backend role check:", currentUserObj?.role, isOwnerBackend);
+                    setIsOwner(isOwnerBackend);
+                }
+                setCurrentUserId(currentUserIdLocal);
+
+                // Teach subjects
+                const currentUserObj = mappedMembers.find(m => String(m.user_id) === currentUserIdLocal);
+                if (currentUserObj?.teach_subjects && Array.isArray(currentUserObj.teach_subjects)) {
+                    setTeachSubjects(currentUserObj.teach_subjects);
+                    localStorage.setItem(`teach_subjects_${groupId}`, JSON.stringify(currentUserObj.teach_subjects));
+                }
+
                 if (res.data?.group_info) {
                     setIntercomEnabled(!!res.data.group_info.enable_intercom);
                 }
 
-                const currentUser = mappedMembers.find(m => String(m.user_id) === currentUserId);
-                if (currentUser && currentUser.teach_subjects && Array.isArray(currentUser.teach_subjects)) {
-                    setTeachSubjects(currentUser.teach_subjects);
-                    localStorage.setItem(`teach_subjects_${groupId}`, JSON.stringify(currentUser.teach_subjects));
-                }
-
             } else {
-                setMembers([
-                    { user_id: 1, name: "张老师", role: 'owner', phone: "13800000001" },
-                    { user_id: 2, name: "李小明", role: 'member', phone: "13800000002" },
-                ]);
+                setMembers([]);
             }
         } catch (e: any) {
             console.error("Failed to fetch members:", e);
@@ -195,6 +249,113 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
             console.error("Failed to toggle intercom", e);
             setIntercomEnabled(!newState);
             alert("切换对讲状态失败");
+        }
+    };
+
+    // Handler: Exit Group
+    const handleExitGroup = async () => {
+        if (!groupId) return;
+
+        if (isOwner) {
+            // Owner needs to transfer ownership first
+            const otherMembers = members.filter(m => String(m.user_id) !== currentUserId);
+            if (otherMembers.length === 0) {
+                alert('您是群内唯一成员，无法转让群主。请使用"解散群聊"。');
+                return;
+            }
+            setShowTransferModal(true);
+        } else {
+            // Regular member can just quit
+            if (!confirm('确定要退出群聊吗？')) return;
+            try {
+                await quitGroup(groupId);
+                alert('已成功退出群聊');
+
+                // Refresh class list (Tauri cross-window event)
+                const { emit } = await import('@tauri-apps/api/event');
+                await emit('refresh-class-list');
+
+                // Close any open windows for this group (schedule and chat)
+                try {
+                    const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+                    // Close ClassScheduleWindow
+                    const scheduleWindow = await WebviewWindow.getByLabel(`class_schedule_${groupId}`);
+                    if (scheduleWindow) await scheduleWindow.close();
+                    // Close ClassChatWindow
+                    const chatWindow = await WebviewWindow.getByLabel(`class_chat_${groupId}`);
+                    if (chatWindow) await chatWindow.close();
+                } catch (e) {
+                    console.log('[ClassInfoModal] No windows to close or error:', e);
+                }
+
+                onClose();
+            } catch (e: any) {
+                alert('退出群聊失败: ' + (e.message || e));
+            }
+        }
+    };
+
+    // Handler: Transfer Ownership and then Quit (for owner exit)
+    const handleTransferAndQuit = async (newOwnerId: string) => {
+        if (!groupId) return;
+        try {
+            await changeGroupOwner(groupId, newOwnerId);
+            await quitGroup(groupId);
+            alert('已成功转让群主并退出群聊');
+
+            // Refresh class list (Tauri cross-window event)
+            const { emit } = await import('@tauri-apps/api/event');
+            await emit('refresh-class-list');
+
+            // Close any open windows for this group (schedule and chat)
+            try {
+                const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+                // Close ClassScheduleWindow
+                const scheduleWindow = await WebviewWindow.getByLabel(`class_schedule_${groupId}`);
+                if (scheduleWindow) await scheduleWindow.close();
+                // Close ClassChatWindow
+                const chatWindow = await WebviewWindow.getByLabel(`class_chat_${groupId}`);
+                if (chatWindow) await chatWindow.close();
+            } catch (e) {
+                console.log('[ClassInfoModal] No windows to close or error:', e);
+            }
+
+            onClose();
+        } catch (e: any) {
+            alert('操作失败: ' + (e.message || e));
+        }
+        setShowTransferModal(false);
+    };
+
+    // Handler: Disband Group (Owner only)
+    const handleDisbandGroup = async () => {
+        if (!groupId) return;
+        if (!confirm('确定要解散群聊吗？此操作不可恢复！')) return;
+
+        try {
+            await dismissGroup(groupId);
+            alert('已成功解散群聊');
+
+            // Refresh class list (Tauri cross-window event)
+            const { emit } = await import('@tauri-apps/api/event');
+            await emit('refresh-class-list');
+
+            // Close any open windows for this group (schedule and chat)
+            try {
+                const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+                // Close ClassScheduleWindow
+                const scheduleWindow = await WebviewWindow.getByLabel(`class_schedule_${groupId}`);
+                if (scheduleWindow) await scheduleWindow.close();
+                // Close ClassChatWindow
+                const chatWindow = await WebviewWindow.getByLabel(`class_chat_${groupId}`);
+                if (chatWindow) await chatWindow.close();
+            } catch (e) {
+                console.log('[ClassInfoModal] No windows to close or error:', e);
+            }
+
+            onClose();
+        } catch (e: any) {
+            alert('解散群聊失败: ' + (e.message || e));
         }
     };
 
@@ -375,6 +536,28 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
                         </button>
                     </div>
                 )}
+
+                {/* Exit / Disband Group Buttons (Class Groups Only) */}
+                {isClassGroup && (
+                    <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 space-y-2">
+                        <button
+                            onClick={handleExitGroup}
+                            className="w-full py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 flex items-center justify-center gap-2 transition-colors"
+                        >
+                            <LogOut size={14} />
+                            退出群聊
+                        </button>
+                        {isOwner && (
+                            <button
+                                onClick={handleDisbandGroup}
+                                className="w-full py-2 text-sm rounded-lg border border-red-200 text-red-600 hover:bg-red-50 flex items-center justify-center gap-2 transition-colors"
+                            >
+                                <Trash2 size={14} />
+                                解散群聊
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Sub Modals */}
@@ -393,6 +576,40 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
                 onClose={() => setShowCourseSchedule(false)}
                 classId={groupId}
             />
+
+            {/* Transfer Ownership Modal (for owner exit) */}
+            {showTransferModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-xl shadow-2xl w-[350px] p-5">
+                        <h2 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+                            <UserCheck size={18} className="text-blue-500" />
+                            选择新群主
+                        </h2>
+                        <p className="text-xs text-gray-500 mb-3">您是群主，退出前需先转让群主身份给其他成员。</p>
+                        <div className="max-h-[200px] overflow-y-auto space-y-1.5 mb-3">
+                            {members.filter(m => String(m.user_id) !== currentUserId).map((member) => (
+                                <button
+                                    key={member.user_id}
+                                    onClick={() => handleTransferAndQuit(String(member.user_id))}
+                                    className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-blue-50 border border-gray-200 transition-colors text-left"
+                                >
+                                    <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-xs text-gray-500 border border-gray-200">
+                                        {member.avatar ? <img src={member.avatar} className="w-full h-full rounded-full" /> : member.name[0]}
+                                    </div>
+                                    <span className="text-sm text-gray-700">{member.name}</span>
+                                    {member.role === 'manager' && <span className="text-[10px] bg-blue-100 text-blue-600 px-1 py-0.5 rounded">管理员</span>}
+                                </button>
+                            ))}
+                        </div>
+                        <button
+                            onClick={() => setShowTransferModal(false)}
+                            className="w-full py-1.5 text-xs text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                            取消
+                        </button>
+                    </div>
+                </div>
+            )}
             {/* CustomListModal Removed */}
         </div>
     );

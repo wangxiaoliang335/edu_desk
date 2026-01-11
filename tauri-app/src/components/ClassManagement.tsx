@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { ChevronRight, ChevronDown, User, Users, School, MessageCircle } from 'lucide-react';
-import { loginTIM, getTIMGroups } from '../utils/tim';
+import { listen } from '@tauri-apps/api/event';
+import { ChevronRight, ChevronDown, User, Users, School, MessageCircle, LogOut, UserMinus } from 'lucide-react';
+import { loginTIM, getTIMGroups, setCachedTIMGroups } from '../utils/tim';
 
 interface ClassInfo {
     class_code: string;
@@ -45,11 +47,7 @@ interface FriendsResponse {
     friends: FriendData[];
 }
 
-interface ClassesResponse {
-    data: {
-        classes: ClassInfo[];
-    };
-}
+
 
 const TreeNode = ({ label, icon, children, defaultOpen = false, count = 0 }: { label: string, icon: React.ReactNode, children?: React.ReactNode, defaultOpen?: boolean, count?: number }) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -76,11 +74,12 @@ const TreeNode = ({ label, icon, children, defaultOpen = false, count = 0 }: { l
     );
 };
 
-const LeafNode = ({ label, subLabel, icon, onClick, onDoubleClick, avatarUrl }: { label: string, subLabel?: string, icon?: React.ReactNode, onClick?: () => void, onDoubleClick?: () => void, avatarUrl?: string }) => {
+const LeafNode = ({ label, subLabel, icon, onClick, onDoubleClick, onContextMenu, avatarUrl }: { label: string, subLabel?: string, icon?: React.ReactNode, onClick?: () => void, onDoubleClick?: () => void, onContextMenu?: (e: React.MouseEvent) => void, avatarUrl?: string }) => {
     return (
         <div
             onClick={onClick}
             onDoubleClick={onDoubleClick}
+            onContextMenu={onContextMenu}
             className="flex items-center gap-3 p-2 hover:bg-blue-50 hover:text-blue-600 rounded-lg cursor-pointer transition-all group"
         >
             {avatarUrl ? (
@@ -108,8 +107,109 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
     const [loading, setLoading] = useState(false);
     const [debugMsg, setDebugMsg] = useState('');
 
+    // Context Menu State
+    const [contextMenu, setContextMenu] = useState<{
+        visible: boolean;
+        x: number;
+        y: number;
+        type: 'class' | 'friend' | null;
+        data: any;
+    }>({ visible: false, x: 0, y: 0, type: null, data: null });
+
+    // Handle closing context menu (Resize/Scroll)
+    useEffect(() => {
+        const handleClose = () => setContextMenu(prev => ({ ...prev, visible: false }));
+        window.addEventListener('resize', handleClose);
+        window.addEventListener('scroll', handleClose, true); // Capture scroll
+        return () => {
+            window.removeEventListener('resize', handleClose);
+            window.removeEventListener('scroll', handleClose, true);
+        };
+    }, []);
+
+    const handleContextMenu = (e: React.MouseEvent, type: 'class' | 'friend', data: any) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setContextMenu({
+            visible: true,
+            x: e.clientX,
+            y: e.clientY,
+            type,
+            data
+        });
+    };
+
+    const handleLeaveClass = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setContextMenu(prev => ({ ...prev, visible: false }));
+
+        if (!contextMenu.data || !userInfo?.teacher_unique_id) return;
+        const classCode = contextMenu.data.class_code;
+        if (confirm(`确定要退出班级 "${contextMenu.data.class_name || classCode}" 吗？`)) {
+            try {
+                await invoke('leave_class', {
+                    teacherUniqueId: userInfo.teacher_unique_id,
+                    classCode: classCode
+                });
+                alert('已退出班级');
+                fetchData(); // Refresh list
+            } catch (e) {
+                console.error(e);
+                alert('退出班级失败: ' + String(e));
+            }
+        }
+    };
+
+    const handleUnfriend = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setContextMenu(prev => ({ ...prev, visible: false }));
+
+        if (!contextMenu.data || !userInfo?.teacher_unique_id) return;
+        const friendId = contextMenu.data.teacher_info?.teacher_unique_id;
+        const friendName = contextMenu.data.teacher_info?.name || '该好友';
+
+        if (!friendId) {
+            alert('无法获取好友ID');
+            return;
+        }
+
+        if (confirm(`确定要解除与 "${friendName}" 的好友关系吗？`)) {
+            try {
+                await invoke('remove_friend', {
+
+                    teacherUniqueId: userInfo.teacher_unique_id,
+                    friendTeacherUniqueId: friendId
+                });
+                alert('已解除好友关系');
+                fetchData(); // Refresh list
+            } catch (e) {
+                console.error(e);
+                alert('解除好友失败: ' + String(e));
+            }
+        }
+    };
+
+
     useEffect(() => {
         fetchData();
+
+        const handleRefresh = () => {
+            console.log('Received refresh-class-list event (browser)');
+            fetchData();
+        };
+        window.addEventListener('refresh-class-list', handleRefresh);
+
+        // Also listen for Tauri events from other windows
+        let unlisten: (() => void) | undefined;
+        listen<void>('refresh-class-list', () => {
+            console.log('Received refresh-class-list event (Tauri)');
+            fetchData();
+        }).then(fn => { unlisten = fn; });
+
+        return () => {
+            window.removeEventListener('refresh-class-list', handleRefresh);
+            if (unlisten) unlisten();
+        };
     }, []);
 
     const fetchData = async () => {
@@ -177,6 +277,8 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
                     const loginSuccess = await loginTIM(timUserId, userSig);
                     if (loginSuccess) {
                         const timGroups = await getTIMGroups();
+                        // Cache the groups for CreateClassGroupModal to use
+                        setCachedTIMGroups(timGroups);
 
                         const cGroups: GroupInfo[] = [];
                         const nGroups: GroupInfo[] = [];
@@ -260,6 +362,7 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
                                     label={cls?.class_name || cls?.class_code || '未知班级'}
                                     subLabel={`${cls?.school_stage || ''}${cls?.grade || ''}`}
                                     icon={<Users size={16} />}
+                                    onContextMenu={(e) => handleContextMenu(e, 'class', cls)}
                                 />
                             ))}
                         </TreeNode>
@@ -273,6 +376,7 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
                                         label={tInfo?.name || uDetail?.name || '未知用户'}
                                         subLabel={tInfo?.subject || ''}
                                         avatarUrl={uDetail?.avatar}
+                                        onContextMenu={(e) => handleContextMenu(e, 'friend', friend)}
                                     />
                                 );
                             })}
@@ -315,12 +419,43 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
                 {/* Debug Info */}
                 {classes.length === 0 && friends.length === 0 && classGroups.length === 0 && normalGroups.length === 0 && (
                     <div className="p-4 text-xs text-gray-400 border-t border-gray-100 mt-4">
-                        Status: {debugMsg} <br />
-                        TeacherID present: {userInfo?.teacher_unique_id ? 'Yes' : 'No'} <br />
-                        IDCard present: {userInfo?.id_number ? 'Yes' : 'No'}
+                        状态: {debugMsg === 'UserInfo is null' ? '用户信息为空' : debugMsg} <br />
+                        教师ID: {userInfo?.teacher_unique_id ? '已获取' : '未获取'} <br />
+                        身份证号: {userInfo?.id_number ? '已获取' : '未获取'}
                     </div>
                 )}
             </div>
+
+            {/* Context Menu - Portaled to body to avoid transform issues */}
+            {contextMenu.visible && createPortal(
+                <>
+                    <div className="fixed inset-0 z-50 bg-transparent" onClick={() => setContextMenu(prev => ({ ...prev, visible: false }))} />
+                    <div
+                        className="fixed bg-white/95 backdrop-blur-sm shadow-xl rounded-xl py-1.5 z-50 border border-gray-100 min-w-[160px] animate-in fade-in zoom-in-95 duration-100"
+                        style={{ top: contextMenu.y, left: contextMenu.x }}
+                    >
+                        {contextMenu.type === 'class' && (
+                            <button
+                                onClick={handleLeaveClass}
+                                className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors group"
+                            >
+                                <LogOut size={16} className="text-red-500 group-hover:text-red-600" />
+                                <span className="font-medium">退出班级</span>
+                            </button>
+                        )}
+                        {contextMenu.type === 'friend' && (
+                            <button
+                                onClick={handleUnfriend}
+                                className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors group"
+                            >
+                                <UserMinus size={16} className="text-red-500 group-hover:text-red-600" />
+                                <span className="font-medium">解除好友</span>
+                            </button>
+                        )}
+                    </div>
+                </>,
+                document.body
+            )}
         </div>
     );
 };
