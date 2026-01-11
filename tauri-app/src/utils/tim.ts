@@ -301,3 +301,18 @@ export const changeGroupOwner = async (groupID: string, newOwnerID: string) => {
         throw error;
     }
 };
+
+export const checkGroupsExist = async (groupIDs: string[]) => {
+    if (!isSDKReady) return [];
+    try {
+        const res = await tim.getGroupProfile({ groupIDList: groupIDs } as any);
+        console.log('TIM checkGroupsExist success:', res.data.groupList.length);
+        // Map to just IDs of successfully found groups
+        return res.data.groupList
+            .filter((g: any) => g.groupID && !g.errorCode) // Check for valid groupID and no error code
+            .map((g: any) => g.groupID);
+    } catch (error) {
+        console.error('TIM checkGroupsExist failed:', error);
+        return [];
+    }
+};

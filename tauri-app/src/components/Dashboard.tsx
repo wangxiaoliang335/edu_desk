@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import Taskbar, { TaskbarItemType } from './Taskbar';
-import { Minus, X, Square, Copy } from 'lucide-react'; // Square for Maximize, Copy for Restore (simulated)
+import { Minus, X, Square, Copy, LogOut } from 'lucide-react'; // Square for Maximize, Copy for Restore (simulated)
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import TeacherSchedule from './TeacherSchedule';
 import ClassManagement from './ClassManagement';
@@ -51,6 +51,28 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
             setShowSearchAdd(true);
         } else {
             console.log('Tool clicked:', toolId);
+        }
+    };
+
+    const handleLogout = () => {
+        if (confirm("确定要退出登录吗？")) {
+            // Update login preferences to disable auto login
+            const prefsStr = localStorage.getItem('login_prefs');
+            if (prefsStr) {
+                try {
+                    const prefs = JSON.parse(prefsStr);
+                    prefs.autoLogin = false;
+                    localStorage.setItem('login_prefs', JSON.stringify(prefs));
+                } catch (e) {
+                    console.error("Failed to update login prefs", e);
+                }
+            }
+
+            // Clear credentials
+            localStorage.removeItem('token');
+
+            // Reload to reset app state and trigger Login view
+            window.location.reload();
         }
     };
 
@@ -134,29 +156,48 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
                         </div>
                     )}
                     {activeApp === 'user' && (
-                        <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-4">
-                            <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-gray-100 shadow-lg">
-                                <img src={userInfo?.avatar || "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"} alt="Avatar" className="w-full h-full object-cover" />
-                            </div>
-                            <div className="text-center">
-                                <h2 className="text-2xl font-bold text-gray-800">{userInfo?.name || '未知用户'}</h2>
-                                <p className="text-gray-500">{userInfo?.school_name || '未知学校'} · {userInfo?.grade_level || ''}</p>
+                        <div className="h-full flex flex-col items-center justify-center space-y-8 animate-in zoom-in-95 duration-300">
+
+                            {/* Avatar Section */}
+                            <div className="relative group">
+                                <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-2xl transition-transform duration-300 group-hover:scale-105">
+                                    <img
+                                        src={userInfo?.avatar || "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"}
+                                        alt="Avatar"
+                                        className="w-full h-full object-cover"
+                                    />
+                                </div>
+                                <div className="absolute bottom-1 right-1 w-6 h-6 bg-green-500 border-4 border-white rounded-full"></div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4 mt-8 w-full max-w-md">
-                                <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100 text-center hover:border-blue-200 transition-colors cursor-default">
-                                    <div className="text-lg font-bold text-gray-800">12</div>
-                                    <div className="text-xs text-gray-500">待办事项</div>
+                            {/* Info Section */}
+                            <div className="text-center space-y-2">
+                                <h2 className="text-3xl font-bold text-gray-800 tracking-tight">{userInfo?.name || '未知用户'}</h2>
+                                <div className="flex flex-col gap-1 text-gray-500 font-medium">
+                                    <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-sm inline-block mx-auto">
+                                        {userInfo?.school_name || '未知学校'}
+                                    </span>
+                                    <span className="text-sm mt-1">
+                                        ID: {userInfo?.teacher_unique_id || userInfo?.id || '---'}
+                                    </span>
                                 </div>
-                                <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100 text-center hover:border-blue-200 transition-colors cursor-default">
-                                    <div className="text-lg font-bold text-gray-800">5</div>
-                                    <div className="text-xs text-gray-500">我的消息</div>
-                                </div>
+                            </div>
+
+                            {/* Actions Section */}
+                            <div className="pt-4">
+                                <button
+                                    onClick={handleLogout}
+                                    className="flex items-center gap-2 px-8 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-bold transition-all hover:shadow-md active:scale-95"
+                                >
+                                    <LogOut size={20} />
+                                    <span>退出登录</span>
+                                </button>
                             </div>
                         </div>
                     )}
+
                 </div>
-            </div>
+            </div >
         );
     };
 
@@ -226,6 +267,7 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
             <SearchAddModal
                 isOpen={showSearchAdd}
                 onClose={() => setShowSearchAdd(false)}
+                userInfo={userInfo}
             />
         </div>
     );

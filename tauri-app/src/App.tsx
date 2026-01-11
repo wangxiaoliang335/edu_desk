@@ -54,6 +54,7 @@ function MainApp() {
 
               localStorage.setItem('teacher_unique_id', fullInfo.teacher_unique_id);
               if (fullInfo.id_number) localStorage.setItem('id_number', fullInfo.id_number);
+              if (fullInfo.name) localStorage.setItem('name', fullInfo.name);
 
               // Fetch UserSig for TIM
               try {

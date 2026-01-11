@@ -587,7 +587,7 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
                         </h2>
                         <p className="text-xs text-gray-500 mb-3">您是群主，退出前需先转让群主身份给其他成员。</p>
                         <div className="max-h-[200px] overflow-y-auto space-y-1.5 mb-3">
-                            {members.filter(m => String(m.user_id) !== currentUserId).map((member) => (
+                            {members.filter(m => String(m.user_id) !== currentUserId && m.name !== '班级' && m.user_id !== 0).map((member) => (
                                 <button
                                     key={member.user_id}
                                     onClick={() => handleTransferAndQuit(String(member.user_id))}

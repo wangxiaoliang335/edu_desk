@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Search, Users, User, Check } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { sendMessageWS } from '../../utils/websocket';
-import { getTIMGroups } from '../../utils/tim';
+import { getTIMGroups, checkGroupsExist } from '../../utils/tim';
 
 interface CreateClassGroupModalProps {
     isOpen: boolean;
@@ -119,6 +119,29 @@ const CreateClassGroupModal = ({ isOpen, onClose, onSuccess, userInfo }: CreateC
                         class_name: c.class_name,
                         grade: c.grade || ''
                     }));
+                }
+            }
+
+            // Check globally if duplicate groups exist (even if I am not in them)
+            // Rule: GroupID = class_id + "01"
+            if (classList.length > 0) {
+                try {
+                    const candidateIDs = classList.map(c => String(c.class_id) + "01");
+                    console.log('[CreateClassGroup] Checking global existence for:', candidateIDs);
+                    // Batch check if needed, but for typical use case (few classes), one call is fine.
+                    // TIM limit usually 20-50.
+                    const existingGlobals = await checkGroupsExist(candidateIDs);
+                    console.log('[CreateClassGroup] Found existing global groups:', existingGlobals);
+
+                    existingGlobals.forEach((gid: any) => {
+                        const groupId = String(gid);
+                        if (groupId.length > 2) {
+                            const classId = groupId.slice(0, -2);
+                            existingGroupClassIds.add(classId);
+                        }
+                    });
+                } catch (e) {
+                    console.error('[CreateClassGroup] Global group check failed', e);
                 }
             }
 

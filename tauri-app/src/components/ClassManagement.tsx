@@ -102,8 +102,10 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
     const [activeTab, setActiveTab] = useState<'contacts' | 'groups'>('contacts');
     const [classes, setClasses] = useState<ClassInfo[]>([]);
     const [friends, setFriends] = useState<FriendData[]>([]);
-    const [classGroups, setClassGroups] = useState<GroupInfo[]>([]);
-    const [normalGroups, setNormalGroups] = useState<GroupInfo[]>([]);
+    const [managedClassGroups, setManagedClassGroups] = useState<GroupInfo[]>([]);
+    const [joinedClassGroups, setJoinedClassGroups] = useState<GroupInfo[]>([]);
+    const [managedNormalGroups, setManagedNormalGroups] = useState<GroupInfo[]>([]);
+    const [joinedNormalGroups, setJoinedNormalGroups] = useState<GroupInfo[]>([]);
     const [loading, setLoading] = useState(false);
     const [debugMsg, setDebugMsg] = useState('');
 
@@ -280,16 +282,16 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
                         // Cache the groups for CreateClassGroupModal to use
                         setCachedTIMGroups(timGroups);
 
-                        const cGroups: GroupInfo[] = [];
-                        const nGroups: GroupInfo[] = [];
+                        const mClassGroups: GroupInfo[] = [];
+                        const jClassGroups: GroupInfo[] = [];
+                        const mNormalGroups: GroupInfo[] = [];
+                        const jNormalGroups: GroupInfo[] = [];
 
                         // Merge TIM groups with Server info
                         timGroups.forEach((timGroup: any) => {
                             const groupId = timGroup.groupID;
                             const groupType = timGroup.type; // "Meeting" (Class) or "Public" (Normal)
                             const serverInfo = serverGroupsMap.get(groupId);
-
-                            console.log(`TIM Group: ${timGroup.name} (ID: ${groupId}, Type: ${groupType}) | On Server: ${!!serverInfo}`);
 
                             // Construct merged group info
                             const groupInfo: GroupInfo = {
@@ -304,18 +306,23 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
                                 classid: serverInfo?.classid
                             };
 
-                            console.log(`  -> Classification Result for ${groupInfo.group_id}: is_class_group=${groupInfo.is_class_group}`);
+                            const isOwner = timGroup.ownerID === timUserId;
+                            // console.log(`Group: ${groupInfo.group_id}, Owner: ${timGroup.ownerID}, Me: ${timUserId}, IsOwner: ${isOwner}`);
 
                             if (groupInfo.is_class_group) {
-                                cGroups.push(groupInfo);
+                                if (isOwner) mClassGroups.push(groupInfo);
+                                else jClassGroups.push(groupInfo);
                             } else {
-                                nGroups.push(groupInfo);
+                                if (isOwner) mNormalGroups.push(groupInfo);
+                                else jNormalGroups.push(groupInfo);
                             }
                         });
 
-                        console.log(`TIM Groups Processed. Class: ${cGroups.length}, Normal: ${nGroups.length}`);
-                        setClassGroups(cGroups);
-                        setNormalGroups(nGroups);
+                        console.log(`TIM Groups Processed. Class(M/J): ${mClassGroups.length}/${jClassGroups.length}, Normal(M/J): ${mNormalGroups.length}/${jNormalGroups.length}`);
+                        setManagedClassGroups(mClassGroups);
+                        setJoinedClassGroups(jClassGroups);
+                        setManagedNormalGroups(mNormalGroups);
+                        setJoinedNormalGroups(jNormalGroups);
                     }
                 } catch (timErr) {
                     console.error('TIM Error:', timErr);
@@ -386,38 +393,66 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
 
                 {!loading && activeTab === 'groups' && (
                     <div className="space-y-1">
-                        <TreeNode label="班级群" count={classGroups.length} icon={<Users size={18} />} defaultOpen={true}>
-                            {classGroups.slice(0, 100).map((g, idx) => (
-                                <LeafNode
-                                    key={idx}
-                                    label={g?.group_name || '未命名群组'}
-                                    avatarUrl={g?.face_url}
-                                    icon={<MessageCircle size={16} />}
-                                    onDoubleClick={() => {
-                                        console.log('Open Class Group:', g.group_name, g.group_id);
-                                        invoke('open_class_window', { groupclassId: g.group_id });
-                                    }}
-                                />
-                            ))}
+                        <TreeNode label="班级群" count={managedClassGroups.length + joinedClassGroups.length} icon={<Users size={18} />} defaultOpen={true}>
+                            {managedClassGroups.length > 0 && (
+                                <TreeNode label="我管理的" count={managedClassGroups.length} icon={<User size={16} className="text-blue-500" />} defaultOpen={true}>
+                                    {managedClassGroups.slice(0, 50).map((g, idx) => (
+                                        <LeafNode
+                                            key={`mgr-c-${idx}`}
+                                            label={g?.group_name || '未命名群组'}
+                                            avatarUrl={g?.face_url}
+                                            icon={<MessageCircle size={16} />}
+                                            onDoubleClick={() => invoke('open_class_window', { groupclassId: g.group_id })}
+                                        />
+                                    ))}
+                                </TreeNode>
+                            )}
+                            {joinedClassGroups.length > 0 && (
+                                <TreeNode label="我加入的" count={joinedClassGroups.length} icon={<Users size={16} />} defaultOpen={true}>
+                                    {joinedClassGroups.slice(0, 50).map((g, idx) => (
+                                        <LeafNode
+                                            key={`join-c-${idx}`}
+                                            label={g?.group_name || '未命名群组'}
+                                            avatarUrl={g?.face_url}
+                                            icon={<MessageCircle size={16} />}
+                                            onDoubleClick={() => invoke('open_class_window', { groupclassId: g.group_id })}
+                                        />
+                                    ))}
+                                </TreeNode>
+                            )}
                         </TreeNode>
-                        <TreeNode label="普通群" count={normalGroups.length} icon={<MessageCircle size={18} />} defaultOpen={true}>
-                            {normalGroups.slice(0, 100).map((g, idx) => (
-                                <LeafNode
-                                    key={idx}
-                                    label={g?.group_name || '未命名群组'}
-                                    avatarUrl={g?.face_url}
-                                    onDoubleClick={() => {
-                                        console.log('Open Normal Group:', g.group_name, g.group_id);
-                                        invoke('open_class_window', { groupclassId: g.group_id });
-                                    }}
-                                />
-                            ))}
+
+                        <TreeNode label="普通群" count={managedNormalGroups.length + joinedNormalGroups.length} icon={<MessageCircle size={18} />} defaultOpen={true}>
+                            {managedNormalGroups.length > 0 && (
+                                <TreeNode label="我管理的" count={managedNormalGroups.length} icon={<User size={16} className="text-blue-500" />} defaultOpen={true}>
+                                    {managedNormalGroups.slice(0, 50).map((g, idx) => (
+                                        <LeafNode
+                                            key={`mgr-n-${idx}`}
+                                            label={g?.group_name || '未命名群组'}
+                                            avatarUrl={g?.face_url}
+                                            onDoubleClick={() => invoke('open_class_window', { groupclassId: g.group_id })}
+                                        />
+                                    ))}
+                                </TreeNode>
+                            )}
+                            {joinedNormalGroups.length > 0 && (
+                                <TreeNode label="我加入的" count={joinedNormalGroups.length} icon={<Users size={16} />} defaultOpen={true}>
+                                    {joinedNormalGroups.slice(0, 50).map((g, idx) => (
+                                        <LeafNode
+                                            key={`join-n-${idx}`}
+                                            label={g?.group_name || '未命名群组'}
+                                            avatarUrl={g?.face_url}
+                                            onDoubleClick={() => invoke('open_class_window', { groupclassId: g.group_id })}
+                                        />
+                                    ))}
+                                </TreeNode>
+                            )}
                         </TreeNode>
                     </div>
                 )}
 
                 {/* Debug Info */}
-                {classes.length === 0 && friends.length === 0 && classGroups.length === 0 && normalGroups.length === 0 && (
+                {classes.length === 0 && friends.length === 0 && managedClassGroups.length === 0 && joinedClassGroups.length === 0 && managedNormalGroups.length === 0 && joinedNormalGroups.length === 0 && (
                     <div className="p-4 text-xs text-gray-400 border-t border-gray-100 mt-4">
                         状态: {debugMsg === 'UserInfo is null' ? '用户信息为空' : debugMsg} <br />
                         教师ID: {userInfo?.teacher_unique_id ? '已获取' : '未获取'} <br />
