@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
-import { Minus, X, Square, Copy, MessageCircle, Calendar, Users, BookOpen, Shuffle, Clock, Grid, LayoutDashboard, Layers, Award, Power, Mic, FileSpreadsheet } from 'lucide-react';
+import { Minus, X, Square, Copy, MessageCircle, Calendar, Users, BookOpen, Shuffle, Clock, Grid, LayoutDashboard, Layers, Award, Power, Mic, FileSpreadsheet, BarChart2 } from 'lucide-react';
 import { useWebSocket } from '../context/WebSocketContext';
 import { sendMessage, getTIMGroups, isSDKReady, loginTIM } from '../utils/tim';
 import RandomCallModal from './modals/RandomCallModal';
@@ -14,6 +14,8 @@ import GroupScoreModal from './modals/GroupScoreModal';
 import ClassInfoModal from './modals/ClassInfoModal';
 import CustomListModal from './modals/CustomListModal';
 import NotificationModal from './modals/NotificationModal';
+import StudentImportModal from './modals/StudentImportModal';
+import ScoreAnalysisModal from './modals/ScoreAnalysisModal';
 import SeatMap from './SeatMap';
 
 
@@ -42,6 +44,11 @@ const ClassScheduleWindow = () => {
     const [isClassInfoOpen, setIsClassInfoOpen] = useState(false);
     const [isCustomListOpen, setIsCustomListOpen] = useState(false);
     const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+    const [isStudentImportOpen, setIsStudentImportOpen] = useState(false);
+    const [isScoreAnalysisOpen, setIsScoreAnalysisOpen] = useState(false);
+    const [seatColorMap, setSeatColorMap] = useState<Record<string, string>>({});
+    const [seatAnalysisMode, setSeatAnalysisMode] = useState<'none' | 'segment' | 'gradient'>('none');
+    const [seatMapKey, setSeatMapKey] = useState(0);
 
     useEffect(() => {
         const checkMaximized = async () => {
@@ -446,6 +453,20 @@ const ClassScheduleWindow = () => {
                                     </div>
                                     <span className="text-xs font-medium text-gray-600">远程开机</span>
                                 </button>
+
+                                <button onClick={() => setIsStudentImportOpen(true)} className="h-24 bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md hover:border-blue-200 transition-all flex flex-col items-center justify-center gap-2 group">
+                                    <div className="p-2.5 rounded-full bg-blue-50 text-blue-500 group-hover:scale-110 group-hover:bg-blue-100 transition-all">
+                                        <Grid size={20} />
+                                    </div>
+                                    <span className="text-xs font-medium text-gray-600">座位导入</span>
+                                </button>
+
+                                <button onClick={() => setIsScoreAnalysisOpen(true)} className="h-24 bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all flex flex-col items-center justify-center gap-2 group">
+                                    <div className="p-2.5 rounded-full bg-indigo-50 text-indigo-500 group-hover:scale-110 group-hover:bg-indigo-100 transition-all">
+                                        <BarChart2 size={20} />
+                                    </div>
+                                    <span className="text-xs font-medium text-gray-600">成绩分析</span>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -469,7 +490,7 @@ const ClassScheduleWindow = () => {
                             </div>
                         </div>
                         <div className="flex-1 overflow-hidden p-2">
-                            <SeatMap classId={undefined} />
+                            <SeatMap classId={groupclassId} key={seatMapKey} colorMap={seatColorMap} isHeatmapMode={seatAnalysisMode === 'gradient'} />
                         </div>
                     </div>
                 )}
@@ -512,6 +533,7 @@ const ClassScheduleWindow = () => {
             <RandomCallModal
                 isOpen={isRandomCallOpen}
                 onClose={() => setIsRandomCallOpen(false)}
+                classId={groupclassId}
             />
             <HomeworkModal
                 isOpen={isHomeworkOpen}
@@ -544,6 +566,23 @@ const ClassScheduleWindow = () => {
                 isOpen={isCustomListOpen}
                 onClose={() => setIsCustomListOpen(false)}
                 classId={groupclassId}
+            />
+            <StudentImportModal
+                isOpen={isStudentImportOpen}
+                onClose={() => setIsStudentImportOpen(false)}
+                classId={groupclassId || ""}
+                onSuccess={() => setSeatMapKey(prev => prev + 1)}
+            />
+            <ScoreAnalysisModal
+                isOpen={isScoreAnalysisOpen}
+                onClose={() => setIsScoreAnalysisOpen(false)}
+                classId={groupclassId || ""}
+                onApply={(map, mode) => {
+                    setSeatColorMap(map);
+                    setSeatAnalysisMode(mode);
+                    // Also switch to seat view if not already
+                    if (currentView !== 'seatmap') setCurrentView('seatmap');
+                }}
             />
             <NotificationModal
                 isOpen={isNotificationOpen}

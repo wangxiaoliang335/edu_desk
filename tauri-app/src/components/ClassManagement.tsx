@@ -306,8 +306,18 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
                                 classid: serverInfo?.classid
                             };
 
-                            const isOwner = timGroup.ownerID === timUserId;
-                            // console.log(`Group: ${groupInfo.group_id}, Owner: ${timGroup.ownerID}, Me: ${timUserId}, IsOwner: ${isOwner}`);
+                            // Check ownership - ownerID may be empty for newly created groups
+                            // Role 400 = Owner, 300 = Admin, 200 = Member
+                            const selfRole = timGroup.selfInfo?.role;
+
+                            // Check if this group was recently created by us (before TIM syncs owner info)
+                            const recentlyCreatedGroups: string[] = JSON.parse(sessionStorage.getItem('recentlyCreatedGroups') || '[]');
+                            const wasCreatedByMe = recentlyCreatedGroups.includes(groupId);
+
+                            const isOwner = timGroup.ownerID === timUserId ||
+                                ((!timGroup.ownerID || timGroup.ownerID === '') && selfRole === 400) ||
+                                ((!timGroup.ownerID || timGroup.ownerID === '') && wasCreatedByMe);
+                            console.log(`Group: ${groupInfo.group_id} (${groupInfo.group_name}), Owner: ${timGroup.ownerID || '(empty)'}, Me: ${timUserId}, Role: ${selfRole}, WasCreatedByMe: ${wasCreatedByMe}, IsOwner: ${isOwner}`);
 
                             if (groupInfo.is_class_group) {
                                 if (isOwner) mClassGroups.push(groupInfo);

@@ -22,9 +22,12 @@ export interface Student {
 interface SeatProps {
     classId: string | undefined;
     onViewChange?: (view: 'list' | 'grid') => void;
+    key?: number;
+    colorMap?: Record<string, string>;
+    isHeatmapMode?: boolean;
 }
 
-const SeatMap: React.FC<SeatProps> = ({ classId, onViewChange }) => {
+const SeatMap: React.FC<SeatProps> = ({ classId, onViewChange, colorMap, isHeatmapMode = false }) => {
     const { groupclassId } = useParams();
     // State
     const [seatData, setSeatData] = useState<SeatInfo[]>([]);
@@ -197,6 +200,13 @@ const SeatMap: React.FC<SeatProps> = ({ classId, onViewChange }) => {
     const getSeatContent = (row: number, col: number) => {
         const seat = seatData.find(s => s.row === row && s.col === col);
         if (!seat) return null;
+
+        // Filter out imported podium placeholders (we already have a hardcoded podium)
+        const name = seat.student_name || seat.name || '';
+        if (name === '讲台' || name.includes('讲台')) {
+            return null;
+        }
+
         return seat;
     };
 
@@ -226,9 +236,54 @@ const SeatMap: React.FC<SeatProps> = ({ classId, onViewChange }) => {
 
             {/* Grid Container */}
             <div className="flex-1 overflow-auto relative">
-                <div className="min-h-full flex items-center justify-center p-4">
+                <div className="min-h-full flex items-center justify-center p-4 relative">
+                    {/* Heatmap Blur Layer (inside scrollable content) */}
+                    {isHeatmapMode && colorMap && Object.keys(colorMap).length > 0 && (
+                        <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+                            <div className="w-full h-full" style={{ filter: 'blur(30px) saturate(1.4)', transform: 'scale(1.1)' }}>
+                                <div
+                                    className="grid w-full h-full p-4"
+                                    style={{
+                                        gridTemplateColumns: `repeat(${COLS}, minmax(60px, 1fr))`,
+                                        gridTemplateRows: `repeat(${ROWS}, minmax(40px, 1fr))`,
+                                        maxWidth: '1200px',
+                                        margin: '0 auto',
+                                    }}
+                                >
+                                    {Array.from({ length: ROWS }).map((_, rIndex) => (
+                                        Array.from({ length: COLS }).map((_, cIndex) => {
+                                            const isSeat = isSeatSlot(rIndex, cIndex);
+                                            const data = getSeatContent(rIndex, cIndex);
+                                            const color = data && colorMap && (colorMap[data.student_id!] || colorMap[data.student_name!]);
+
+                                            // Skip podium cells
+                                            if (rIndex === 0 && [4, 5, 6].includes(cIndex)) {
+                                                return <div key={`blur-${rIndex}-${cIndex}`} />;
+                                            }
+
+                                            if (!isSeat || !color) {
+                                                return <div key={`blur-${rIndex}-${cIndex}`} />;
+                                            }
+
+                                            return (
+                                                <div
+                                                    key={`blur-${rIndex}-${cIndex}`}
+                                                    className="rounded-lg"
+                                                    style={{
+                                                        backgroundColor: color,
+                                                        transform: 'scale(1.5)',
+                                                    }}
+                                                />
+                                            );
+                                        })
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     <div
-                        className="grid gap-2"
+                        className="grid gap-2 relative z-10"
                         style={{
                             gridTemplateColumns: `repeat(${COLS}, minmax(60px, 1fr))`,
                             gridTemplateRows: `repeat(${ROWS}, minmax(40px, 1fr))`,
@@ -266,18 +321,21 @@ const SeatMap: React.FC<SeatProps> = ({ classId, onViewChange }) => {
                                     return <div key={`${rIndex}-${cIndex}`} className="invisible" />;
                                 }
 
+                                const seatColor = data && colorMap && (colorMap[data.student_id!] || colorMap[data.student_name!]);
+
                                 return (
                                     <div
                                         key={`${rIndex}-${cIndex}`}
                                         className={`
                                             relative rounded-md border shadow-sm flex flex-col items-center justify-center p-1 cursor-pointer transition-all hover:scale-105 active:scale-95
-                                            ${data ? 'bg-white border-blue-200 hover:border-blue-400 hover:shadow-md' : 'bg-gray-100 border-gray-200 text-gray-400'}
+                                            ${data ? (seatColor ? 'text-white border-transparent' : 'bg-white border-blue-200 hover:border-blue-400 hover:shadow-md') : 'bg-gray-100 border-gray-200 text-gray-400'}
                                         `}
+                                        style={seatColor ? { backgroundColor: isHeatmapMode ? `${seatColor}` : seatColor } : {}}
                                         title={data ? `${data.student_name || data.name} (${data.row + 1},${data.col + 1})` : `空座位 (${rIndex + 1},${cIndex + 1})`}
                                     >
                                         {data ? (
                                             <>
-                                                <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mb-0.5">
+                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center mb-0.5 ${seatColor ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-600'}`}>
                                                     <User size={14} />
                                                 </div>
                                                 <span className="text-xs font-medium truncate w-full text-center leading-tight">

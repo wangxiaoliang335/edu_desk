@@ -82,6 +82,7 @@ const MidtermGradeModal = ({ isOpen, onClose, fileName, data, classId, file, aut
             });
 
             // Auto-calculate Totals upon import
+            const round = (n: number) => Math.round(n * 10) / 10;
             processedRows = processedRows.map(r => {
                 let sum = 0;
                 processedHeaders.forEach(h => {
@@ -92,7 +93,7 @@ const MidtermGradeModal = ({ isOpen, onClose, fileName, data, classId, file, aut
                         }
                     }
                 });
-                return { ...r, '总分': sum };
+                return { ...r, '总分': round(sum) };
             });
 
             setHeaders(processedHeaders);
@@ -516,64 +517,66 @@ const MidtermGradeModal = ({ isOpen, onClose, fileName, data, classId, file, aut
                 </div>
             )}
 
-            <div className="bg-[#808080] rounded shadow-2xl w-[1200px] h-[800px] flex flex-col overflow-hidden text-sm select-none relative">
+            <div className="bg-white rounded-2xl shadow-2xl w-[1200px] h-[800px] flex flex-col overflow-hidden text-sm select-none relative border border-gray-100">
 
-                {/* Close Button (Absolute like QT) */}
+                {/* Close Button */}
                 <button
                     onClick={onClose}
-                    className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center bg-[#666666] text-white rounded hover:bg-[#777777] font-bold z-20 border border-gray-500"
+                    className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all z-20"
                 >
-                    X
+                    ×
                 </button>
 
                 {/* Header */}
-                <div className="p-4 flex flex-col items-center justify-center gap-2 pt-10">
-                    <div className="bg-[#d3d3d3] text-black px-8 py-2 rounded font-bold text-lg shadow-sm">
-                        {fileName}
+                <div className="p-6 pb-4 flex flex-col items-center justify-center gap-2 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg">
+                            <span className="text-white text-lg">📊</span>
+                        </div>
+                        <div>
+                            <h2 className="text-gray-800 font-bold text-lg">{fileName}</h2>
+                            <p className="text-xs text-gray-500">学生属性表 · 包含 {headers.filter(h => !['学号', '姓名', '总分'].includes(h)).length} 个评分项</p>
+                        </div>
                     </div>
                 </div>
 
-                {/* Controls (Green Buttons) */}
-                <div className="px-4 py-2 flex gap-2 overflow-x-auto justify-start border-b border-gray-600 pb-4">
-                    <button onClick={handleAddRow} className="px-4 py-1.5 rounded text-white text-xs font-bold whitespace-nowrap shadow-sm bg-green-700 hover:bg-green-800">
-                        添加行
+                {/* Toolbar */}
+                <div className="px-6 py-3 flex gap-2 overflow-x-auto bg-gray-50/50 border-b border-gray-100">
+                    <button onClick={handleAddRow} className="px-4 py-2 rounded-lg text-gray-700 text-xs font-medium whitespace-nowrap bg-white border border-gray-200 hover:border-blue-300 hover:text-blue-600 hover:shadow-sm transition-all">
+                        + 添加行
                     </button>
-                    <button onClick={handleDeleteRow} className={`px-4 py-1.5 rounded text-white text-xs font-bold whitespace-nowrap shadow-sm ${selectedRowId !== null ? 'bg-red-600 hover:bg-red-700' : 'bg-green-700 hover:bg-green-800'}`}>
-                        {selectedRowId !== null ? '删除选中行' : '删除行'}
+                    <button onClick={handleDeleteRow} className={`px-4 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${selectedRowId !== null ? 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100' : 'bg-white text-gray-700 border border-gray-200 hover:border-gray-300'}`}>
+                        {selectedRowId !== null ? '🗑 删除选中行' : '删除行'}
                     </button>
-                    <button onClick={handleDeleteColumn} className={`px-4 py-1.5 rounded text-white text-xs font-bold whitespace-nowrap shadow-sm ${selectedCol ? 'bg-red-600 hover:bg-red-700' : 'bg-green-700 hover:bg-green-800'}`}>
-                        {selectedCol ? `删除列(${selectedCol})` : '删除列'}
+                    <button onClick={handleDeleteColumn} className={`px-4 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${selectedCol ? 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100' : 'bg-white text-gray-700 border border-gray-200 hover:border-gray-300'}`}>
+                        {selectedCol ? `🗑 删除列(${selectedCol})` : '删除列'}
                     </button>
-                    <button onClick={handleAddColumn} className="px-4 py-1.5 rounded text-white text-xs font-bold whitespace-nowrap shadow-sm bg-green-700 hover:bg-green-800">
-                        添加列
+                    <button onClick={handleAddColumn} className="px-4 py-2 rounded-lg text-gray-700 text-xs font-medium whitespace-nowrap bg-white border border-gray-200 hover:border-blue-300 hover:text-blue-600 hover:shadow-sm transition-all">
+                        + 添加列
                     </button>
-                    <button onClick={handleExport} className="px-4 py-1.5 rounded text-white text-xs font-bold whitespace-nowrap shadow-sm bg-green-700 hover:bg-green-800">
-                        导出
+                    <div className="flex-1" />
+                    <button onClick={handleExport} className="px-4 py-2 rounded-lg text-gray-700 text-xs font-medium whitespace-nowrap bg-white border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all">
+                        📥 导出
                     </button>
-                    <button onClick={handleUpload} className="px-4 py-1.5 rounded text-white text-xs font-bold whitespace-nowrap shadow-sm bg-blue-600 hover:bg-blue-700">
-                        上传服务器
+                    <button onClick={handleUpload} className="px-4 py-2 rounded-lg text-white text-xs font-medium whitespace-nowrap bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 shadow-sm hover:shadow-md transition-all">
+                        ☁️ 上传服务器
                     </button>
-                </div>
-
-                {/* Description */}
-                <div className="px-4 py-2">
-                    <div className="font-bold text-black mb-1">说明:</div>
-                    <div className="bg-[#ffa500] text-black p-2 border border-gray-500 text-xs shadow-inner">
-                        说明:该表为学生属性表。包含以下评分项: {headers.filter(h => !['学号', '姓名', '总分'].includes(h)).join('、')}
-                    </div>
                 </div>
 
                 {/* Table Area */}
-                <div className="flex-1 overflow-auto bg-white mx-4 mb-4 border border-gray-600 relative shadow-inner">
+                <div className="flex-1 overflow-auto mx-6 my-4 rounded-xl border border-gray-200 bg-white shadow-inner">
                     <table className="w-full border-collapse">
-                        <thead className="bg-[#f0f0f0] sticky top-0 z-10 shadow-sm">
+                        <thead className="bg-gray-50 sticky top-0 z-10">
                             <tr>
-                                <th className="w-10 border border-gray-400 p-1 bg-[#e0e0e0]"></th>
+                                <th className="w-10 border-b border-r border-gray-200 p-2 bg-gray-50 text-gray-400 text-xs font-medium">#</th>
                                 {headers.map(h => (
                                     <th
                                         key={h}
                                         onClick={() => !['学号', '姓名', '总分'].includes(h) && setSelectedCol(h === selectedCol ? null : h)}
-                                        className={`border border-gray-400 p-2 text-gray-800 min-w-[80px] font-bold cursor-pointer transition-colors ${selectedCol === h ? 'bg-blue-200' : 'bg-[#e0e0e0] hover:bg-[#d0d0d0]'}`}
+                                        className={`border-b border-r border-gray-200 p-3 text-gray-700 min-w-[80px] font-semibold text-xs uppercase tracking-wide cursor-pointer transition-all ${selectedCol === h
+                                                ? 'bg-blue-50 text-blue-600'
+                                                : 'bg-gray-50 hover:bg-gray-100'
+                                            } ${h === '总分' ? 'bg-emerald-50 text-emerald-700' : ''}`}
                                     >
                                         {h}
                                     </th>
@@ -585,9 +588,9 @@ const MidtermGradeModal = ({ isOpen, onClose, fileName, data, classId, file, aut
                                 <tr
                                     key={row._id}
                                     onClick={() => setSelectedRowId(row._id)}
-                                    className={`cursor-pointer transition-colors ${selectedRowId === row._id ? 'bg-blue-100' : 'hover:bg-blue-50'}`}
+                                    className={`cursor-pointer transition-colors ${selectedRowId === row._id ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
                                 >
-                                    <td className="border border-gray-300 bg-[#f8f8f8] text-center text-gray-500 text-xs font-mono select-none">{idx + 1}</td>
+                                    <td className="border-b border-r border-gray-100 bg-gray-50/50 text-center text-gray-400 text-xs font-mono select-none p-2">{idx + 1}</td>
                                     {headers.map(col => {
                                         const isScore = !['学号', '姓名', '总分'].includes(col);
                                         const val = row[col];
@@ -596,7 +599,9 @@ const MidtermGradeModal = ({ isOpen, onClose, fileName, data, classId, file, aut
                                         return (
                                             <td
                                                 key={col}
-                                                className={`border border-gray-300 p-1 text-center ${selectedCol === col ? 'bg-blue-50' : ''} ${hasComment ? 'bg-yellow-100' : ''}`}
+                                                className={`border-b border-r border-gray-100 p-2 text-center ${selectedCol === col ? 'bg-blue-50/50' : ''
+                                                    } ${hasComment ? 'bg-yellow-50' : ''} ${col === '总分' ? 'bg-emerald-50/30' : ''
+                                                    }`}
                                                 onContextMenu={(e) => {
                                                     if (isScore) handleContextMenu(e, row._id, col);
                                                 }}
@@ -604,13 +609,13 @@ const MidtermGradeModal = ({ isOpen, onClose, fileName, data, classId, file, aut
                                                 {isScore ? (
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); setSelectedRowId(row._id); handleValueClick(row._id, col, val, row['姓名'], row['学号']); }}
-                                                        className={`w-full h-full px-2 py-1 text-gray-800 hover:bg-gray-200 rounded text-sm text-left ${hasComment ? 'bg-yellow-100' : ''}`}
-                                                        title={row[`_comment_${col}`]} // Tooltip for comment
+                                                        className={`w-full h-full px-2 py-1 text-gray-700 hover:bg-gray-100 rounded text-sm text-center transition-colors ${hasComment ? 'ring-2 ring-yellow-300 ring-inset' : ''}`}
+                                                        title={row[`_comment_${col}`]}
                                                     >
                                                         {val || ''}
                                                     </button>
                                                 ) : (
-                                                    <span className={`text-gray-800 font-medium px-2 ${col === '总分' ? 'text-blue-600' : ''}`}>
+                                                    <span className={`font-medium px-2 ${col === '总分' ? 'text-emerald-600 font-bold' : 'text-gray-800'}`}>
                                                         {val}
                                                     </span>
                                                 )}

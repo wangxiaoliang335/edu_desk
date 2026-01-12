@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Search, Users, User, Check } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { sendMessageWS } from '../../utils/websocket';
-import { getTIMGroups, checkGroupsExist } from '../../utils/tim';
+import { getTIMGroups, checkGroupsExist, invalidateTIMGroupsCache } from '../../utils/tim';
 
 interface CreateClassGroupModalProps {
     isOpen: boolean;
@@ -273,7 +273,35 @@ const CreateClassGroupModal = ({ isOpen, onClose, onSuccess, userInfo }: CreateC
 
                         if (data.group_id) {
                             alert(`班级群 "${data.groupname || groupName}" 创建成功`);
-                            onSuccess?.();
+
+                            // Store the newly created group ID for immediate ownership detection
+                            // This helps before TIM SDK syncs the owner info
+                            const newGroupId = data.group_id;
+                            if (newGroupId) {
+                                const recentlyCreatedGroups = JSON.parse(sessionStorage.getItem('recentlyCreatedGroups') || '[]');
+                                recentlyCreatedGroups.push(newGroupId);
+                                sessionStorage.setItem('recentlyCreatedGroups', JSON.stringify(recentlyCreatedGroups));
+                                console.log('[CreateClassGroup] Stored newly created group ID:', newGroupId);
+                            }
+
+                            // Invalidate cache and delay to allow TIM server to sync
+                            // TIM cloud needs more time to propagate the new group
+                            invalidateTIMGroupsCache();
+
+                            // First refresh after 2 seconds
+                            setTimeout(() => {
+                                console.log('[CreateClassGroup] First refresh attempt');
+                                onSuccess?.();
+
+                                // Second refresh after 4 more seconds (total 6s)
+                                // This catches cases where TIM sync is slow
+                                setTimeout(() => {
+                                    console.log('[CreateClassGroup] Second refresh attempt');
+                                    invalidateTIMGroupsCache();
+                                    onSuccess?.();
+                                }, 4000);
+                            }, 2000);
+
                             onClose();
                         } else {
                             alert(`创建失败: ${data.message || data.error || '未知错误'}`);

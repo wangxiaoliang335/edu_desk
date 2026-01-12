@@ -167,6 +167,12 @@ export const setCachedTIMGroups = (groups: any[]) => {
     console.log('TIM groups cache updated:', groups.length);
 };
 
+// Export function to invalidate/clear the cache (force fresh fetch on next call)
+export const invalidateTIMGroupsCache = () => {
+    cachedTIMGroups = [];
+    console.log('TIM groups cache invalidated');
+};
+
 export const sendMessage = async (to: string, text: string, type: 'C2C' | 'GROUP' = 'GROUP') => {
     if (!isSDKReady) {
         console.error('sendMessage failed: SDK not ready');
@@ -302,17 +308,52 @@ export const changeGroupOwner = async (groupID: string, newOwnerID: string) => {
     }
 };
 
-export const checkGroupsExist = async (groupIDs: string[]) => {
-    if (!isSDKReady) return [];
-    try {
-        const res = await tim.getGroupProfile({ groupIDList: groupIDs } as any);
-        console.log('TIM checkGroupsExist success:', res.data.groupList.length);
-        // Map to just IDs of successfully found groups
-        return res.data.groupList
-            .filter((g: any) => g.groupID && !g.errorCode) // Check for valid groupID and no error code
-            .map((g: any) => g.groupID);
-    } catch (error) {
-        console.error('TIM checkGroupsExist failed:', error);
-        return [];
+export const checkGroupsExist = async (groupIDs: string[]): Promise<string[]> => {
+    if (!isSDKReady || groupIDs.length === 0) return [];
+
+    const existingGroups: string[] = [];
+
+    // Helper to delay between requests
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+    // Check groups sequentially with throttling to avoid rate limits
+    for (const groupID of groupIDs) {
+        try {
+            const res = await tim.getGroupProfile({ groupID });
+            // If we get here without error, the group exists
+            if (res.data.group && res.data.group.groupID) {
+                existingGroups.push(res.data.group.groupID);
+            }
+        } catch (error: any) {
+            // Error code 10010 means group doesn't exist - this is expected
+            // Error code 10007 means "only group member can get group info" - group EXISTS but we're not a member
+            if (error?.code === 10007) {
+                console.log(`TIM checkGroupExist for ${groupID}: exists (not a member, code 10007)`);
+                existingGroups.push(groupID);
+            } else if (error?.code === 2996) {
+                // Rate limit hit - wait longer and retry once
+                console.log(`TIM checkGroupExist for ${groupID}: rate limited, waiting and retrying...`);
+                await delay(500);
+                try {
+                    const retryRes = await tim.getGroupProfile({ groupID });
+                    if (retryRes.data.group && retryRes.data.group.groupID) {
+                        existingGroups.push(retryRes.data.group.groupID);
+                    }
+                } catch (retryError: any) {
+                    if (retryError?.code === 10007) {
+                        existingGroups.push(groupID);
+                    } else if (retryError?.code !== 10010) {
+                        console.log(`TIM checkGroupExist retry for ${groupID}:`, retryError?.code || retryError?.message);
+                    }
+                }
+            } else if (error?.code !== 10010) {
+                console.log(`TIM checkGroupExist for ${groupID}:`, error?.code || error?.message || 'unknown error');
+            }
+        }
+        // Throttle: wait 100ms between requests
+        await delay(100);
     }
+
+    console.log('TIM checkGroupsExist: found', existingGroups.length, 'existing groups out of', groupIDs.length);
+    return existingGroups;
 };

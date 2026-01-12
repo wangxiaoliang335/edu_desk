@@ -595,6 +595,133 @@ async fn save_course_schedule(class_id: String, term: String, days: Vec<String>,
     Ok(text)
 }
 
+
+
+#[tauri::command]
+async fn update_user_name(phone: String, name: String, id_number: String) -> Result<String, String> {
+    println!("Backend: update_user_name called. Phone: {}, Name: {}", phone, name);
+    let client = reqwest::Client::new();
+    let url = format!("{}updateUserName", API_BASE_URL);
+
+    let response = client.post(&url)
+        .form(&serde_json::json!({
+            "phone": phone,
+            "name": name,
+            "id_number": id_number
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
+#[tauri::command]
+async fn update_user_info(
+    phone: String, id_number: String, name: String, avatar: String, 
+    sex: String, address: String, school_name: String, 
+    grade_level: String, is_administrator: String
+) -> Result<String, String> {
+    println!("Backend: update_user_info called. Phone: {}", phone);
+    let client = reqwest::Client::new();
+    let url = format!("{}updateUserInfo", API_BASE_URL);
+
+    let response = client.post(&url)
+        .form(&serde_json::json!({
+            "phone": phone,
+            "id_number": id_number,
+            "name": name,
+            "avatar": avatar,
+            "sex": sex,
+            "address": address,
+            "school_name": school_name,
+            "grade_level": grade_level,
+            "is_administrator": is_administrator
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
+
+
+#[tauri::command]
+async fn update_user_administrator(phone: String, id_number: String, is_administrator: String) -> Result<String, String> {
+    println!("Backend: update_user_administrator called. Phone: {}, Status: {}", phone, is_administrator);
+    let client = reqwest::Client::new();
+    let url = format!("{}updateUserAdministrator", API_BASE_URL);
+
+    let response = client.post(&url)
+        .form(&serde_json::json!({
+            "phone": phone,
+            "id_number": id_number,
+            "is_administrator": is_administrator
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
+
+
+#[tauri::command]
+async fn get_school_by_name(name: String) -> Result<String, String> {
+    println!("Backend: get_school_by_name called. Name: {}", name);
+    let client = reqwest::Client::new();
+    let url = format!("{}schools?name={}", API_BASE_URL, name);
+
+    let response = client.get(&url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
+#[tauri::command]
+async fn get_unique_6_digit() -> Result<String, String> {
+    println!("Backend: get_unique_6_digit called.");
+    let client = reqwest::Client::new();
+    let url = format!("{}unique6digit", API_BASE_URL);
+
+    // Qt uses GET for this based on `m_httpHandler->get` call in line 194 of QSchoolInfoWidget.cpp
+    let response = client.get(&url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
+#[tauri::command]
+async fn update_school_info(id: String, name: String, address: String) -> Result<String, String> {
+    println!("Backend: update_school_info called. ID: {}, Name: {}", id, name);
+    let client = reqwest::Client::new();
+    let url = format!("{}updateSchoolInfo", API_BASE_URL);
+
+    let response = client.post(&url)
+        .form(&serde_json::json!({
+            "id": id,
+            "name": name,
+            "address": address
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
 #[tauri::command]
 async fn get_classes_by_prefix(prefix: String) -> Result<String, String> {
     println!("Backend: get_classes_by_prefix called with prefix: {}", prefix);
@@ -605,6 +732,100 @@ async fn get_classes_by_prefix(prefix: String) -> Result<String, String> {
         .json(&serde_json::json!({
             "prefix": prefix
         }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+
+}
+
+#[tauri::command]
+async fn update_classes(classes: Vec<serde_json::Value>) -> Result<String, String> {
+    println!("Backend: update_classes called. Count: {}", classes.len());
+    let client = reqwest::Client::new();
+    let url = format!("{}updateClasses", API_BASE_URL);
+
+    // Ensure payload is a JSON array
+    let response = client.post(&url)
+        .json(&classes)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
+#[tauri::command]
+async fn delete_classes(classes: Vec<serde_json::Value>) -> Result<String, String> {
+    println!("Backend: delete_classes called. Count: {}", classes.len());
+    let client = reqwest::Client::new();
+    // Use deleteClasses endpoint
+    let url = format!("{}deleteClasses", API_BASE_URL);
+
+    let response = client.post(&url)
+        .json(&classes)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
+
+
+#[tauri::command]
+async fn get_list_teachers(school_id: String) -> Result<String, String> {
+    println!("Backend: get_list_teachers called. SchoolID: {}", school_id);
+    let client = reqwest::Client::new();
+    let url = format!("{}get_list_teachers?schoolId={}", API_BASE_URL, school_id);
+
+    let response = client.get(&url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
+#[tauri::command]
+async fn add_teacher(teachers: Vec<serde_json::Value>) -> Result<String, String> {
+    println!("Backend: add_teacher called. Count: {}", teachers.len());
+    let client = reqwest::Client::new();
+    let url = format!("{}add_teacher", API_BASE_URL);
+
+    // Endpoint name is add_teacher, but usually accepts a list or single? 
+    // QMemberManager sends a JSON list.
+    let response = client.post(&url)
+        .json(&teachers)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
+#[tauri::command]
+async fn delete_teacher(phones: Vec<String>) -> Result<String, String> {
+    println!("Backend: delete_teacher called. Count: {}", phones.len());
+    let client = reqwest::Client::new();
+    let url = format!("{}delete_teacher", API_BASE_URL);
+
+    // QMemberManager sends a JSON list of phones to delete?
+    // Or objects? `delete_teacher` usually takes list of IDs or phones.
+    // Let's assume list of phones for now based on usual patterns, or objects if generic.
+    // Qt: `QJsonObject json; json.insert("phone", phone); array.append(json);`
+    // So it sends an array of objects: `[{"phone": "..."}]`
+    
+    let payload: Vec<_> = phones.into_iter().map(|p| serde_json::json!({ "phone": p })).collect();
+
+    let response = client.post(&url)
+        .json(&payload)
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -849,6 +1070,53 @@ async fn exit_app() {
     std::process::exit(0);
 }
 
+#[tauri::command]
+async fn save_seat_arrangement(class_id: String, seats_json: String) -> Result<String, String> {
+    println!("Backend: save_seat_arrangement called. ClassID: {}", class_id);
+    let client = reqwest::Client::new();
+    let url = format!("{}seat-arrangement/save", API_BASE_URL);
+
+    let response = client.post(&url)
+        .header("Content-Type", "application/json")
+        .body(seats_json)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
+#[tauri::command]
+async fn get_student_scores(class_id: String) -> Result<String, String> {
+    println!("Backend: get_student_scores called for class_id: {}", class_id);
+    let client = reqwest::Client::new();
+    let url = format!("{}student-scores?class_id={}", API_BASE_URL, class_id);
+    
+    let response = client.get(&url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
+#[tauri::command]
+async fn get_group_scores(class_id: String, term: String) -> Result<String, String> {
+    println!("Backend: get_group_scores called for class_id: {}, term: {}", class_id, term);
+    let client = reqwest::Client::new();
+    let url = format!("{}group-scores?class_id={}&term={}", API_BASE_URL, class_id, term);
+    
+    let response = client.get(&url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -893,6 +1161,20 @@ pub fn run() {
             join_class,
             remove_friend,
             leave_class,
+            update_user_name,
+            update_user_info,
+            update_user_administrator,
+            get_school_by_name,
+            get_unique_6_digit,
+            update_school_info,
+            update_classes,
+            delete_classes,
+            get_list_teachers,
+            add_teacher,
+            delete_teacher,
+            save_seat_arrangement,
+            get_student_scores,
+            get_group_scores,
             exit_app
         ])
         .run(tauri::generate_context!())

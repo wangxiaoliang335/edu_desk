@@ -489,50 +489,94 @@ const CustomListModal = ({ isOpen, onClose, classId }: CustomListModalProps) => 
     };
 
     return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-[#808080] rounded shadow-2xl w-[600px] h-[400px] flex flex-col overflow-hidden text-sm">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl shadow-2xl w-[700px] max-h-[500px] flex flex-col overflow-hidden border border-gray-100">
 
                 {/* Header */}
-                <div className="flex items-center justify-between p-2">
-                    <div className="bg-[#d3d3d3] text-black px-4 py-2 rounded font-bold text-base">
-                        学生统计表导入
+                <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
+                            <FileSpreadsheet className="text-white" size={20} />
+                        </div>
+                        <div>
+                            <h2 className="font-bold text-lg text-gray-800">学生统计表导入</h2>
+                            <p className="text-xs text-gray-500">管理成绩表、小组评价表等数据</p>
+                        </div>
                     </div>
-                    <button onClick={onClose} className="w-8 h-8 flex items-center justify-center bg-[#666666] text-white rounded hover:bg-[#777777] font-bold">
+                    <button
+                        onClick={onClose}
+                        className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all"
+                    >
                         <X size={20} />
                     </button>
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 p-4 flex flex-wrap content-start gap-4 overflow-y-auto">
-                    {importedFiles.map(file => (
-                        <div
-                            key={file.id}
-                            onClick={() => handleFileClick(file)}
-                            className="relative group w-24 h-24 bg-green-600 rounded flex flex-col items-center justify-center cursor-pointer hover:bg-green-700 transition-colors shadow-md border-2 border-transparent hover:border-yellow-300"
-                        >
-                            <FileSpreadsheet className="text-white mb-2" size={32} />
-                            <span className="text-white text-xs px-1 text-center line-clamp-2 break-all font-bold">
-                                {file.name}
-                            </span>
-
-                            {/* Delete Button (Hover) */}
-                            <button
-                                onClick={(e) => deleteFile(e, file.id)}
-                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                <div className="flex-1 p-6 overflow-y-auto bg-gray-50/50">
+                    <div className="grid grid-cols-4 gap-4">
+                        {importedFiles.map(file => (
+                            <div
+                                key={file.id}
+                                onClick={() => handleFileClick(file)}
+                                className="relative group bg-white rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200 border border-gray-100 hover:border-blue-200"
                             >
-                                <Trash2 size={12} />
-                            </button>
-                        </div>
-                    ))}
+                                {/* Icon */}
+                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 shadow-sm ${file.type === 'midterm_grade'
+                                        ? 'bg-gradient-to-br from-emerald-400 to-teal-500'
+                                        : 'bg-gradient-to-br from-blue-400 to-indigo-500'
+                                    }`}>
+                                    <FileSpreadsheet className="text-white" size={24} />
+                                </div>
 
-                    {/* Add Button */}
-                    <button
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-24 h-24 bg-[#a9a9a9] rounded flex flex-col items-center justify-center cursor-pointer hover:bg-[#b0b0b0] transition-colors border-2 border-dashed border-[#666666] text-[#444444]"
-                    >
-                        <Plus size={32} />
-                        <span className="text-xs font-bold mt-1">导入表格</span>
-                    </button>
+                                {/* Name */}
+                                <span className="text-gray-700 text-xs font-medium text-center line-clamp-2 leading-tight">
+                                    {file.name}
+                                </span>
+
+                                {/* Type Badge */}
+                                <span className={`mt-2 text-[10px] px-2 py-0.5 rounded-full font-medium ${file.type === 'midterm_grade'
+                                        ? 'bg-emerald-50 text-emerald-600'
+                                        : 'bg-blue-50 text-blue-600'
+                                    }`}>
+                                    {file.type === 'midterm_grade' ? '个人成绩' : '小组评价'}
+                                </span>
+
+                                {/* Delete Button (Hover) */}
+                                <button
+                                    onClick={(e) => deleteFile(e, file.id)}
+                                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-md hover:bg-red-600 hover:scale-110"
+                                >
+                                    <Trash2 size={12} />
+                                </button>
+                            </div>
+                        ))}
+
+                        {/* Add Button */}
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="min-h-[120px] bg-white rounded-xl flex flex-col items-center justify-center cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 border-2 border-dashed border-gray-200 hover:border-blue-300 text-gray-400 hover:text-blue-500 group"
+                        >
+                            <div className="w-12 h-12 rounded-xl bg-gray-50 group-hover:bg-blue-50 flex items-center justify-center mb-2 transition-colors">
+                                <Plus size={24} />
+                            </div>
+                            <span className="text-xs font-medium">导入表格</span>
+                        </button>
+                    </div>
+
+                    {/* Empty State */}
+                    {importedFiles.length === 0 && (
+                        <div className="text-center py-8 text-gray-400">
+                            <FileSpreadsheet size={48} className="mx-auto mb-3 opacity-50" />
+                            <p className="text-sm">暂无数据表</p>
+                            <p className="text-xs">点击上方按钮导入 Excel 文件</p>
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div className="px-6 py-3 border-t border-gray-100 bg-white flex items-center justify-between">
+                    <span className="text-xs text-gray-400">支持 .xlsx, .xls, .csv 格式</span>
+                    <span className="text-xs text-gray-500">共 {importedFiles.length} 个表格</span>
                 </div>
 
                 {/* Hidden Input */}

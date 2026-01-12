@@ -7,6 +7,9 @@ import ClassManagement from './ClassManagement';
 import CreateClassGroupModal from './modals/CreateClassGroupModal';
 import CreateNormalGroupModal from './modals/CreateNormalGroupModal';
 import SearchAddModal from './modals/SearchAddModal';
+import UserInfoModal from './modals/UserInfoModal';
+import ChangePasswordModal from './modals/ChangePasswordModal';
+import SchoolInfoModal from './modals/SchoolInfoModal';
 
 
 import { invoke } from '@tauri-apps/api/core';
@@ -23,6 +26,9 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
     const [showCreateClassGroup, setShowCreateClassGroup] = useState(false);
     const [showCreateNormalGroup, setShowCreateNormalGroup] = useState(false);
     const [showSearchAdd, setShowSearchAdd] = useState(false);
+    const [showUserInfo, setShowUserInfo] = useState(false);
+    const [showChangePassword, setShowChangePassword] = useState(false);
+    const [showSchoolInfo, setShowSchoolInfo] = useState(false);
 
     const handleMinimize = () => getCurrentWindow().minimize();
     const handleClose = () => invoke('exit_app');
@@ -49,6 +55,8 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
             setShowCreateNormalGroup(true);
         } else if (toolId === 'search_add') {
             setShowSearchAdd(true);
+        } else if (toolId === 'school_info') {
+            setShowSchoolInfo(true);
         } else {
             console.log('Tool clicked:', toolId);
         }
@@ -119,7 +127,7 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
                                     { id: 'new_folder', name: '创建文件夹', icon: '➕', color: 'bg-yellow-100 text-yellow-600' },
                                     { id: 'countdown', name: '倒计时', icon: '⏳', color: 'bg-red-100 text-red-600' },
                                     { id: 'time', name: '时间', icon: '🕒', color: 'bg-purple-100 text-purple-600' },
-                                    { id: 'class_mgr', name: '学校/班级', icon: '🏫', color: 'bg-emerald-100 text-emerald-600' },
+                                    { id: 'school_info', name: '配置学校信息', icon: '🏫', color: 'bg-emerald-100 text-emerald-600' },
                                     { id: 'wallpaper', name: '壁纸', icon: '🖼️', color: 'bg-pink-100 text-pink-600' },
                                     { id: 'schedule', name: '教师课程表', icon: '📅', color: 'bg-orange-100 text-orange-600' },
                                     { id: 'calendar', name: '校历', icon: '🗓️', color: 'bg-cyan-100 text-cyan-600' },
@@ -159,13 +167,16 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
                         <div className="h-full flex flex-col items-center justify-center space-y-8 animate-in zoom-in-95 duration-300">
 
                             {/* Avatar Section */}
-                            <div className="relative group">
+                            <div className="relative group cursor-pointer" onClick={() => setShowUserInfo(true)}>
                                 <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-2xl transition-transform duration-300 group-hover:scale-105">
                                     <img
                                         src={userInfo?.avatar || "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"}
                                         alt="Avatar"
                                         className="w-full h-full object-cover"
                                     />
+                                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <span className="text-white text-xs font-bold">查看资料</span>
+                                    </div>
                                 </div>
                                 <div className="absolute bottom-1 right-1 w-6 h-6 bg-green-500 border-4 border-white rounded-full"></div>
                             </div>
@@ -267,6 +278,25 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
             <SearchAddModal
                 isOpen={showSearchAdd}
                 onClose={() => setShowSearchAdd(false)}
+                userInfo={userInfo}
+            />
+            <UserInfoModal
+                isOpen={showUserInfo}
+                onClose={() => setShowUserInfo(false)}
+                userInfo={userInfo}
+                onChangePassword={() => {
+                    setShowUserInfo(false);
+                    setShowChangePassword(true);
+                }}
+            />
+            <ChangePasswordModal
+                isOpen={showChangePassword}
+                onClose={() => setShowChangePassword(false)}
+                defaultPhone={userInfo?.phone}
+            />
+            <SchoolInfoModal
+                isOpen={showSchoolInfo}
+                onClose={() => setShowSchoolInfo(false)}
                 userInfo={userInfo}
             />
         </div>
