@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { Mic, MicOff, Volume2, X } from 'lucide-react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { Mic, MicOff, Volume2, X, Activity, Terminal } from 'lucide-react';
 
 // Types
 interface Member {
@@ -470,70 +471,177 @@ const IntercomWindow = () => {
         }
     };
 
+    // Toggle for debug logs
+    const [showLogs, setShowLogs] = useState(false);
+
     return (
-        <div className="h-screen w-screen bg-[#3C3C3C] text-white flex flex-col items-center justify-center p-4">
-            {/* Header */}
-            <div className="w-full max-w-4xl bg-[#2C2C2C] rounded-t-xl p-4 flex justify-between items-center border-b border-[#4C4C4C]">
-                <div className="flex items-center gap-2 font-bold">
-                    <span>对讲机</span>
-                    <span className="text-xs bg-blue-600 px-2 py-0.5 rounded text-white">{roomInfo ? '在线' : '等待房间...'}</span>
-                </div>
-                <div className="flex gap-2">
-                    <button className="bg-[#4C4C4C] hover:bg-[#5C5C5C] px-3 py-1 rounded text-sm transition-colors">静音</button>
-                    <button onClick={() => window.close()} className="hover:bg-red-500/20 p-1 rounded transition-colors"><X size={20} /></button>
-                </div>
-            </div>
+        <div className="h-screen w-screen bg-[#f0f2f5] text-slate-800 flex flex-col items-center justify-center relative overflow-hidden font-sans">
+            {/* Background Decorations */}
+            <div className="absolute top-0 left-0 w-full h-64 bg-gradient-to-b from-blue-100/50 to-transparent pointer-events-none"></div>
+            <div className="absolute -top-24 -right-24 w-64 h-64 bg-blue-400/10 rounded-full blur-3xl pointer-events-none"></div>
+            <div className="absolute bottom-0 -left-24 w-80 h-80 bg-indigo-400/10 rounded-full blur-3xl pointer-events-none"></div>
 
-            {/* Participants */}
-            <div className="w-full max-w-4xl bg-[#3C3C3C] border-x border-[#4C4C4C] p-6">
-                <h3 className="text-sm text-gray-400 mb-4">参与者 ({members.length})</h3>
-                <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
-                    {/* Current User First? Or Just List */}
-                    {members.map(m => (
-                        <div key={m.id} className="flex flex-col items-center gap-2 min-w-[70px]">
-                            <div className={`w-16 h-16 rounded-lg flex items-center justify-center text-xl font-bold relative transition-all ${speakingUser == String(m.id) ? 'ring-4 ring-green-500 shadow-lg shadow-green-500/20' : 'ring-2 ring-transparent bg-gradient-to-br from-indigo-500 to-purple-600'}`}>
-                                {m.avatar ? <img src={m.avatar} className="w-full h-full object-cover rounded-lg" /> : m.name[0]}
-                                {speakingUser == String(m.id) && <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-[#3C3C3C] animate-pulse" />}
+            {/* Main Card */}
+            <div className="w-full max-w-lg bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 flex flex-col overflow-hidden h-[90vh] max-h-[800px] ring-1 ring-black/5 relative z-10 transition-all">
+
+                {/* Header */}
+                <div className="px-6 py-4 bg-white/50 backdrop-blur-md border-b border-gray-100 flex justify-between items-center relative z-20">
+                    <div className="flex items-center gap-3">
+                        <div className={`w-2.5 h-2.5 rounded-full ${roomInfo ? 'bg-green-500 animate-pulse' : 'bg-red-400'}`}></div>
+                        <div>
+                            <h1 className="text-lg font-bold text-slate-800 tracking-tight">班级对讲</h1>
+                            <div
+                                className="flex items-center gap-1.5 cursor-pointer group"
+                                onClick={() => setShowLogs(!showLogs)}
+                            >
+                                <p className="text-xs text-slate-500 font-medium group-hover:text-blue-600 transition-colors">
+                                    {roomInfo ? '正在通话中' : '正在连接...'}
+                                </p>
+                                <Activity size={10} className="text-slate-400 group-hover:text-blue-600 transition-colors" />
                             </div>
-                            <span className="text-xs text-gray-300 truncate max-w-[70px]">{m.name}</span>
                         </div>
-                    ))}
-                    {members.length === 0 && <div className="text-gray-500 text-sm italic">加载成员中...</div>}
-                </div>
-            </div>
+                    </div>
+                    <div className="flex gap-2">
+                        {/* Future Volume Control - currently disabled/hidden or separate */}
+                        <button
+                            className="p-2 hover:bg-gray-100 text-gray-400 hover:text-gray-600 rounded-xl transition-colors"
+                            title="静音 (暂未实装)"
+                        >
+                            <Volume2 size={18} />
+                        </button>
 
-            {/* Status Log */}
-            <div className="w-full max-w-4xl flex-1 bg-[#2C2C2C] border-x border-[#4C4C4C] overflow-hidden flex flex-col">
-                <div className="p-2 bg-[#252525] text-xs text-gray-400">状态日志</div>
-                <div ref={statusLogRef} className="flex-1 overflow-y-auto p-4 space-y-2 font-mono text-xs">
-                    {statusLogs.map((l, i) => (
-                        <div key={i} className={`border-l-2 pl-2 ${l.type === 'error' ? 'border-red-500 text-red-400' : l.type === 'success' ? 'border-green-500 text-green-400' : l.type === 'warn' ? 'border-orange-500 text-orange-400' : 'border-blue-500 text-gray-300'}`}>
-                            {l.msg}
+                        <button
+                            onClick={() => getCurrentWindow().close()}
+                            className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-xl transition-colors"
+                        >
+                            <X size={20} />
+                        </button>
+                    </div>
+                </div>
+
+                {/* Participants Area */}
+                <div className="flex-1 overflow-y-auto p-6 scrollbar-hide relative z-10">
+                    {members.length > 0 ? (
+                        <div className="grid grid-cols-4 gap-4 pb-24"> {/* Added padding bottom for floating controls */}
+                            {members.map(m => {
+                                const isSpeaking = speakingUser == String(m.id);
+                                return (
+                                    <div key={m.id} className="flex flex-col items-center group">
+                                        <div className="relative">
+                                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-lg font-bold text-white shadow-sm transition-all duration-300
+                                                ${m.avatar ? 'bg-gray-100' : 'bg-gradient-to-br from-blue-400 to-indigo-500'}
+                                                ${isSpeaking ? 'ring-4 ring-green-400/50 scale-105 shadow-green-200' : 'group-hover:scale-105 group-hover:shadow-md'}
+                                            `}>
+                                                {m.avatar ? (
+                                                    <img src={m.avatar} className="w-full h-full object-cover rounded-2xl" />
+                                                ) : (
+                                                    m.name[0]
+                                                )}
+
+                                                {/* Status Indicator */}
+                                                <div className={`absolute -bottom-1 -right-1 w-4 h-4 border-2 border-white rounded-full 
+                                                    ${isSpeaking ? 'bg-green-500 animate-bounce' : 'bg-gray-300'}
+                                                `}></div>
+                                            </div>
+
+                                            {/* Sound Wave Animation if speaking */}
+                                            {isSpeaking && (
+                                                <div className="absolute -inset-2 rounded-3xl border-2 border-green-400/30 animate-ping pointer-events-none"></div>
+                                            )}
+                                        </div>
+                                        <span className={`mt-2 text-xs font-medium truncate max-w-[80px] text-center px-1 py-0.5 rounded
+                                            ${isSpeaking ? 'text-green-600 bg-green-50' : 'text-slate-600'}
+                                        `}>
+                                            {m.name}
+                                        </span>
+                                    </div>
+                                );
+                            })}
                         </div>
-                    ))}
+                    ) : (
+                        <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-2">
+                            <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-2">
+                                <MicOff size={24} className="opacity-50" />
+                            </div>
+                            <p className="text-sm">暂无成员加入</p>
+                        </div>
+                    )}
                 </div>
-            </div>
 
-            {/* Footer Push-to-Talk */}
-            <div className="w-full max-w-4xl bg-[#2C2C2C] rounded-b-xl p-6 flex flex-col items-center gap-4 border-t border-[#4C4C4C]">
-                <button
-                    disabled={!intercomEnabled || !roomInfo}
-                    onMouseDown={startPublishing}
-                    onMouseUp={stopPublishing}
-                    onMouseLeave={stopPublishing}
-                    onTouchStart={startPublishing}
-                    onTouchEnd={stopPublishing}
-                    className={`
-                        w-20 h-20 rounded-full flex items-center justify-center text-3xl shadow-xl transition-all select-none
-                        ${!intercomEnabled || !roomInfo ? 'bg-gray-600 text-gray-400 cursor-not-allowed' :
-                            isPublishing ? 'bg-red-500 text-white scale-110 ring-4 ring-red-500/30' : 'bg-blue-600 text-white hover:bg-blue-500 hover:scale-105 active:scale-95'}
+                {/* Bottom Sheet Debug Logs */}
+                <div
+                    className={`absolute bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t border-gray-200 shadow-[0_-10px_40px_rgba(0,0,0,0.1)] transition-all duration-500 ease-in-out z-30 flex flex-col
+                        ${showLogs ? 'h-[60%] opacity-100 translate-y-0' : 'h-0 opacity-0 translate-y-full pointer-events-none'}
                     `}
                 >
-                    {isPublishing ? <MicOff /> : <Mic />}
-                </button>
-                <span className="text-xs text-gray-400">
-                    {intercomEnabled ? "按住按钮开始对讲，松开按钮停止" : "正在获取麦克风..."}
-                </span>
+                    <div className="flex items-center justify-between p-3 border-b border-gray-100 bg-gray-50/50">
+                        <div className="flex items-center gap-2 text-slate-600 font-bold text-xs uppercase tracking-wider">
+                            <Terminal size={14} className="text-blue-500" />
+                            <span>系统日志</span>
+                        </div>
+                        <button onClick={() => setShowLogs(false)} className="p-1 hover:bg-gray-200 rounded text-gray-400">
+                            <X size={14} />
+                        </button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4 font-mono text-[10px] space-y-1.5">
+                        {statusLogs.map((l, i) => (
+                            <div key={i} className={`flex gap-2 ${l.type === 'error' ? 'text-red-500' :
+                                l.type === 'success' ? 'text-emerald-600' :
+                                    l.type === 'warn' ? 'text-amber-500' : 'text-slate-500'
+                                }`}>
+                                <span className="text-slate-300 select-none">[{l.msg.split(' ')[0]}]</span>
+                                <span className="break-all">{l.msg.split(' ').slice(1).join(' ')}</span>
+                            </div>
+                        ))}
+                        <div ref={statusLogRef}></div>
+                    </div>
+                </div>
+
+                {/* Footer / Controls */}
+                <div className="p-8 bg-white/60 backdrop-blur-md border-t border-white/50 flex flex-col items-center justify-center relative z-20">
+                    {/* Ripple Effect Background when talking */}
+                    {isPublishing && (
+                        <>
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-400/10 rounded-full animate-ping pointer-events-none"></div>
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-blue-400/5 rounded-full animate-ping animation-delay-500 pointer-events-none"></div>
+                        </>
+                    )}
+
+                    <button
+                        disabled={!intercomEnabled || !roomInfo}
+                        onMouseDown={startPublishing}
+                        onMouseUp={stopPublishing}
+                        onMouseLeave={stopPublishing}
+                        onTouchStart={startPublishing}
+                        onTouchEnd={stopPublishing}
+                        className={`
+                            group relative w-24 h-24 rounded-full flex items-center justify-center
+                            shadow-[0_10px_30px_-5px_rgba(59,130,246,0.3)] transition-all duration-200
+                            ${!intercomEnabled || !roomInfo ? 'bg-slate-100 text-slate-300 cursor-not-allowed border-4 border-slate-200' :
+                                isPublishing ? 'scale-110 shadow-blue-500/50 translate-y-1' :
+                                    'hover:scale-105 hover:shadow-blue-500/40 hover:-translate-y-0.5 cursor-pointer'}
+                        `}
+                    >
+                        {/* Button Background Gradient */}
+                        <div className={`absolute inset-0 rounded-full transition-all duration-300 ${!intercomEnabled || !roomInfo ? 'bg-slate-100' :
+                            isPublishing ? 'bg-gradient-to-br from-blue-500 to-indigo-600' :
+                                'bg-gradient-to-br from-blue-400 to-indigo-500 group-hover:from-blue-500 group-hover:to-indigo-600'
+                            }`}></div>
+
+                        {/* Icon */}
+                        <div className="relative z-10 text-white">
+                            {isPublishing ? (
+                                <Mic size={40} className="animate-pulse" />
+                            ) : (
+                                <Mic size={32} className={!intercomEnabled || !roomInfo ? 'text-slate-300' : 'drop-shadow-md'} />
+                            )}
+                        </div>
+                    </button>
+
+                    <p className={`mt-4 text-xs font-semibold transition-colors ${isPublishing ? 'text-blue-600' : 'text-slate-400'}`}>
+                        {isPublishing ? "正在讲话..." : (intercomEnabled ? "按住说话" : "准备中...")}
+                    </p>
+                </div>
             </div>
         </div>
     );

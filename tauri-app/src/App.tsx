@@ -5,6 +5,9 @@ import Dashboard from "./components/Dashboard";
 import ClassChatWindow from "./components/ClassChatWindow";
 import ClassScheduleWindow from "./components/ClassScheduleWindow";
 import IntercomWindow from "./components/IntercomWindow";
+import NormalGroupChatWindow from "./components/NormalGroupChatWindow";
+import DesktopFileBox from "./components/DesktopFileBox";
+import TeacherSchedule from "./components/TeacherSchedule";
 
 import { invoke } from "@tauri-apps/api/core";
 import { loginTIM, getTIMGroups, setCachedTIMGroups } from "./utils/tim";
@@ -113,6 +116,9 @@ function App() {
         <Route path="/class/schedule/:groupclassId" element={<ClassScheduleWindow />} />
         <Route path="/class/chat/:groupclassId" element={<ClassChatWindow />} />
         <Route path="/intercom/:groupId" element={<IntercomWindow />} />
+        <Route path="/chat/normal/:groupId" element={<NormalGroupChatWindow />} />
+        <Route path="/file-box/:boxId" element={<DesktopFileBox />} />
+        <Route path="/teacher-schedule" element={<TeacherSchedule />} />
       </Routes>
     </BrowserRouter>
   );

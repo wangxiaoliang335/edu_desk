@@ -7,9 +7,240 @@ fn greet(name: &str) -> String {
 }
 
 #[tauri::command]
+fn get_system_icon(path: String, size: Option<u32>) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use base64::Engine;
+        use std::ffi::OsStr;
+        use std::io::Cursor;
+        use std::os::windows::ffi::OsStrExt;
+        use windows::core::PCWSTR;
+        use windows::Win32::Graphics::Gdi::{
+            CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetDC, ReleaseDC,
+            SelectObject, BITMAPINFO,
+            BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, RGBQUAD,
+        };
+        use windows::Win32::UI::Shell::{SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON};
+        use windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES;
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, DrawIconEx, HICON, DI_NORMAL};
+
+        fn to_wide_null(s: &str) -> Vec<u16> {
+            OsStr::new(s).encode_wide().chain(Some(0)).collect()
+        }
+
+        unsafe fn hicon_to_png_data_url(hicon: HICON, size: u32) -> Result<String, String> {
+            // Create 32-bit ARGB DIB and draw the icon into it (best way to preserve alpha / overlays)
+            let screen_dc = GetDC(HWND(0));
+            if screen_dc.0 == 0 {
+                return Err("GetDC failed".into());
+            }
+
+            let mem_dc = CreateCompatibleDC(screen_dc);
+            if mem_dc.0 == 0 {
+                let _ = ReleaseDC(HWND(0), screen_dc);
+                return Err("CreateCompatibleDC failed".into());
+            }
+
+            let bmi = BITMAPINFO {
+                bmiHeader: BITMAPINFOHEADER {
+                    biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                    biWidth: size as i32,
+                    biHeight: -(size as i32), // top-down
+                    biPlanes: 1,
+                    biBitCount: 32,
+                    biCompression: BI_RGB.0 as u32,
+                    biSizeImage: 0,
+                    biXPelsPerMeter: 0,
+                    biYPelsPerMeter: 0,
+                    biClrUsed: 0,
+                    biClrImportant: 0,
+                },
+                bmiColors: [RGBQUAD { rgbBlue: 0, rgbGreen: 0, rgbRed: 0, rgbReserved: 0 }; 1],
+            };
+
+            let mut bits_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
+            let hbitmap = CreateDIBSection(screen_dc, &bmi, DIB_RGB_COLORS, &mut bits_ptr, None, 0)
+                .map_err(|e| e.message().to_string())?;
+            if bits_ptr.is_null() {
+                DeleteDC(mem_dc);
+                let _ = ReleaseDC(HWND(0), screen_dc);
+                return Err("CreateDIBSection failed".into());
+            }
+
+            let old_obj = SelectObject(mem_dc, hbitmap);
+            // Draw icon scaled into our buffer
+            DrawIconEx(mem_dc, 0, 0, hicon, size as i32, size as i32, 0, None, DI_NORMAL)
+                .map_err(|e| e.message().to_string())?;
+            // Restore + cleanup GDI objects
+            let _ = SelectObject(mem_dc, old_obj);
+            DeleteDC(mem_dc);
+            let _ = ReleaseDC(HWND(0), screen_dc);
+
+            // Copy BGRA -> RGBA
+            let byte_len = (size as usize) * (size as usize) * 4;
+            let src = std::slice::from_raw_parts(bits_ptr as *const u8, byte_len);
+            let mut rgba = src.to_vec();
+            for px in rgba.chunks_mut(4) {
+                px.swap(0, 2);
+            }
+
+            DeleteObject(hbitmap);
+
+            let img = image::RgbaImage::from_raw(size, size, rgba)
+                .ok_or_else(|| "Failed to create image buffer".to_string())?;
+            let mut png = Vec::new();
+            img.write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
+                .map_err(|e| e.to_string())?;
+
+            let b64 = base64::engine::general_purpose::STANDARD.encode(png);
+            Ok(format!("data:image/png;base64,{}", b64))
+        }
+
+        let size = size.unwrap_or(64).clamp(16, 256);
+        let wide = to_wide_null(&path);
+        let mut sfi = SHFILEINFOW::default();
+
+        // Large icon is usually closer to Explorer; we draw/scale to requested size.
+        let flags = SHGFI_ICON | SHGFI_LARGEICON;
+        let res = unsafe {
+            SHGetFileInfoW(
+                PCWSTR(wide.as_ptr()),
+                FILE_FLAGS_AND_ATTRIBUTES(0),
+                Some(&mut sfi),
+                std::mem::size_of::<SHFILEINFOW>() as u32,
+                flags,
+            )
+        };
+
+        if res == 0 || sfi.hIcon.0 == 0 {
+            return Err("SHGetFileInfoW failed to get icon".into());
+        }
+
+        let data_url = unsafe { hicon_to_png_data_url(sfi.hIcon, size) };
+        unsafe {
+            let _ = DestroyIcon(sfi.hIcon);
+        }
+        return data_url;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = path;
+        let _ = size;
+        Err("get_system_icon is only supported on Windows".into())
+    }
+}
+
+#[tauri::command]
+fn start_file_drag(paths: Vec<String>) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+        use std::path::Path;
+        use windows::core::{PCWSTR, HRESULT};
+        use windows::Win32::Foundation::BOOL;
+        use windows::Win32::System::Com::{CoInitializeEx, CoTaskMemFree, CoUninitialize, COINIT_APARTMENTTHREADED};
+        use windows::Win32::System::Ole::{DoDragDrop, DROPEFFECT, DROPEFFECT_COPY, DROPEFFECT_MOVE};
+        use windows::Win32::System::Com::IDataObject;
+        use windows::Win32::System::SystemServices::MODIFIERKEYS_FLAGS;
+        use windows::Win32::UI::Shell::{ILFindLastID, SHCreateDataObject, SHParseDisplayName};
+        use windows::Win32::UI::Shell::Common::ITEMIDLIST;
+        use windows::Win32::System::Ole::IDropSource;
+
+        #[windows::core::implement(IDropSource)]
+        struct DropSource;
+        #[allow(non_snake_case)]
+        impl windows::Win32::System::Ole::IDropSource_Impl for DropSource {
+            fn QueryContinueDrag(&self, fEscapePressed: BOOL, grfKeyState: MODIFIERKEYS_FLAGS) -> HRESULT {
+                const DRAGDROP_S_CANCEL: HRESULT = HRESULT(0x00040101);
+                const DRAGDROP_S_DROP: HRESULT = HRESULT(0x00040100);
+                const MK_LBUTTON: u32 = 0x0001;
+                if fEscapePressed.as_bool() {
+                    return DRAGDROP_S_CANCEL;
+                }
+                if (grfKeyState.0 & MK_LBUTTON) == 0 {
+                    return DRAGDROP_S_DROP;
+                }
+                HRESULT(0)
+            }
+            fn GiveFeedback(&self, _dwEffect: DROPEFFECT) -> HRESULT {
+                const DRAGDROP_S_USEDEFAULTCURSORS: HRESULT = HRESULT(0x00040102);
+                DRAGDROP_S_USEDEFAULTCURSORS
+            }
+        }
+
+        if paths.is_empty() {
+            return Err("未提供拖拽路径".into());
+        }
+
+        let first_path = Path::new(&paths[0]);
+        let parent = first_path.parent().ok_or("无法获取父目录")?;
+        for p in &paths[1..] {
+            let cur = Path::new(p);
+            let cur_parent = cur.parent().ok_or("无法获取父目录")?;
+            if cur_parent != parent {
+                return Err("暂不支持跨目录多选拖拽".into());
+            }
+        }
+
+        unsafe {
+            CoInitializeEx(None, COINIT_APARTMENTTHREADED).map_err(|e| e.message().to_string())?;
+        }
+
+        let parent_wide: Vec<u16> = OsStr::new(parent.as_os_str()).encode_wide().chain(Some(0)).collect();
+        let mut pidl_folder: *mut ITEMIDLIST = std::ptr::null_mut();
+        let mut pidl_full_list: Vec<*mut ITEMIDLIST> = Vec::new();
+        let mut child_list: Vec<*const ITEMIDLIST> = Vec::new();
+
+        unsafe {
+            SHParseDisplayName(PCWSTR(parent_wide.as_ptr()), None, &mut pidl_folder, 0, None)
+                .map_err(|e| e.message().to_string())?;
+            for full_path in &paths {
+                let full_wide: Vec<u16> =
+                    OsStr::new(full_path.as_str()).encode_wide().chain(Some(0)).collect();
+                let mut pidl_full: *mut ITEMIDLIST = std::ptr::null_mut();
+                SHParseDisplayName(PCWSTR(full_wide.as_ptr()), None, &mut pidl_full, 0, None)
+                    .map_err(|e| e.message().to_string())?;
+                let child = ILFindLastID(pidl_full) as *const ITEMIDLIST;
+                pidl_full_list.push(pidl_full);
+                child_list.push(child);
+            }
+
+            let data_obj: IDataObject = SHCreateDataObject(
+                Some(pidl_folder as *const ITEMIDLIST),
+                Some(&child_list),
+                None,
+            )
+            .map_err(|e| e.message().to_string())?;
+
+            let drop_source: IDropSource = DropSource.into();
+            let mut effect = DROPEFFECT_COPY | DROPEFFECT_MOVE;
+            let _ = DoDragDrop(&data_obj, &drop_source, effect, &mut effect);
+
+            CoTaskMemFree(Some(pidl_folder as _));
+            for pidl in pidl_full_list {
+                CoTaskMemFree(Some(pidl as _));
+            }
+            CoUninitialize();
+        }
+
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = paths;
+        Err("start_file_drag 仅支持 Windows".into())
+    }
+}
+
+#[tauri::command]
 async fn login(phone: &str, password: &str) -> Result<String, String> {
     let client = reqwest::Client::new();
-    let res = client.post("http://47.100.126.194:5000/login")
+    let res = client
+        .post("http://47.100.126.194:5000/login")
         .json(&serde_json::json!({
             "phone": phone,
             "password": password
@@ -26,7 +257,8 @@ async fn login(phone: &str, password: &str) -> Result<String, String> {
 async fn send_verification_code(phone: &str) -> Result<String, String> {
     let client = reqwest::Client::new();
     // Logic from RegisterDialog.cpp/ResetPwdDialog.cpp
-    let res = client.post("http://47.100.126.194:5000/send_verification_code")
+    let res = client
+        .post("http://47.100.126.194:5000/send_verification_code")
         .form(&serde_json::json!({
             "phone": phone
         }))
@@ -39,10 +271,15 @@ async fn send_verification_code(phone: &str) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn register_account(phone: &str, password: &str, verification_code: &str) -> Result<String, String> {
+async fn register_account(
+    phone: &str,
+    password: &str,
+    verification_code: &str,
+) -> Result<String, String> {
     let client = reqwest::Client::new();
     // Logic from RegisterDialog.cpp
-    let res = client.post("http://47.100.126.194:5000/register")
+    let res = client
+        .post("http://47.100.126.194:5000/register")
         .form(&serde_json::json!({
             "phone": phone,
             "password": password,
@@ -57,10 +294,15 @@ async fn register_account(phone: &str, password: &str, verification_code: &str) 
 }
 
 #[tauri::command]
-async fn reset_password(phone: &str, new_password: &str, verification_code: &str) -> Result<String, String> {
+async fn reset_password(
+    phone: &str,
+    new_password: &str,
+    verification_code: &str,
+) -> Result<String, String> {
     let client = reqwest::Client::new();
     // Logic from ResetPwdDialog.cpp
-    let res = client.post("http://47.100.126.194:5000/verify_and_set_password")
+    let res = client
+        .post("http://47.100.126.194:5000/verify_and_set_password")
         .form(&serde_json::json!({
             "phone": phone,
             "new_password": new_password,
@@ -77,20 +319,35 @@ async fn reset_password(phone: &str, new_password: &str, verification_code: &str
 #[tauri::command]
 async fn resize_window(window: tauri::Window) {
     let _ = window.set_resizable(true);
-    let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: 1280, height: 800 }));
+    let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
+        width: 1280,
+        height: 800,
+    }));
     let _ = window.center();
 }
 
 #[tauri::command]
-async fn get_course_schedule(class_id: &str, term: Option<&str>, token: &str) -> Result<String, String> {
+async fn get_course_schedule(
+    class_id: &str,
+    term: Option<&str>,
+    week: Option<i32>,
+    token: &str,
+) -> Result<String, String> {
     let client = reqwest::Client::new();
-    let mut url = format!("http://47.100.126.194:5000/course-schedule?class_id={}", class_id);
-    
+    let mut url = format!(
+        "http://47.100.126.194:5000/course-schedule?class_id={}",
+        class_id
+    );
+
     if let Some(t) = term {
         url.push_str(&format!("&term={}", t));
     }
+    if let Some(w) = week {
+        url.push_str(&format!("&week={}", w));
+    }
 
-    let res = client.get(&url)
+    let res = client
+        .get(&url)
         .header("Authorization", token) // Assuming token is passed directly or as Bearer? User said "Token: needed in header". Usually implies "Authorization". Qt code might clarify but let's try direct or Bearer. I'll use raw token first as Qt usually sends raw or specific format.
         .send()
         .await
@@ -105,12 +362,82 @@ async fn get_course_schedule(class_id: &str, term: Option<&str>, token: &str) ->
 }
 
 #[tauri::command]
+async fn get_teacher_schedule(
+    teacher_id: &str,
+    term: Option<&str>,
+    week: Option<i32>,
+    token: &str,
+) -> Result<String, String> {
+    let client = reqwest::Client::new();
+    let mut url = format!(
+        "{}teacher-schedule?teacher_id={}",
+        API_BASE_URL, teacher_id
+    );
+
+    if let Some(t) = term {
+        url.push_str(&format!("&term={}", t));
+    }
+    if let Some(w) = week {
+        url.push_str(&format!("&week={}", w));
+    }
+
+    let res = client
+        .get(&url)
+        .header("Authorization", token)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if res.status().is_success() {
+        let text = res.text().await.map_err(|e| e.to_string())?;
+        Ok(text)
+    } else {
+        Err(format!("Request failed with status: {}", res.status()))
+    }
+}
+
+#[tauri::command]
+async fn get_school_course_schedule(
+    school_id: &str,
+    term: &str,
+    token: &str,
+) -> Result<String, String> {
+    println!(
+        "Backend: get_school_course_schedule called. SchoolId: {}, Term: {}",
+        school_id, term
+    );
+    let client = reqwest::Client::new();
+    let url = format!(
+        "http://47.100.126.194:5000/course-schedule/school?school_id={}&term={}",
+        school_id, term
+    );
+
+    let res = client
+        .get(&url)
+        .header("Authorization", token)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let status = res.status();
+    println!("Backend: get_school_course_schedule status: {}", status);
+
+    if status.is_success() {
+        let text = res.text().await.map_err(|e| e.to_string())?;
+        Ok(text)
+    } else {
+        Err(format!("Request failed with status: {}", status))
+    }
+}
+
+#[tauri::command]
 async fn get_user_friends(id_card: &str, token: &str) -> Result<String, String> {
     println!("Backend: get_user_friends called with id_card: {}", id_card);
     let client = reqwest::Client::new();
     let url = format!("http://47.100.126.194:5000/friends?id_card={}", id_card);
 
-    let res = client.get(&url)
+    let res = client
+        .get(&url)
         .header("Authorization", token)
         .send()
         .await
@@ -130,16 +457,23 @@ async fn get_user_friends(id_card: &str, token: &str) -> Result<String, String> 
 
 #[tauri::command]
 async fn get_teacher_classes(teacher_unique_id: &str, token: &str) -> Result<String, String> {
-    println!("Backend: get_teacher_classes called with teacher_unique_id: {}", teacher_unique_id);
+    println!(
+        "Backend: get_teacher_classes called with teacher_unique_id: {}",
+        teacher_unique_id
+    );
     let client = reqwest::Client::new();
-    let url = format!("http://47.100.126.194:5000/teachers/classes?teacher_unique_id={}", teacher_unique_id);
+    let url = format!(
+        "http://47.100.126.194:5000/teachers/classes?teacher_unique_id={}",
+        teacher_unique_id
+    );
 
-    let res = client.get(&url)
+    let res = client
+        .get(&url)
         .header("Authorization", token)
         .send()
         .await
         .map_err(|e| e.to_string())?;
-    
+
     let status = res.status();
     println!("Backend: get_teacher_classes status: {}", status);
 
@@ -152,18 +486,26 @@ async fn get_teacher_classes(teacher_unique_id: &str, token: &str) -> Result<Str
 }
 
 #[tauri::command]
-async fn get_user_info(phone: Option<&str>, user_id: Option<&str>, token: &str) -> Result<String, String> {
-    println!("Backend: get_user_info called. Phone: {:?}, UserId: {:?}", phone, user_id);
+async fn get_user_info(
+    phone: Option<&str>,
+    user_id: Option<&str>,
+    token: &str,
+) -> Result<String, String> {
+    println!(
+        "Backend: get_user_info called. Phone: {:?}, UserId: {:?}",
+        phone, user_id
+    );
     let client = reqwest::Client::new();
     let mut url = "http://47.100.126.194:5000/userInfo?".to_string();
-    
+
     if let Some(p) = phone {
         url.push_str(&format!("phone={}", p));
     } else if let Some(u) = user_id {
         url.push_str(&format!("userid={}", u));
     }
 
-    let res = client.get(&url)
+    let res = client
+        .get(&url)
         .header("Authorization", token)
         .send()
         .await
@@ -183,7 +525,8 @@ async fn get_user_info(phone: Option<&str>, user_id: Option<&str>, token: &str) 
 async fn get_user_sig(user_id: &str) -> Result<String, String> {
     println!("Backend: get_user_sig called for user_id: {}", user_id);
     let client = reqwest::Client::new();
-    let res = client.post("http://47.100.126.194:5000/getUserSig")
+    let res = client
+        .post("http://47.100.126.194:5000/getUserSig")
         .form(&serde_json::json!({
             "user_id": user_id
         }))
@@ -198,9 +541,10 @@ async fn get_user_sig(user_id: &str) -> Result<String, String> {
         let text = res.text().await.map_err(|e| e.to_string())?;
         // Parse the JSON to extract the user_sig field
         let json: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-        
+
         // C++ checks multiple fields: user_sig, usersig, sig
-        let sig = json["data"]["user_sig"].as_str()
+        let sig = json["data"]["user_sig"]
+            .as_str()
             .or_else(|| json["data"]["usersig"].as_str())
             .or_else(|| json["data"]["sig"].as_str())
             .or_else(|| json["user_sig"].as_str())
@@ -221,8 +565,11 @@ async fn get_user_sig(user_id: &str) -> Result<String, String> {
 
 #[tauri::command]
 async fn open_class_window(app: tauri::AppHandle, groupclass_id: String) -> Result<(), String> {
-    println!("Backend: Opening class schedule window for ID: {}", groupclass_id);
-    
+    println!(
+        "Backend: Opening class schedule window for ID: {}",
+        groupclass_id
+    );
+
     let window_label = format!("class_schedule_{}", groupclass_id);
     // Route to the new Schedule Window
     let url = format!("/class/schedule/{}", groupclass_id);
@@ -232,15 +579,12 @@ async fn open_class_window(app: tauri::AppHandle, groupclass_id: String) -> Resu
         return Ok(());
     }
 
-    let builder = tauri::WebviewWindowBuilder::new(
-        &app,
-        window_label,
-        tauri::WebviewUrl::App(url.into()),
-    )
-    .title("班级空间")
-    .inner_size(1280.0, 800.0)
-    .decorations(false)
-    .transparent(true);
+    let builder =
+        tauri::WebviewWindowBuilder::new(&app, window_label, tauri::WebviewUrl::App(url.into()))
+            .title("班级空间")
+            .inner_size(1280.0, 800.0)
+            .decorations(false)
+            .transparent(true);
 
     match builder.build() {
         Ok(_) => Ok(()),
@@ -250,8 +594,11 @@ async fn open_class_window(app: tauri::AppHandle, groupclass_id: String) -> Resu
 
 #[tauri::command]
 async fn open_chat_window(app: tauri::AppHandle, groupclass_id: String) -> Result<(), String> {
-    println!("Backend: Opening class chat window for ID: {}", groupclass_id);
-    
+    println!(
+        "Backend: Opening class chat window for ID: {}",
+        groupclass_id
+    );
+
     let window_label = format!("class_chat_{}", groupclass_id);
     // Route to the Chat Window
     let url = format!("/class/chat/{}", groupclass_id);
@@ -261,15 +608,12 @@ async fn open_chat_window(app: tauri::AppHandle, groupclass_id: String) -> Resul
         return Ok(());
     }
 
-    let builder = tauri::WebviewWindowBuilder::new(
-        &app,
-        window_label,
-        tauri::WebviewUrl::App(url.into()),
-    )
-    .title("班级群")
-    .inner_size(800.0, 600.0)
-    .decorations(false)
-    .transparent(true);
+    let builder =
+        tauri::WebviewWindowBuilder::new(&app, window_label, tauri::WebviewUrl::App(url.into()))
+            .title("班级群")
+            .inner_size(800.0, 600.0)
+            .decorations(false)
+            .transparent(true);
 
     match builder.build() {
         Ok(_) => Ok(()),
@@ -279,11 +623,18 @@ async fn open_chat_window(app: tauri::AppHandle, groupclass_id: String) -> Resul
 
 #[tauri::command]
 async fn get_group_members(group_id: &str, token: &str) -> Result<String, String> {
-    println!("Backend: get_group_members called for group_id: {}", group_id);
+    println!(
+        "Backend: get_group_members called for group_id: {}",
+        group_id
+    );
     let client = reqwest::Client::new();
-    let url = format!("http://47.100.126.194:5000/groups/members?group_id={}", group_id);
-    
-    let res = client.get(&url)
+    let url = format!(
+        "http://47.100.126.194:5000/groups/members?group_id={}",
+        group_id
+    );
+
+    let res = client
+        .get(&url)
         .header("Authorization", token)
         .send()
         .await
@@ -300,14 +651,12 @@ async fn get_group_members(group_id: &str, token: &str) -> Result<String, String
     }
 }
 
-
-
 #[tauri::command]
 async fn fetch_seat_map(class_id: String) -> Result<String, String> {
     println!("Backend: Fetching seat map for class_id: {}", class_id);
     let client = reqwest::Client::new();
     let url = "http://47.100.126.194:5000/seat-arrangement";
-    
+
     let response = client
         .get(url)
         .query(&[("class_id", &class_id)])
@@ -334,13 +683,17 @@ async fn save_seat_map(class_id: String, seats: Vec<serde_json::Value>) -> Resul
         .send()
         .await
         .map_err(|e| e.to_string())?;
-    
+
     let text = response.text().await.map_err(|e| e.to_string())?;
     Ok(text)
 }
 
 #[tauri::command]
-async fn save_teach_subjects(group_id: String, user_id: String, teach_subjects: Vec<String>) -> Result<String, String> {
+async fn save_teach_subjects(
+    group_id: String,
+    user_id: String,
+    teach_subjects: Vec<String>,
+) -> Result<String, String> {
     println!("Backend: Saving teach subjects for group_id: {}", group_id);
     let client = reqwest::Client::new();
     let url = "http://47.100.126.194:5000/groups/member/teach-subjects";
@@ -355,14 +708,17 @@ async fn save_teach_subjects(group_id: String, user_id: String, teach_subjects: 
         .send()
         .await
         .map_err(|e| e.to_string())?;
-    
+
     let text = response.text().await.map_err(|e| e.to_string())?;
     Ok(text)
 }
 
 #[tauri::command]
 async fn toggle_group_intercom(group_id: String, enable: bool) -> Result<String, String> {
-    println!("Backend: Toggling intercom for group_id: {}, enable: {}", group_id, enable);
+    println!(
+        "Backend: Toggling intercom for group_id: {}, enable: {}",
+        group_id, enable
+    );
     let client = reqwest::Client::new();
     let url = "http://47.100.126.194:5000/groups/intercom/toggle";
 
@@ -375,7 +731,7 @@ async fn toggle_group_intercom(group_id: String, enable: bool) -> Result<String,
         .send()
         .await
         .map_err(|e| e.to_string())?;
-    
+
     let text = response.text().await.map_err(|e| e.to_string())?;
     Ok(text)
 }
@@ -394,7 +750,7 @@ async fn fetch_temp_room(group_id: String) -> Result<String, String> {
         .send()
         .await
         .map_err(|e| e.to_string())?;
-    
+
     let text = response.text().await.map_err(|e| e.to_string())?;
     Ok(text)
 }
@@ -402,7 +758,7 @@ async fn fetch_temp_room(group_id: String) -> Result<String, String> {
 #[tauri::command]
 async fn open_intercom_window(app: tauri::AppHandle, group_id: String) -> Result<(), String> {
     println!("Backend: Opening intercom window for ID: {}", group_id);
-    
+
     let window_label = format!("intercom_{}", group_id);
     let url = format!("/intercom/{}", group_id);
 
@@ -411,15 +767,12 @@ async fn open_intercom_window(app: tauri::AppHandle, group_id: String) -> Result
         return Ok(());
     }
 
-    let builder = tauri::WebviewWindowBuilder::new(
-        &app,
-        window_label,
-        tauri::WebviewUrl::App(url.into()),
-    )
-    .title("对讲")
-    .inner_size(800.0, 500.0) 
-    .decorations(false)
-    .transparent(true);
+    let builder =
+        tauri::WebviewWindowBuilder::new(&app, window_label, tauri::WebviewUrl::App(url.into()))
+            .title("对讲")
+            .inner_size(800.0, 500.0)
+            .decorations(false)
+            .transparent(true);
 
     match builder.build() {
         Ok(_) => Ok(()),
@@ -431,33 +784,49 @@ async fn open_intercom_window(app: tauri::AppHandle, group_id: String) -> Result
 async fn fetch_duty_roster(group_id: String) -> Result<String, String> {
     println!("Backend: Fetching duty roster for group_id: {}", group_id);
     let client = reqwest::Client::new();
-    let url = format!("http://47.100.126.194:5000/duty-roster?group_id={}", group_id);
+    let url = format!(
+        "http://47.100.126.194:5000/duty-roster?group_id={}",
+        group_id
+    );
     let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
     let text = response.text().await.map_err(|e| e.to_string())?;
     Ok(text)
 }
 
 #[tauri::command]
-async fn save_duty_roster(group_id: String, rows: Vec<Vec<String>>, requirement_row_index: i32) -> Result<String, String> {
+async fn save_duty_roster(
+    group_id: String,
+    rows: Vec<Vec<String>>,
+    requirement_row_index: i32,
+) -> Result<String, String> {
     println!("Backend: Saving duty roster for group_id: {}", group_id);
     let client = reqwest::Client::new();
     let url = "http://47.100.126.194:5000/duty-roster";
-    let response = client.post(url)
+    let response = client
+        .post(url)
         .json(&serde_json::json!({
             "group_id": group_id,
             "rows": rows,
             "requirement_row_index": requirement_row_index
         }))
-        .send().await.map_err(|e| e.to_string())?;
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
     let text = response.text().await.map_err(|e| e.to_string())?;
     Ok(text)
 }
 
 #[tauri::command]
 async fn fetch_class_wallpapers(group_id: String) -> Result<String, String> {
-    println!("Backend: Fetching class wallpapers for group_id: {}", group_id);
+    println!(
+        "Backend: Fetching class wallpapers for group_id: {}",
+        group_id
+    );
     let client = reqwest::Client::new();
-    let url = format!("http://47.100.126.194:5000/class-wallpapers?group_id={}", group_id);
+    let url = format!(
+        "http://47.100.126.194:5000/class-wallpapers?group_id={}",
+        group_id
+    );
     let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
     let text = response.text().await.map_err(|e| e.to_string())?;
     Ok(text)
@@ -475,17 +844,101 @@ async fn fetch_wallpaper_library() -> Result<String, String> {
 
 #[tauri::command]
 async fn set_class_wallpaper(group_id: String, wallpaper_id: i32) -> Result<String, String> {
-    println!("Backend: Setting class wallpaper group_id: {}, wallpaper_id: {}", group_id, wallpaper_id);
+    println!(
+        "Backend: Setting class wallpaper group_id: {}, wallpaper_id: {}",
+        group_id, wallpaper_id
+    );
     let client = reqwest::Client::new();
     let url = "http://47.100.126.194:5000/class-wallpapers/set-current";
-    let response = client.post(url)
+    let response = client
+        .post(url)
         .json(&serde_json::json!({
             "group_id": group_id,
             "wallpaper_id": wallpaper_id
         }))
-        .send().await.map_err(|e| e.to_string())?;
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
     let text = response.text().await.map_err(|e| e.to_string())?;
     Ok(text)
+}
+
+#[tauri::command]
+async fn fetch_weekly_config(group_id: String) -> String {
+    println!("Backend: Fetching weekly config for group_id: {}", group_id);
+    let client = reqwest::Client::new();
+    let url = format!(
+        "{}class-wallpapers/weekly-config?group_id={}",
+        API_BASE_URL, group_id
+    );
+
+    match client.get(&url).send().await {
+        Ok(res) => match res.text().await {
+            Ok(text) => {
+                println!("Backend: Weekly config response: {}", text);
+                text
+            }
+            Err(e) => format!(
+                "{{\"code\": 500, \"message\": \"Failed to read response: {}\"}}",
+                e
+            ),
+        },
+        Err(e) => format!("{{\"code\": 500, \"message\": \"Request failed: {}\"}}", e),
+    }
+}
+
+#[tauri::command]
+async fn apply_weekly_config(group_id: String, weekly_wallpapers: serde_json::Value) -> String {
+    println!("Backend: Applying weekly config for group_id: {}", group_id);
+    let client = reqwest::Client::new();
+    let url = format!("{}class-wallpapers/apply-weekly", API_BASE_URL);
+
+    let params = serde_json::json!({
+        "group_id": group_id,
+        "weekly_wallpapers": weekly_wallpapers
+    });
+
+    match client.post(&url).json(&params).send().await {
+        Ok(res) => match res.text().await {
+            Ok(text) => {
+                println!("Backend: Apply weekly response: {}", text);
+                text
+            }
+            Err(e) => format!(
+                "{{\"code\": 500, \"message\": \"Failed to read response: {}\"}}",
+                e
+            ),
+        },
+        Err(e) => format!("{{\"code\": 500, \"message\": \"Request failed: {}\"}}", e),
+    }
+}
+
+#[tauri::command]
+async fn disable_weekly_wallpaper(group_id: String) -> String {
+    println!(
+        "Backend: Disabling weekly wallpaper for group_id: {}",
+        group_id
+    );
+    let client = reqwest::Client::new();
+    let url = format!("{}class-wallpapers/disable-weekly", API_BASE_URL);
+
+    let params = serde_json::json!({
+        "group_id": group_id
+    });
+
+    match client.post(&url).json(&params).send().await {
+        Ok(res) => match res.text().await {
+            Ok(text) => {
+                println!("Backend: Disable weekly response: {}", text);
+                text
+            }
+            Err(e) => format!(
+                "{{\"code\": 500, \"message\": \"Failed to read response: {}\"}}",
+                e
+            ),
+        },
+        Err(e) => format!("{{\"code\": 500, \"message\": \"Request failed: {}\"}}", e),
+    }
 }
 
 const API_BASE_URL: &str = "http://47.100.126.194:5000/";
@@ -500,46 +953,57 @@ async fn download_wallpaper(group_id: String, wallpaper_id: i32) -> String {
     });
 
     match client.post(&url).json(&params).send().await {
-        Ok(res) => {
-            match res.text().await {
-                Ok(text) => text,
-                Err(e) => format!("{{\"code\": 500, \"message\": \"Failed to read response: {}\"}}", e)
-            }
+        Ok(res) => match res.text().await {
+            Ok(text) => text,
+            Err(e) => format!(
+                "{{\"code\": 500, \"message\": \"Failed to read response: {}\"}}",
+                e
+            ),
         },
-        Err(e) => format!("{{\"code\": 500, \"message\": \"Request failed: {}\"}}", e)
+        Err(e) => format!("{{\"code\": 500, \"message\": \"Request failed: {}\"}}", e),
     }
 }
 
 #[tauri::command]
 async fn upload_wallpaper(group_id: String, image_data: Vec<u8>, mime_type: String) -> String {
     let client = reqwest::Client::new();
-    let url = format!("{}groups/wallpapers/upload", API_BASE_URL);
+    let url = format!("{}class-wallpapers/upload", API_BASE_URL);
 
-    // Create a Part from the bytes
-    // We guess filename based on mime or just use generic
-    let file_name = match mime_type.as_str() {
-        "image/png" => "wallpaper.png",
-        "image/jpeg" => "wallpaper.jpg",
-        "image/gif" => "wallpaper.gif",
-        _ => "wallpaper.bin",
-    };
+    // Convert bytes to base64 with data URI prefix
+    let base64_data =
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &image_data);
+    let image_with_prefix = format!("data:{};base64,{}", mime_type, base64_data);
 
-    let part = reqwest::multipart::Part::bytes(image_data)
-        .file_name(file_name.to_string())
-        .mime_str(&mime_type).unwrap();
+    // Generate a name based on timestamp
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let name = format!("自定义壁纸_{}", timestamp);
 
-    let form = reqwest::multipart::Form::new()
-        .text("group_id", group_id)
-        .part("file", part);
+    let params = serde_json::json!({
+        "group_id": group_id,
+        "image": image_with_prefix,
+        "name": name
+    });
 
-    match client.post(&url).multipart(form).send().await {
-        Ok(res) => {
-            match res.text().await {
-                Ok(text) => text,
-                Err(e) => format!("{{\"code\": 500, \"message\": \"Failed to read response: {}\"}}", e)
+    println!(
+        "Backend: Uploading wallpaper to {} for group {}",
+        url, group_id
+    );
+
+    match client.post(&url).json(&params).send().await {
+        Ok(res) => match res.text().await {
+            Ok(text) => {
+                println!("Backend: Upload response: {}", text);
+                text
             }
+            Err(e) => format!(
+                "{{\"code\": 500, \"message\": \"Failed to read response: {}\"}}",
+                e
+            ),
         },
-        Err(e) => format!("{{\"code\": 500, \"message\": \"Request failed: {}\"}}", e)
+        Err(e) => format!("{{\"code\": 500, \"message\": \"Request failed: {}\"}}", e),
     }
 }
 
@@ -549,11 +1013,11 @@ async fn save_student_score_sheet(
     term: String,
     exam_name: String,
     scores: Vec<serde_json::Value>,
-    fields: Vec<serde_json::Value>
+    fields: Vec<serde_json::Value>,
 ) -> String {
     let client = reqwest::Client::new();
     let url = format!("{}student-scores/save", API_BASE_URL);
-    
+
     let params = serde_json::json!({
         "class_id": class_id,
         "term": term,
@@ -564,46 +1028,97 @@ async fn save_student_score_sheet(
     });
 
     match client.post(&url).json(&params).send().await {
-        Ok(res) => {
-            match res.text().await {
-                Ok(text) => text,
-                Err(e) => format!("{{\"code\": 500, \"message\": \"Failed to read response: {}\"}}", e)
-            }
+        Ok(res) => match res.text().await {
+            Ok(text) => text,
+            Err(e) => format!(
+                "{{\"code\": 500, \"message\": \"Failed to read response: {}\"}}",
+                e
+            ),
         },
-        Err(e) => format!("{{\"code\": 500, \"message\": \"Request failed: {}\"}}", e)
+        Err(e) => format!("{{\"code\": 500, \"message\": \"Request failed: {}\"}}", e),
     }
 }
 
 #[tauri::command]
-async fn save_course_schedule(class_id: String, term: String, days: Vec<String>, times: Vec<String>, cells: serde_json::Value, token: String) -> Result<String, String> {
+async fn save_course_schedule(
+    class_id: String,
+    term: String,
+    week: Option<i32>,
+    days: Vec<String>,
+    times: Vec<String>,
+    cells: serde_json::Value,
+    token: String,
+) -> Result<String, String> {
     println!("Backend: Saving course schedule for class_id: {}", class_id);
     let client = reqwest::Client::new();
-    let url = "http://47.100.126.194:5000/course-schedule/save"; 
+    let url = "http://47.100.126.194:5000/course-schedule/save";
 
-    let response = client.post(url)
+    let response = client
+        .post(url)
         .header("Authorization", token)
         .json(&serde_json::json!({
             "class_id": class_id,
             "term": term,
+            "week": week,
             "days": days,
             "times": times,
             "cells": cells
         }))
-        .send().await.map_err(|e| e.to_string())?;
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
 
     let text = response.text().await.map_err(|e| e.to_string())?;
     Ok(text)
 }
 
-
-
 #[tauri::command]
-async fn update_user_name(phone: String, name: String, id_number: String) -> Result<String, String> {
-    println!("Backend: update_user_name called. Phone: {}, Name: {}", phone, name);
+async fn save_teacher_schedule(
+    teacher_id: String,
+    term: String,
+    week: Option<i32>,
+    days: Vec<String>,
+    times: Vec<String>,
+    cells: serde_json::Value,
+    token: String,
+) -> Result<String, String> {
+    println!("Backend: Saving teacher schedule for teacher_id: {}", teacher_id);
+    let client = reqwest::Client::new();
+    let url = format!("{}teacher-schedule/save", API_BASE_URL);
+
+    let response = client
+        .post(&url)
+        .header("Authorization", token)
+        .json(&serde_json::json!({
+            "teacher_id": teacher_id,
+            "term": term,
+            "week": week,
+            "days": days,
+            "times": times,
+            "cells": cells
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+#[tauri::command]
+async fn update_user_name(
+    phone: String,
+    name: String,
+    id_number: String,
+) -> Result<String, String> {
+    println!(
+        "Backend: update_user_name called. Phone: {}, Name: {}",
+        phone, name
+    );
     let client = reqwest::Client::new();
     let url = format!("{}updateUserName", API_BASE_URL);
 
-    let response = client.post(&url)
+    let response = client
+        .post(&url)
         .form(&serde_json::json!({
             "phone": phone,
             "name": name,
@@ -619,15 +1134,22 @@ async fn update_user_name(phone: String, name: String, id_number: String) -> Res
 
 #[tauri::command]
 async fn update_user_info(
-    phone: String, id_number: String, name: String, avatar: String, 
-    sex: String, address: String, school_name: String, 
-    grade_level: String, is_administrator: String
+    phone: String,
+    id_number: String,
+    name: String,
+    avatar: String,
+    sex: String,
+    address: String,
+    school_name: String,
+    grade_level: String,
+    is_administrator: String,
 ) -> Result<String, String> {
     println!("Backend: update_user_info called. Phone: {}", phone);
     let client = reqwest::Client::new();
     let url = format!("{}updateUserInfo", API_BASE_URL);
 
-    let response = client.post(&url)
+    let response = client
+        .post(&url)
         .form(&serde_json::json!({
             "phone": phone,
             "id_number": id_number,
@@ -647,15 +1169,21 @@ async fn update_user_info(
     Ok(text)
 }
 
-
-
 #[tauri::command]
-async fn update_user_administrator(phone: String, id_number: String, is_administrator: String) -> Result<String, String> {
-    println!("Backend: update_user_administrator called. Phone: {}, Status: {}", phone, is_administrator);
+async fn update_user_administrator(
+    phone: String,
+    id_number: String,
+    is_administrator: String,
+) -> Result<String, String> {
+    println!(
+        "Backend: update_user_administrator called. Phone: {}, Status: {}",
+        phone, is_administrator
+    );
     let client = reqwest::Client::new();
     let url = format!("{}updateUserAdministrator", API_BASE_URL);
 
-    let response = client.post(&url)
+    let response = client
+        .post(&url)
         .form(&serde_json::json!({
             "phone": phone,
             "id_number": id_number,
@@ -669,18 +1197,13 @@ async fn update_user_administrator(phone: String, id_number: String, is_administ
     Ok(text)
 }
 
-
-
 #[tauri::command]
 async fn get_school_by_name(name: String) -> Result<String, String> {
     println!("Backend: get_school_by_name called. Name: {}", name);
     let client = reqwest::Client::new();
     let url = format!("{}schools?name={}", API_BASE_URL, name);
 
-    let response = client.get(&url)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
 
     let text = response.text().await.map_err(|e| e.to_string())?;
     Ok(text)
@@ -693,10 +1216,7 @@ async fn get_unique_6_digit() -> Result<String, String> {
     let url = format!("{}unique6digit", API_BASE_URL);
 
     // Qt uses GET for this based on `m_httpHandler->get` call in line 194 of QSchoolInfoWidget.cpp
-    let response = client.get(&url)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
 
     let text = response.text().await.map_err(|e| e.to_string())?;
     Ok(text)
@@ -704,11 +1224,15 @@ async fn get_unique_6_digit() -> Result<String, String> {
 
 #[tauri::command]
 async fn update_school_info(id: String, name: String, address: String) -> Result<String, String> {
-    println!("Backend: update_school_info called. ID: {}, Name: {}", id, name);
+    println!(
+        "Backend: update_school_info called. ID: {}, Name: {}",
+        id, name
+    );
     let client = reqwest::Client::new();
     let url = format!("{}updateSchoolInfo", API_BASE_URL);
 
-    let response = client.post(&url)
+    let response = client
+        .post(&url)
         .form(&serde_json::json!({
             "id": id,
             "name": name,
@@ -723,12 +1247,62 @@ async fn update_school_info(id: String, name: String, address: String) -> Result
 }
 
 #[tauri::command]
+async fn request_server_leave_group(group_id: String, user_id: String) -> Result<String, String> {
+    println!(
+        "Backend: Requesting server to leave group: {}, user: {}",
+        group_id, user_id
+    );
+    let client = reqwest::Client::new();
+    let url = format!("{}groups/leave", API_BASE_URL);
+
+    let response = client
+        .post(&url)
+        .json(&serde_json::json!({
+            "group_id": group_id,
+            "user_id": user_id
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
+#[tauri::command]
+async fn request_server_dismiss_group(group_id: String, user_id: String) -> Result<String, String> {
+    println!(
+        "Backend: Requesting server to dismiss group: {}, user: {}",
+        group_id, user_id
+    );
+    let client = reqwest::Client::new();
+    let url = format!("{}groups/dismiss", API_BASE_URL);
+
+    let response = client
+        .post(&url)
+        .json(&serde_json::json!({
+            "group_id": group_id,
+            "user_id": user_id
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = response.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
+#[tauri::command]
 async fn get_classes_by_prefix(prefix: String) -> Result<String, String> {
-    println!("Backend: get_classes_by_prefix called with prefix: {}", prefix);
+    println!(
+        "Backend: get_classes_by_prefix called with prefix: {}",
+        prefix
+    );
     let client = reqwest::Client::new();
     let url = format!("{}{}", API_BASE_URL, "getClassesByPrefix");
 
-    let response = client.post(&url)
+    let response = client
+        .post(&url)
         .json(&serde_json::json!({
             "prefix": prefix
         }))
@@ -738,7 +1312,6 @@ async fn get_classes_by_prefix(prefix: String) -> Result<String, String> {
 
     let text = response.text().await.map_err(|e| e.to_string())?;
     Ok(text)
-
 }
 
 #[tauri::command]
@@ -748,7 +1321,8 @@ async fn update_classes(classes: Vec<serde_json::Value>) -> Result<String, Strin
     let url = format!("{}updateClasses", API_BASE_URL);
 
     // Ensure payload is a JSON array
-    let response = client.post(&url)
+    let response = client
+        .post(&url)
         .json(&classes)
         .send()
         .await
@@ -765,7 +1339,8 @@ async fn delete_classes(classes: Vec<serde_json::Value>) -> Result<String, Strin
     // Use deleteClasses endpoint
     let url = format!("{}deleteClasses", API_BASE_URL);
 
-    let response = client.post(&url)
+    let response = client
+        .post(&url)
         .json(&classes)
         .send()
         .await
@@ -775,18 +1350,13 @@ async fn delete_classes(classes: Vec<serde_json::Value>) -> Result<String, Strin
     Ok(text)
 }
 
-
-
 #[tauri::command]
 async fn get_list_teachers(school_id: String) -> Result<String, String> {
     println!("Backend: get_list_teachers called. SchoolID: {}", school_id);
     let client = reqwest::Client::new();
     let url = format!("{}get_list_teachers?schoolId={}", API_BASE_URL, school_id);
 
-    let response = client.get(&url)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
 
     let text = response.text().await.map_err(|e| e.to_string())?;
     Ok(text)
@@ -798,9 +1368,10 @@ async fn add_teacher(teachers: Vec<serde_json::Value>) -> Result<String, String>
     let client = reqwest::Client::new();
     let url = format!("{}add_teacher", API_BASE_URL);
 
-    // Endpoint name is add_teacher, but usually accepts a list or single? 
+    // Endpoint name is add_teacher, but usually accepts a list or single?
     // QMemberManager sends a JSON list.
-    let response = client.post(&url)
+    let response = client
+        .post(&url)
         .json(&teachers)
         .send()
         .await
@@ -821,10 +1392,14 @@ async fn delete_teacher(phones: Vec<String>) -> Result<String, String> {
     // Let's assume list of phones for now based on usual patterns, or objects if generic.
     // Qt: `QJsonObject json; json.insert("phone", phone); array.append(json);`
     // So it sends an array of objects: `[{"phone": "..."}]`
-    
-    let payload: Vec<_> = phones.into_iter().map(|p| serde_json::json!({ "phone": p })).collect();
 
-    let response = client.post(&url)
+    let payload: Vec<_> = phones
+        .into_iter()
+        .map(|p| serde_json::json!({ "phone": p }))
+        .collect();
+
+    let response = client
+        .post(&url)
         .json(&payload)
         .send()
         .await
@@ -836,7 +1411,10 @@ async fn delete_teacher(phones: Vec<String>) -> Result<String, String> {
 
 #[tauri::command]
 async fn search_classes(keyword: String, school_id: Option<String>) -> Result<String, String> {
-    println!("Backend: search_classes called with keyword: {}, school_id: {:?}", keyword, school_id);
+    println!(
+        "Backend: search_classes called with keyword: {}, school_id: {:?}",
+        keyword, school_id
+    );
     let client = reqwest::Client::new();
     let mut url = format!("{}classes/search?class_code={}", API_BASE_URL, keyword);
 
@@ -846,10 +1424,7 @@ async fn search_classes(keyword: String, school_id: Option<String>) -> Result<St
         }
     }
 
-    let response = client.get(&url)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
 
     let text = response.text().await.map_err(|e| e.to_string())?;
     Ok(text)
@@ -860,23 +1435,26 @@ async fn search_teachers(keyword: String) -> Result<String, String> {
     println!("Backend: search_teachers called with keyword: {}", keyword);
     let client = reqwest::Client::new();
     let url = format!("{}teachers/search", API_BASE_URL);
-    
+
     // Determine if keyword looks like ID or Name (Simple logic: check if purely numeric/alphanumeric with special chars vs chinese)
     // Rust doesn't have easy "containsChinese" regex without crate, but we can pass generic params or just try one.
     // The python API likely handles query params manually.
     // Logic from SearchDialog.h: if looksLikeId -> teacher_unique_id else name.
-    
-    let is_id = keyword.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
-    
+
+    let is_id = keyword
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+
     let query_param = if is_id {
         format!("teacher_unique_id={}", keyword)
     } else {
         format!("name={}", keyword)
     };
-    
+
     let full_url = format!("{}?{}", url, query_param);
 
-    let response = client.get(&full_url)
+    let response = client
+        .get(&full_url)
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -887,21 +1465,27 @@ async fn search_teachers(keyword: String) -> Result<String, String> {
 
 #[tauri::command]
 async fn search_class_groups(keyword: String) -> Result<String, String> {
-    println!("Backend: search_class_groups called with keyword: {}", keyword);
+    println!(
+        "Backend: search_class_groups called with keyword: {}",
+        keyword
+    );
     let client = reqwest::Client::new();
     let url = format!("{}groups/search", API_BASE_URL);
-    
-    let is_id = keyword.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
-    
+
+    let is_id = keyword
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+
     let query_param = if is_id {
         format!("group_id={}", keyword)
     } else {
         format!("group_name={}", keyword)
     };
-    
+
     let full_url = format!("{}?{}", url, query_param);
 
-    let response = client.get(&full_url)
+    let response = client
+        .get(&full_url)
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -911,12 +1495,21 @@ async fn search_class_groups(keyword: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn join_class_group_request(group_id: String, user_id: String, user_name: String, reason: String) -> Result<String, String> {
-    println!("Backend: join_class_group_request called. Group: {}, User: {}", group_id, user_id);
+async fn join_class_group_request(
+    group_id: String,
+    user_id: String,
+    user_name: String,
+    reason: String,
+) -> Result<String, String> {
+    println!(
+        "Backend: join_class_group_request called. Group: {}, User: {}",
+        group_id, user_id
+    );
     let client = reqwest::Client::new();
-    let url = format!("{}groups/join", API_BASE_URL); 
+    let url = format!("{}groups/join", API_BASE_URL);
 
-    let response = client.post(&url)
+    let response = client
+        .post(&url)
         .json(&serde_json::json!({
             "group_id": group_id,
             "user_id": user_id,
@@ -933,11 +1526,15 @@ async fn join_class_group_request(group_id: String, user_id: String, user_name: 
 
 #[tauri::command]
 async fn join_class(teacher_unique_id: String, class_code: String) -> Result<String, String> {
-    println!("Backend: join_class called. Teacher: {}, ClassCode: {}", teacher_unique_id, class_code);
+    println!(
+        "Backend: join_class called. Teacher: {}, ClassCode: {}",
+        teacher_unique_id, class_code
+    );
     let client = reqwest::Client::new();
     let url = format!("{}teachers/classes/add", API_BASE_URL);
 
-    let response = client.post(&url)
+    let response = client
+        .post(&url)
         .json(&serde_json::json!({
             "teacher_unique_id": teacher_unique_id,
             "class_code": class_code,
@@ -955,20 +1552,24 @@ async fn join_class(teacher_unique_id: String, class_code: String) -> Result<Str
 async fn fetch_user_sig_internal(user_id: &str) -> Result<String, String> {
     let client = reqwest::Client::new();
     let url = format!("{}getUserSig", API_BASE_URL);
-    let res = client.post(&url)
+    let res = client
+        .post(&url)
         .form(&serde_json::json!({ "user_id": user_id }))
-        .send().await.map_err(|e| e.to_string())?;
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
 
     if res.status().is_success() {
         let text = res.text().await.map_err(|e| e.to_string())?;
         let json: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-        let sig = json["data"]["user_sig"].as_str()
+        let sig = json["data"]["user_sig"]
+            .as_str()
             .or_else(|| json["data"]["usersig"].as_str())
             .or_else(|| json["data"]["sig"].as_str())
             .or_else(|| json["user_sig"].as_str())
             .or_else(|| json["usersig"].as_str())
             .or_else(|| json["sig"].as_str());
-        
+
         if let Some(s) = sig {
             Ok(s.to_string())
         } else {
@@ -980,48 +1581,69 @@ async fn fetch_user_sig_internal(user_id: &str) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn create_group_tim(owner_id: String, group_name: String, group_type: String) -> Result<String, String> {
-    println!("Backend: create_group_tim called. Owner: {}, Name: {}, Type: {}", owner_id, group_name, group_type);
-    
+async fn create_group_tim(
+    owner_id: String,
+    group_name: String,
+    group_type: String,
+) -> Result<String, String> {
+    println!(
+        "Backend: create_group_tim called. Owner: {}, Name: {}, Type: {}",
+        owner_id, group_name, group_type
+    );
+
     // 1. Get UserSig
     let sig = fetch_user_sig_internal(&owner_id).await?;
-    
+
     // 2. Construct TIM URL
     let sdk_app_id = 1600111046;
-    let random = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    let random = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
     let url = format!("https://console.tim.qq.com/v4/group_open_http_svc/create_group?sdkappid={}&identifier={}&usersig={}&random={}&contenttype=json", 
         sdk_app_id, owner_id, sig, random);
 
     // 3. Construct Body
     let client = reqwest::Client::new();
-    let response = client.post(&url)
+    let response = client
+        .post(&url)
         .json(&serde_json::json!({
             "Name": group_name,
-            "Type": group_type, 
+            "Type": group_type,
             "Owner_Account": owner_id,
             "GroupConfig": {
                 "MaxMemberCount": 2000,
                 "ApplyJoinOption": "FreeAccess"
             },
             "MemberList": [
-                { "Member_Account": owner_id }
+                {
+                    "Member_Account": owner_id
+                }
             ]
         }))
         .send()
         .await
         .map_err(|e| e.to_string())?;
-        
+
     let text = response.text().await.map_err(|e| e.to_string())?;
+    println!("Backend: Tencent API Response: {}", text);
     Ok(text)
 }
 
 #[tauri::command]
-async fn remove_friend(teacher_unique_id: String, friend_teacher_unique_id: String) -> Result<String, String> {
-    println!("Backend: remove_friend called. userId: {}, friendId: {}", teacher_unique_id, friend_teacher_unique_id);
+async fn remove_friend(
+    teacher_unique_id: String,
+    friend_teacher_unique_id: String,
+) -> Result<String, String> {
+    println!(
+        "Backend: remove_friend called. userId: {}, friendId: {}",
+        teacher_unique_id, friend_teacher_unique_id
+    );
     let client = reqwest::Client::new();
     let url = "http://47.100.126.194:5000/friends/remove";
-    
-    let res = client.post(url)
+
+    let res = client
+        .post(url)
         .json(&serde_json::json!({
              "teacher_unique_id": teacher_unique_id,
              "friend_teacher_unique_id": friend_teacher_unique_id
@@ -1036,17 +1658,24 @@ async fn remove_friend(teacher_unique_id: String, friend_teacher_unique_id: Stri
     if status.is_success() {
         Ok(text)
     } else {
-        Err(format!("Request failed with status: {}. Body: {}", status, text))
+        Err(format!(
+            "Request failed with status: {}. Body: {}",
+            status, text
+        ))
     }
 }
 
 #[tauri::command]
 async fn leave_class(teacher_unique_id: String, class_code: String) -> Result<String, String> {
-    println!("Backend: leave_class called. userId: {}, classCode: {}", teacher_unique_id, class_code);
+    println!(
+        "Backend: leave_class called. userId: {}, classCode: {}",
+        teacher_unique_id, class_code
+    );
     let client = reqwest::Client::new();
     let url = "http://47.100.126.194:5000/teachers/classes/remove";
-    
-    let res = client.post(url)
+
+    let res = client
+        .post(url)
         .json(&serde_json::json!({
              "teacher_unique_id": teacher_unique_id,
              "class_code": class_code
@@ -1061,7 +1690,10 @@ async fn leave_class(teacher_unique_id: String, class_code: String) -> Result<St
     if status.is_success() {
         Ok(text)
     } else {
-        Err(format!("Request failed with status: {}. Body: {}", status, text))
+        Err(format!(
+            "Request failed with status: {}. Body: {}",
+            status, text
+        ))
     }
 }
 
@@ -1072,11 +1704,15 @@ async fn exit_app() {
 
 #[tauri::command]
 async fn save_seat_arrangement(class_id: String, seats_json: String) -> Result<String, String> {
-    println!("Backend: save_seat_arrangement called. ClassID: {}", class_id);
+    println!(
+        "Backend: save_seat_arrangement called. ClassID: {}",
+        class_id
+    );
     let client = reqwest::Client::new();
     let url = format!("{}seat-arrangement/save", API_BASE_URL);
 
-    let response = client.post(&url)
+    let response = client
+        .post(&url)
         .header("Content-Type", "application/json")
         .body(seats_json)
         .send()
@@ -1089,14 +1725,14 @@ async fn save_seat_arrangement(class_id: String, seats_json: String) -> Result<S
 
 #[tauri::command]
 async fn get_student_scores(class_id: String) -> Result<String, String> {
-    println!("Backend: get_student_scores called for class_id: {}", class_id);
+    println!(
+        "Backend: get_student_scores called for class_id: {}",
+        class_id
+    );
     let client = reqwest::Client::new();
     let url = format!("{}student-scores?class_id={}", API_BASE_URL, class_id);
-    
-    let response = client.get(&url)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+
+    let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
 
     let text = response.text().await.map_err(|e| e.to_string())?;
     Ok(text)
@@ -1104,38 +1740,132 @@ async fn get_student_scores(class_id: String) -> Result<String, String> {
 
 #[tauri::command]
 async fn get_group_scores(class_id: String, term: String) -> Result<String, String> {
-    println!("Backend: get_group_scores called for class_id: {}, term: {}", class_id, term);
+    println!(
+        "Backend: get_group_scores called for class_id: {}, term: {}",
+        class_id, term
+    );
     let client = reqwest::Client::new();
-    let url = format!("{}group-scores?class_id={}&term={}", API_BASE_URL, class_id, term);
-    
-    let response = client.get(&url)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let url = format!(
+        "{}group-scores?class_id={}&term={}",
+        API_BASE_URL, class_id, term
+    );
+
+    let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
 
     let text = response.text().await.map_err(|e| e.to_string())?;
     Ok(text)
 }
 
+#[tauri::command]
+async fn open_file_box_window(app: tauri::AppHandle, box_id: String) -> Result<(), String> {
+    println!("Backend: Opening file box window for ID: {}", box_id);
+
+    let window_label = format!("file_box_{}", box_id);
+    let url = format!("/file-box/{}", box_id);
+
+    if let Some(window) = app.get_webview_window(&window_label) {
+        let _ = window.set_focus();
+        return Ok(());
+    }
+
+    let builder =
+        tauri::WebviewWindowBuilder::new(&app, window_label, tauri::WebviewUrl::App(url.into()))
+            .title("文件盒子")
+            .inner_size(800.0, 600.0)
+            .decorations(false)
+            .resizable(true);
+
+    match builder.build() {
+        Ok(window) => {
+            // UIPI Bypass for Administrator Accounts
+            #[cfg(target_os = "windows")]
+            {
+                use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+                use windows::Win32::UI::WindowsAndMessaging::{ChangeWindowMessageFilterEx, MSGFLT_ALLOW, WM_DROPFILES, WM_COPYDATA, GetWindow, GW_CHILD, GW_HWNDNEXT};
+                use windows::Win32::UI::Shell::DragAcceptFiles;
+                use windows::Win32::Foundation::HWND;
+
+                if let Ok(handle) = window.window_handle() {
+                    if let RawWindowHandle::Win32(handle) = handle.as_raw() {
+                         let hwnd = HWND(handle.hwnd.get());
+                         unsafe {
+                            fn apply_filter_and_accept(h: HWND) {
+                                unsafe {
+                                    let _ = ChangeWindowMessageFilterEx(h, WM_DROPFILES, MSGFLT_ALLOW, None);
+                                    let _ = ChangeWindowMessageFilterEx(h, WM_COPYDATA, MSGFLT_ALLOW, None);
+                                    let _ = ChangeWindowMessageFilterEx(h, 0x0049, MSGFLT_ALLOW, None);
+                                    DragAcceptFiles(h, true); // Explicitly enable file dropping
+                                }
+                            }
+
+                            apply_filter_and_accept(hwnd);
+
+                            // Apply to all children (WebView2 is a child)
+                            let mut child = GetWindow(hwnd, GW_CHILD);
+                            while child.0 != 0 {
+                                apply_filter_and_accept(child);
+                                child = GetWindow(child, GW_HWNDNEXT);
+                            }
+                            
+                            println!("Backend: Applied DragAcceptFiles + UIPI Bypass (Main + Children).");
+                        }
+                    }
+                }
+            }
+            Ok(())
+        },
+        Err(e) => Err(format!("Failed to create window: {}", e)),
+    }
+}
+
+#[tauri::command]
+async fn open_teacher_schedule_window(app: tauri::AppHandle) -> Result<(), String> {
+    let window_label = "teacher_schedule".to_string();
+    let url = "/teacher-schedule".to_string();
+
+    if let Some(window) = app.get_webview_window(&window_label) {
+        let _ = window.set_focus();
+        return Ok(());
+    }
+
+    let builder =
+        tauri::WebviewWindowBuilder::new(&app, window_label, tauri::WebviewUrl::App(url.into()))
+            .title("教师个人课表")
+            .inner_size(1200.0, 800.0)
+            .resizable(true)
+            .decorations(true);
+
+    match builder.build() {
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("Failed to create window: {}", e)),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-    .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            greet, 
+            greet,
+            get_system_icon,
+            start_file_drag,
             login,
             send_verification_code,
             register_account,
             reset_password,
             resize_window,
             get_course_schedule,
+            get_teacher_schedule,
             save_course_schedule,
+            save_teacher_schedule,
             get_user_friends,
             get_teacher_classes,
             get_user_info,
-            get_user_sig, 
-            open_class_window, 
-            open_chat_window, 
+            get_user_sig,
+            open_class_window,
+            open_chat_window,
             get_group_members,
             fetch_seat_map,
             save_seat_map,
@@ -1150,6 +1880,9 @@ pub fn run() {
             set_class_wallpaper,
             download_wallpaper,
             upload_wallpaper,
+            fetch_weekly_config,
+            apply_weekly_config,
+            disable_weekly_wallpaper,
             save_student_score_sheet,
             get_classes_by_prefix,
             search_classes,
@@ -1157,7 +1890,8 @@ pub fn run() {
             search_class_groups,
             join_class_group_request,
             create_group_tim,
-
+            request_server_leave_group,
+            request_server_dismiss_group,
             join_class,
             remove_friend,
             leave_class,
@@ -1175,6 +1909,9 @@ pub fn run() {
             save_seat_arrangement,
             get_student_scores,
             get_group_scores,
+            get_school_course_schedule,
+            open_file_box_window,
+            open_teacher_schedule_window,
             exit_app
         ])
         .run(tauri::generate_context!())

@@ -79,69 +79,137 @@ const ClassChatWindow = () => {
     };
 
     const loadMembers = async () => {
-        if (!groupclassId) return;
+        if (!groupclassId) {
+            console.error("[ClassChatWindow] 未提供 groupclassId");
+            return;
+        }
+
+        console.log(`[ClassChatWindow] 开始加载成员: ${groupclassId}`);
 
         const currentUserId = localStorage.getItem('teacher_unique_id') || '';
 
-        // 1. Fetch TIM Members (includes role info)
-        let timList: any[] = [];
-        if (isSDKReady) {
-            timList = await getGroupMemberList(groupclassId);
-        }
-
-        // Check ownership from TIM list
-        const selfInTim = timList.find((m: any) => m.userID === currentUserId);
-        if (selfInTim && selfInTim.role === 'Owner') {
-            setIsOwner(true);
-        } else {
-            setIsOwner(false);
-        }
-
-        // 2. Fetch Backend Members (Primary Source)
-        let backendMembers: any[] = [];
+        // Prepare Token
+        let token = localStorage.getItem('token') || "";
         try {
-            const userInfoStr = localStorage.getItem('user_info');
-            let token = "";
-            if (userInfoStr) {
-                const u = JSON.parse(userInfoStr);
-                token = u.token || "";
+            if (!token) {
+                const userInfoStr = localStorage.getItem('user_info');
+                if (userInfoStr) {
+                    const u = JSON.parse(userInfoStr);
+                    token = u.token || "";
+                }
             }
-            if (token) {
+        } catch (e) {
+            console.error("Token parse error", e);
+        }
+
+        if (!token) console.warn("[ClassChatWindow] 未找到用于后端请求的 token");
+
+        // 1. Start Backend Fetch (Primary)
+        const backendPromise = (async (): Promise<{ members: any[]; groupInfo: any }> => {
+            if (!token) return { members: [], groupInfo: null };
+            try {
+                console.log("[ClassChatWindow] 正在调用 get_group_members...");
                 const resStr = await invoke<string>('get_group_members', {
                     groupId: groupclassId,
                     token
                 });
+                console.log("[ClassChatWindow] get_group_members 原始响应:", resStr);
                 const res = JSON.parse(resStr);
                 if (res.code === 200 || (res.data && res.data.code === 200)) {
-                    backendMembers = res.data?.members || res.data || [];
+                    return {
+                        members: res.data?.members || res.data || [],
+                        groupInfo: res.data?.group_info
+                    };
+                }
+            } catch (e) {
+                console.error("[ClassChatWindow] 后端拉取失败", e);
+            }
+            return { members: [], groupInfo: null };
+        })();
+
+        // 2. Start TIM Fetch
+        const timPromise = (async () => {
+            if (isSDKReady) {
+                try {
+                    return await getGroupMemberList(groupclassId);
+                } catch (e) {
+                    console.error("[ClassChatWindow] TIM 拉取失败", e);
                 }
             }
-        } catch (e) {
-            console.error("Failed to fetch backend members in Chat", e);
-        }
+            return [];
+        })();
 
-        // 3. Merge - Prioritize Backend Members to match ClassInfoModal
+        // 3. Wait for both
+        const [backendData, timList] = await Promise.all([backendPromise, timPromise]);
+
+        const backendMembers = backendData.members || [];
+        const groupInfo = backendData.groupInfo;
+        const finalTimList: any[] = Array.isArray(timList) ? timList : [];
+
+        console.log(`[ClassChatWindow] 数据获取完毕. 后端: ${backendMembers.length}, TIM: ${finalTimList.length}`);
+
+        // Check ownership
+        const selfInTim = finalTimList.find((m: any) => m.userID === currentUserId);
+        setIsOwner(selfInTim?.role === 'Owner');
+
+        // 4. Merge Logic
         let mergedList: any[] = [];
 
+        // If we have backend members, use them as base
         if (backendMembers.length > 0) {
             mergedList = backendMembers.map((bm: any) => {
                 const userIdStr = String(bm.user_id || bm.id || bm.Member_Account);
-                const tm = timList.find((t: any) => t.userID == userIdStr);
+                const tm = finalTimList.find((t: any) => t.userID == userIdStr);
+
+                // Avatar Fallback Logic - Prioritize Backend
+                let avatarUrl = bm.face_url || bm.avatar || tm?.avatar;
+
+                if (!avatarUrl && groupInfo) {
+                    if (String(groupInfo.classid) === userIdStr || bm.user_name === '班级' || bm.name === '班级' || userIdStr.startsWith("0000")) {
+                        avatarUrl = groupInfo.face_url;
+                        console.log(`[ClassChatWindow] 已为 ${userIdStr} 应用群头像回退`);
+                    }
+                }
+
+                // Role Mapping
+                let role = tm?.role || bm.role;
+                if (!role && bm.self_role) {
+                    if (bm.self_role === 400) role = 'Owner';
+                    else if (bm.self_role === 300) role = 'Admin';
+                    else role = 'Member';
+                }
+
                 return {
                     userID: userIdStr,
                     nick: bm.user_name || bm.name || bm.student_name || tm?.nick || "未知用户",
-                    avatar: tm?.avatar || bm.face_url || bm.avatar,
-                    role: tm?.role || bm.role || 'Member',
+                    avatar: avatarUrl,
+                    role: role || 'Member',
                 };
             });
         } else {
-            mergedList = timList.map((tm: any) => ({
+            // Fallback to TIM only if backend failed empty
+            mergedList = finalTimList.map((tm: any) => ({
                 userID: tm.userID,
                 nick: tm.nick || tm.userID,
                 avatar: tm.avatar,
                 role: tm.role,
             }));
         }
+
+        // Sort: Owner -> Class Bot -> Others
+        mergedList.sort((a, b) => {
+            const isOwnerA = a.role === 'Owner';
+            const isOwnerB = b.role === 'Owner';
+            if (isOwnerA && !isOwnerB) return -1;
+            if (!isOwnerA && isOwnerB) return 1;
+
+            const isClassA = a.nick === '班级' || a.userID.startsWith('0000');
+            const isClassB = b.nick === '班级' || b.userID.startsWith('0000');
+            if (isClassA && !isClassB) return -1;
+            if (!isClassA && isClassB) return 1;
+
+            return 0;
+        });
 
         setMembers(mergedList);
     };
@@ -196,7 +264,7 @@ const ClassChatWindow = () => {
 
         try {
             await dismissGroup(groupclassId);
-            alert('已成功解散群聊');
+            // Success - silently close window without alert
             getCurrentWindow().close();
         } catch (e: any) {
             alert('解散群聊失败: ' + (e.message || e));
@@ -460,8 +528,12 @@ const ClassChatWindow = () => {
                     <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
                         {members.map((member) => (
                             <div key={member.userID} className="flex items-center gap-2 p-1.5 hover:bg-gray-50 rounded cursor-pointer">
-                                <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-[10px] text-gray-500 border border-gray-200">
-                                    {member.avatar ? <img src={member.avatar} className="w-full h-full rounded-full" /> : (member.nick || member.userID).substring(0, 1).toUpperCase()}
+                                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-[10px] text-gray-500 border border-gray-200 overflow-hidden shrink-0">
+                                    {member.avatar ? (
+                                        <img src={member.avatar} className="w-full h-full object-cover" alt="" />
+                                    ) : (
+                                        (member.nick || member.userID || '?').substring(0, 1).toUpperCase()
+                                    )}
                                 </div>
                                 <span className="text-xs text-gray-700 truncate">{member.nick || member.userID}</span>
                             </div>

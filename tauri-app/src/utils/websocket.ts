@@ -6,7 +6,12 @@ let heartbeatInterval: any = null;
 let reconnectTimeout: any = null;
 let currentUserId: string = "";
 
+// Cache for notification data
+let latestNotifications: any[] = [];
+
 const WS_URL_BASE = "ws://47.100.126.194:5000/ws/";
+
+export const getLatestNotifications = () => latestNotifications;
 
 export const connectWS = (userId: string) => {
     if (socket && socket.readyState === WebSocket.OPEN) {
@@ -32,6 +37,17 @@ export const connectWS = (userId: string) => {
             return;
         }
         console.log("[WS] Message received:", msg);
+
+        try {
+            const parsed = JSON.parse(msg);
+            if (parsed.type === "unread_notifications") {
+                latestNotifications = parsed.data || [];
+                console.log("[WS] Cached unread notifications:", latestNotifications.length);
+            }
+        } catch (e) {
+            // ignore parse error for non-json
+        }
+
         // Dispatch event for other components to listen if needed
         window.dispatchEvent(new CustomEvent("ws-message", { detail: msg }));
     };
@@ -59,6 +75,7 @@ export const disconnectWS = () => {
     }
     stopHeartbeat();
     if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    latestNotifications = []; // Clear cache on explicit disconnect? Or keep it?
 };
 
 const startHeartbeat = () => {
@@ -85,3 +102,4 @@ export const sendMessageWS = (msg: string) => {
         console.warn("[WS] Cannot send message, socket not open");
     }
 };
+

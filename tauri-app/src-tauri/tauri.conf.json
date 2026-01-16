@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.administrator.tauri-app",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "npm run kill:1420 && npm run dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"

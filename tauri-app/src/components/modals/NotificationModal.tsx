@@ -1,201 +1,293 @@
 import { useState, useEffect } from 'react';
-import { X, Bell, Send, Clock, Trash2 } from 'lucide-react';
+import { X, Clock, Trash2, History, ChevronLeft, Bell, Check } from 'lucide-react';
 import { useDraggable } from '../../hooks/useDraggable';
-import { sendMessage, addMessageListener } from '../../utils/tim';
+import { sendMessageWS } from '../../utils/websocket';
 
 interface Props {
     isOpen: boolean;
     onClose: () => void;
+    classId?: string;
     groupId?: string;
+    groupName?: string;
+    className?: string;
 }
 
 interface Notice {
     id: string;
     content: string;
-    date: string;
-    sender: string;
-    isNew?: boolean;
+    senderName: string;
+    timestamp: number;
 }
 
-const NotificationModal = ({ isOpen, onClose, groupId }: Props) => {
+const MAX_NOTICES = 100;
+
+const getStorageKey = (classId: string) => `notification_history_${classId}`;
+
+const loadNotices = (classId: string): Notice[] => {
+    try {
+        const data = localStorage.getItem(getStorageKey(classId));
+        return data ? JSON.parse(data) : [];
+    } catch {
+        return [];
+    }
+};
+
+const saveNotices = (classId: string, notices: Notice[]) => {
+    const trimmed = notices.slice(0, MAX_NOTICES);
+    localStorage.setItem(getStorageKey(classId), JSON.stringify(trimmed));
+};
+
+const NotificationModal = ({ isOpen, onClose, classId, groupId, groupName, className }: Props) => {
     const { style, handleMouseDown } = useDraggable();
-    const [notices, setNotices] = useState<Notice[]>([
-        {
-            id: "1",
-            content: "请各位同学注意，本周五下午将进行期中考试模拟，请提前做好准备。考试范围包括第一章至第三章。",
-            date: "2023-11-15 14:30",
-            sender: "张老师",
-            isNew: true
-        },
-        {
-            id: "2",
-            content: "下周一班会课将进行“文明礼仪”主题教育，请班长提前准备好PPT。",
-            date: "2023-11-14 09:00",
-            sender: "李老师"
-        }
-    ]);
+    const [showHistory, setShowHistory] = useState(false);
+    const [notices, setNotices] = useState<Notice[]>([]);
     const [newNotice, setNewNotice] = useState("");
-    const [sending, setSending] = useState(false);
+    const [sendStatus, setSendStatus] = useState<'idle' | 'sending' | 'success'>('idle');
 
-    // Focus input & Listen for notices
     useEffect(() => {
-        if (isOpen) {
-            // fetch notices (mock or api)
+        if (isOpen && classId) {
+            setNotices(loadNotices(classId));
+            setShowHistory(false);
+            setSendStatus('idle');
         }
-
-        const removeListener = addMessageListener((event) => {
-            // Check if event is for this group
-            // event.data matches TIM message structure
-            const newMsgs = event.data || [];
-            newMsgs.forEach((msg: any) => {
-                if (msg.to === groupId || !groupId) { // Simple filter
-                    const newNotice: Notice = {
-                        id: msg.ID || Date.now().toString(),
-                        content: msg.payload?.text || "[非文本消息]",
-                        date: new Date(msg.time * 1000).toLocaleString(),
-                        sender: msg.from || "未知",
-                        isNew: true
-                    };
-                    setNotices(prev => [newNotice, ...prev]);
-                }
-            });
-        });
-
-        return () => {
-            removeListener();
-        };
-    }, [isOpen, groupId]);
+    }, [isOpen, classId]);
 
     const handleSend = async () => {
         if (!newNotice.trim()) return;
-        setSending(true);
+        if (!classId) {
+            alert("班级ID缺失，无法发送通知");
+            return;
+        }
+
+        setSendStatus('sending');
 
         try {
-            // If we have a real groupId, try to send via TIM
-            if (groupId) {
-                const msgText = `[班级通知] ${newNotice}`;
-                await sendMessage(groupId, msgText);
+            const userInfoStr = localStorage.getItem('user_info');
+            let senderName = "老师";
+            let senderId = "";
+
+            if (userInfoStr) {
+                try {
+                    const u = JSON.parse(userInfoStr);
+                    senderName = u.name || u.strName || u.data?.name || "老师";
+                    senderId = u.teacher_unique_id || u.data?.teacher_unique_id || "";
+                } catch (e) { }
             }
 
-            // Optimistic UI update
-            const notice: Notice = {
-                id: Date.now().toString(),
-                content: newNotice,
-                date: new Date().toLocaleString(),
-                sender: "我"
+            const notificationObj: Record<string, string> = {
+                type: "notification",
+                class_id: classId,
+                content: newNotice.trim(),
+                content_text: "notification",
+                sender_name: senderName,
             };
-            setNotices([notice, ...notices]);
-            setNewNotice("");
+
+            if (senderId) notificationObj.sender_id = senderId;
+            if (groupId) {
+                notificationObj.group_id = groupId;
+                notificationObj.unique_group_id = groupId;
+            }
+            if (groupName) notificationObj.group_name = groupName;
+
+            let wsMessage = groupId
+                ? `to:${groupId}:${JSON.stringify(notificationObj)}`
+                : JSON.stringify(notificationObj);
+
+            console.log('[NotificationModal] Sending:', wsMessage);
+            sendMessageWS(wsMessage);
+
+            // Save to history
+            const newNoticeObj: Notice = {
+                id: Date.now().toString(),
+                content: newNotice.trim(),
+                senderName,
+                timestamp: Date.now()
+            };
+            const updatedNotices = [newNoticeObj, ...notices];
+            setNotices(updatedNotices);
+            saveNotices(classId, updatedNotices);
+
+            setSendStatus('success');
+
+            // Wait a bit to show success state
+            setTimeout(() => {
+                setNewNotice("");
+                setSendStatus('idle');
+                // Auto-close removed
+            }, 1500);
+
         } catch (e) {
             console.error("Failed to send notice", e);
             alert("发送失败，请重试");
-        } finally {
-            setSending(false);
+            setSendStatus('idle');
         }
     };
 
     const handleDelete = (id: string) => {
-        if (confirm("确定删除这条通知吗？")) {
-            setNotices(notices.filter(n => n.id !== id));
-        }
-    }
+        if (!classId) return;
+        const updated = notices.filter(n => n.id !== id);
+        setNotices(updated);
+        saveNotices(classId, updated);
+    };
 
     if (!isOpen) return null;
 
+    const displayName = className || groupName || classId || "班级";
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-300 font-sans">
             <div
-                className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
-                style={{ ...style, height: '650px' }}
+                style={style}
+                className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-2xl w-[480px] max-h-[600px] overflow-hidden border border-white/60 ring-1 ring-black/5 flex flex-col transition-all"
             >
                 {/* Header */}
                 <div
                     onMouseDown={handleMouseDown}
-                    className="flex items-center justify-between p-4 border-b border-gray-100 bg-gray-50/50 cursor-move select-none"
+                    className="px-6 py-4 flex items-center justify-between cursor-move select-none border-b border-gray-100 bg-white/50 relative z-10"
                 >
-                    <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
-                        <span className="bg-red-100 text-red-600 p-1 rounded-md"><Bell size={18} /></span>
-                        班级通知
-                    </h3>
-                    <button
-                        onClick={onClose}
-                        className="p-1.5 hover:bg-gray-200 rounded-full text-gray-500 transition-colors"
-                    >
-                        <X size={20} />
-                    </button>
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-blue-50 text-blue-600 rounded-lg shadow-sm border border-blue-100">
+                            {showHistory ? <History size={20} /> : <Bell size={20} />}
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-slate-800 text-base tracking-tight">
+                                {showHistory ? '发送历史记录' : '发送通知消息'}
+                            </h3>
+                            <p className="text-xs text-slate-500 font-medium truncate max-w-[200px]">
+                                {displayName}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        {!showHistory ? (
+                            <button
+                                onClick={() => setShowHistory(true)}
+                                className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                title="查看历史"
+                            >
+                                <History size={18} />
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => setShowHistory(false)}
+                                className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                title="返回发送"
+                            >
+                                <ChevronLeft size={18} />
+                            </button>
+                        )}
+                        <button
+                            onClick={onClose}
+                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                            <X size={20} />
+                        </button>
+                    </div>
                 </div>
 
-                {/* Content */}
-                <div className="flex-1 overflow-hidden flex flex-col bg-gray-50/30">
-                    {/* Notice List */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {showHistory ? (
+                    /* History View */
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50 custom-scrollbar">
                         {notices.length > 0 ? (
                             notices.map(notice => (
-                                <div key={notice.id} className={`bg-white p-4 rounded-xl border shadow-sm relative group transition-all hover:shadow-md ${notice.isNew ? 'border-red-200 ring-4 ring-red-50' : 'border-gray-100'}`}>
-                                    {notice.isNew && (
-                                        <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full shadow-sm animate-pulse">NEW</span>
-                                    )}
-
-                                    <div className="flex justify-between items-start mb-2">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">
-                                                {notice.sender[0]}
-                                            </div>
-                                            <div>
-                                                <span className="font-bold text-gray-800 text-sm block">{notice.sender}</span>
-                                                <span className="text-[10px] text-gray-400 flex items-center gap-1">
-                                                    <Clock size={10} /> {notice.date}
-                                                </span>
-                                            </div>
-                                        </div>
+                                <div key={notice.id} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 group relative hover:shadow-md transition-all">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">{notice.content}</p>
                                         <button
                                             onClick={() => handleDelete(notice.id)}
-                                            className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-1"
+                                            className="text-slate-300 hover:text-red-500 p-1.5 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                                            title="删除"
                                         >
                                             <Trash2 size={14} />
                                         </button>
                                     </div>
-
-                                    <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap pl-10">
-                                        {notice.content}
-                                    </p>
+                                    <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-gray-50">
+                                        <div className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-bold">
+                                            <Clock size={10} />
+                                            <span>已发送</span>
+                                        </div>
+                                        <span className="text-[10px] text-slate-400 font-medium font-mono">
+                                            {new Date(notice.timestamp).toLocaleString()}
+                                        </span>
+                                    </div>
                                 </div>
                             ))
                         ) : (
-                            <div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-70">
-                                <Bell size={48} className="mb-2 opacity-50" />
-                                <p className="text-sm">暂无通知</p>
+                            <div className="flex flex-col items-center justify-center py-12 text-slate-400 gap-3">
+                                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center">
+                                    <History size={24} className="opacity-50" />
+                                </div>
+                                <p className="text-sm font-medium">暂无发送历史</p>
                             </div>
                         )}
                     </div>
+                ) : (
+                    /* Send View */
+                    <div className="bg-white flex flex-col h-full">
+                        <div className="p-5 flex-1 pb-0">
+                            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">
+                                消息内容
+                            </label>
+                            <div className="relative">
+                                <textarea
+                                    value={newNotice}
+                                    onChange={e => setNewNotice(e.target.value)}
+                                    placeholder="请输入需要发送给全班的通知内容..."
+                                    className="w-full h-48 bg-slate-50 text-slate-800 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all outline-none resize-none placeholder:text-slate-400 leading-relaxed scrollbar-thin"
+                                    autoFocus
+                                />
+                                <div className="absolute bottom-3 right-3 text-[10px] text-slate-400 font-medium bg-slate-50/80 px-1.5 py-0.5 rounded border border-slate-100">
+                                    {newNotice.length} 字
+                                </div>
+                            </div>
 
-                    {/* Input Area */}
-                    <div className="p-4 bg-white border-t border-gray-100 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
-                        <div className="relative">
-                            <textarea
-                                value={newNotice}
-                                onChange={e => setNewNotice(e.target.value)}
-                                placeholder="发布新通知..."
-                                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-300 focus:bg-white transition-all outline-none resize-none h-24"
-                            />
-                            <div className="absolute bottom-3 right-3 flex items-center gap-2">
-                                <span className="text-xs text-gray-400">{newNotice.length} 字</span>
-                                <button
-                                    onClick={handleSend}
-                                    disabled={!newNotice.trim() || sending}
-                                    className={`p-2 rounded-lg transition-all flex items-center gap-2 ${!newNotice.trim() || sending ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg active:scale-95'}`}
-                                >
-                                    {sending ? (
-                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                    ) : (
-                                        <Send size={16} />
-                                    )}
-                                    <span className="text-xs font-bold">发布</span>
-                                </button>
+                            <div className="mt-4 flex items-start gap-2 text-xs text-slate-400 bg-blue-50/50 p-3 rounded-lg border border-blue-100/50">
+                                <div className="mt-0.5 text-blue-500 flex-shrink-0">
+                                    <Clock size={14} />
+                                </div>
+                                <p>消息将即时发送到班级群，所有在线成员均可收到。</p>
                             </div>
                         </div>
+
+                        <div className="p-5 flex items-center justify-end gap-3 bg-slate-50 border-t border-slate-100 mt-auto">
+                            <button
+                                onClick={onClose}
+                                className="px-5 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-200/50 rounded-xl transition-colors"
+                            >
+                                取消
+                            </button>
+                            <button
+                                onClick={handleSend}
+                                disabled={!newNotice.trim() || sendStatus !== 'idle'}
+                                className={`px-8 py-2.5 text-sm font-bold text-white rounded-xl flex items-center gap-2 shadow-lg transition-all transform active:scale-95
+                                    ${!newNotice.trim() && sendStatus === 'idle'
+                                        ? 'bg-slate-300 shadow-none cursor-not-allowed text-slate-500'
+                                        : sendStatus === 'success'
+                                            ? 'bg-green-500 hover:bg-green-600 shadow-green-500/30'
+                                            : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 hover:-translate-y-0.5 shadow-blue-500/30'}`}
+                            >
+                                {sendStatus === 'sending' ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                        <span>发送中...</span>
+                                    </>
+                                ) : sendStatus === 'success' ? (
+                                    <>
+                                        <Check size={18} />
+                                        <span>已发送</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span>立即发送</span>
+                                        <div className="w-px h-3 bg-white/20 mx-0.5"></div>
+                                        <Clock size={14} className="opacity-80" />
+                                    </>
+                                )}
+                            </button>
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
         </div>
     );

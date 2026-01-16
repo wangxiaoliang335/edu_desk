@@ -2,8 +2,11 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { ChevronRight, ChevronDown, User, Users, School, MessageCircle, LogOut, UserMinus } from 'lucide-react';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { ChevronRight, ChevronDown, User, Users, School, MessageCircle, LogOut, UserMinus, Bell } from 'lucide-react';
 import { loginTIM, getTIMGroups, setCachedTIMGroups } from '../utils/tim';
+import { getLatestNotifications } from '../utils/websocket';
+import NotificationCenterModal, { NotificationItem } from './modals/NotificationCenterModal';
 
 interface ClassInfo {
     class_code: string;
@@ -109,6 +112,77 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
     const [loading, setLoading] = useState(false);
     const [debugMsg, setDebugMsg] = useState('');
 
+    // Notification Center State
+    const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false);
+    const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
+    // Normal Group Chat State - REMOVED for Independent Window
+    // const [selectedNormalGroup, setSelectedNormalGroup] = useState<{ groupId: string; groupName: string; isOwner: boolean } | null>(null);
+
+    const openNormalChatWindow = async (groupId: string, groupName: string) => {
+        try {
+            const label = `chat-${groupId.replace(/[^a-zA-Z0-9-/:_]/g, '_')}`;
+            const existingWin = await WebviewWindow.getByLabel(label);
+            if (existingWin) {
+                await existingWin.setFocus();
+                return;
+            }
+
+            const webview = new WebviewWindow(label, {
+                url: `/chat/normal/${encodeURIComponent(groupId)}`,
+                title: groupName || "群聊",
+                width: 800,
+                height: 600,
+                center: true,
+                resizable: true,
+                decorations: false, // We have custom header
+                transparent: true
+            });
+
+            webview.once('tauri://created', function () {
+                // webview window successfully created
+            });
+
+            webview.once('tauri://error', function (e) {
+                console.error("Failed to create chat window", e);
+            });
+        } catch (e) {
+            console.error("Error opening chat window:", e);
+        }
+    };
+
+    // Websocket Listener for Notifications
+    useEffect(() => {
+        // Load initial cached notifications
+        const cached = getLatestNotifications();
+        if (cached && cached.length > 0) {
+            console.log("[Dashboard] Loaded cached notifications:", cached.length);
+            setNotifications(cached as NotificationItem[]);
+        }
+
+        const handleWSMessage = (event: CustomEvent) => {
+            try {
+                const msg = JSON.parse(event.detail);
+                if (msg.type === "unread_notifications") {
+                    console.log("[Dashboard] Received Notifications Payload:", msg.data);
+                    const newItems = (msg.data || []) as NotificationItem[];
+                    setNotifications(prev => {
+                        const existingMap = new Map(prev.map(item => [item.id, item]));
+                        newItems.forEach(item => existingMap.set(item.id, item));
+                        return Array.from(existingMap.values());
+                    });
+                }
+            } catch (e) {
+                console.error("[Dashboard] Error parsing WS message:", e);
+            }
+        };
+
+        window.addEventListener('ws-message', handleWSMessage as EventListener);
+        return () => {
+            window.removeEventListener('ws-message', handleWSMessage as EventListener);
+        };
+    }, []);
+
     // Context Menu State
     const [contextMenu, setContextMenu] = useState<{
         visible: boolean;
@@ -147,17 +221,21 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
 
         if (!contextMenu.data || !userInfo?.teacher_unique_id) return;
         const classCode = contextMenu.data.class_code;
-        if (confirm(`确定要退出班级 "${contextMenu.data.class_name || classCode}" 吗？`)) {
+        const className = contextMenu.data.class_name || classCode;
+
+        if (confirm(`确定要退出班级 "${className}" 吗？`)) {
             try {
+                // Class List "Leave" only calls /teachers/classes/remove
+                // It does NOT interact with TIM SDK directly.
                 await invoke('leave_class', {
                     teacherUniqueId: userInfo.teacher_unique_id,
                     classCode: classCode
                 });
                 alert('已退出班级');
                 fetchData(); // Refresh list
-            } catch (e) {
+            } catch (e: any) {
                 console.error(e);
-                alert('退出班级失败: ' + String(e));
+                alert('退出班级失败: ' + (e.message || String(e)));
             }
         }
     };
@@ -253,6 +331,9 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
 
             // 2. Fetch Friends & Server Groups info (for enrichment)
             let serverGroupsMap = new Map<string, GroupInfo>();
+            let serverOwnerIds = new Set<string>();
+            let serverMemberIds = new Set<string>();
+
             if (idCard) {
                 console.log('Fetching friends for:', idCard);
                 const friendsResText = await invoke<string>('get_user_friends', { idCard, token });
@@ -263,8 +344,17 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
                 }
 
                 if (friendsRes.data) {
-                    const allGroups = [...(friendsRes.data.owner_groups || []), ...(friendsRes.data.member_groups || [])];
-                    allGroups.forEach(g => serverGroupsMap.set(g.group_id, g));
+                    const ownerGroups = friendsRes.data.owner_groups || [];
+                    const memberGroups = friendsRes.data.member_groups || [];
+
+                    ownerGroups.forEach(g => {
+                        serverGroupsMap.set(g.group_id, g);
+                        serverOwnerIds.add(g.group_id);
+                    });
+                    memberGroups.forEach(g => {
+                        serverGroupsMap.set(g.group_id, g);
+                        serverMemberIds.add(g.group_id);
+                    });
                 }
             }
 
@@ -291,33 +381,46 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
                         timGroups.forEach((timGroup: any) => {
                             const groupId = timGroup.groupID;
                             const groupType = timGroup.type; // "Meeting" (Class) or "Public" (Normal)
-                            const serverInfo = serverGroupsMap.get(groupId);
-
                             // Construct merged group info
+                            // DEBUG: Log raw group type to check if "Public" is handled
+                            // console.log(`[ClassManagement] Processing Group: ${groupId}, Type: ${groupType}, Name: ${timGroup.name}`);
+
                             const groupInfo: GroupInfo = {
                                 group_id: groupId,
-                                group_name: timGroup.name || serverInfo?.group_name || '未命名群聊',
-                                face_url: timGroup.avatar || serverInfo?.face_url || '',
+                                group_name: timGroup.name || '未命名群聊',
+                                face_url: timGroup.avatar || '',
                                 // Classification Logic:
                                 // 1. "ChatRoom" or "Meeting" -> Class Group (based on C++ Meeting type mapping to ChatRoom in SDK)
                                 // 2. "Public" -> Normal Group
-                                // 3. Fallback to Server Info
-                                is_class_group: groupType === 'Meeting' || groupType === 'ChatRoom' || (serverInfo ? (serverInfo.is_class_group === 1 || String(serverInfo.is_class_group) === 'true') : false),
-                                classid: serverInfo?.classid
+                                // 3. Fallback: ID check
+                                is_class_group: groupType === 'Meeting' || groupType === 'ChatRoom' || groupId.endsWith('01'),
+                                classid: undefined
                             };
 
-                            // Check ownership - ownerID may be empty for newly created groups
-                            // Role 400 = Owner, 300 = Admin, 200 = Member
-                            const selfRole = timGroup.selfInfo?.role;
+                            // Check ownership
+                            // Priority: Server Data > TIM Data
+                            let isOwner = false;
+                            let ownershipSource = "TIM";
 
-                            // Check if this group was recently created by us (before TIM syncs owner info)
+                            // Fallback logic preparation
+                            const selfRole = timGroup.selfInfo?.role;
                             const recentlyCreatedGroups: string[] = JSON.parse(sessionStorage.getItem('recentlyCreatedGroups') || '[]');
                             const wasCreatedByMe = recentlyCreatedGroups.includes(groupId);
 
-                            const isOwner = timGroup.ownerID === timUserId ||
-                                ((!timGroup.ownerID || timGroup.ownerID === '') && selfRole === 400) ||
-                                ((!timGroup.ownerID || timGroup.ownerID === '') && wasCreatedByMe);
-                            console.log(`Group: ${groupInfo.group_id} (${groupInfo.group_name}), Owner: ${timGroup.ownerID || '(empty)'}, Me: ${timUserId}, Role: ${selfRole}, WasCreatedByMe: ${wasCreatedByMe}, IsOwner: ${isOwner}`);
+                            if (serverOwnerIds.has(groupId)) {
+                                isOwner = true;
+                                ownershipSource = "Server(Owner)";
+                            } else if (serverMemberIds.has(groupId)) {
+                                isOwner = false;
+                                ownershipSource = "Server(Member)";
+                            } else {
+                                // Fallback to TIM logic
+                                isOwner = timGroup.ownerID === timUserId ||
+                                    ((!timGroup.ownerID || timGroup.ownerID === '') && selfRole === 400) ||
+                                    ((!timGroup.ownerID || timGroup.ownerID === '') && wasCreatedByMe);
+                            }
+
+                            // console.log(`Group: ${groupInfo.group_id} (${groupInfo.group_name}), Source: ${ownershipSource}, IsOwner: ${isOwner}`);
 
                             if (groupInfo.is_class_group) {
                                 if (isOwner) mClassGroups.push(groupInfo);
@@ -328,7 +431,7 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
                             }
                         });
 
-                        console.log(`TIM Groups Processed. Class(M/J): ${mClassGroups.length}/${jClassGroups.length}, Normal(M/J): ${mNormalGroups.length}/${jNormalGroups.length}`);
+                        // console.log(`TIM Groups Processed. Class(M/J): ${mClassGroups.length}/${jClassGroups.length}, Normal(M/J): ${mNormalGroups.length}/${jNormalGroups.length}`);
                         setManagedClassGroups(mClassGroups);
                         setJoinedClassGroups(jClassGroups);
                         setManagedNormalGroups(mNormalGroups);
@@ -348,7 +451,7 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
     };
 
     return (
-        <div className="flex flex-col h-full bg-white/50 backdrop-blur-sm rounded-xl overflow-hidden border border-white/40 shadow-sm">
+        <div className="flex flex-col h-full bg-white/50 backdrop-blur-sm rounded-xl overflow-hidden border border-white/40 shadow-sm relative">
             {/* Header Tabs */}
             <div className="flex items-center shrink-0 bg-gray-50/50 p-1 m-2 rounded-lg border border-gray-100">
                 <button
@@ -364,6 +467,20 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
                 >
                     群聊
                 </button>
+
+                {/* Notification Bell */}
+                <div className="ml-1 pl-1 border-l border-gray-200">
+                    <button
+                        onClick={() => setIsNotificationCenterOpen(true)}
+                        className="p-1.5 hover:bg-white hover:text-blue-600 rounded-md text-gray-500 transition-all relative"
+                        title="消息中心"
+                    >
+                        <Bell size={16} />
+                        {notifications.length > 0 && notifications.some(n => n.is_read === 0) && (
+                            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+                        )}
+                    </button>
+                </div>
             </div>
 
             {/* List Content */}
@@ -440,7 +557,8 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
                                             key={`mgr-n-${idx}`}
                                             label={g?.group_name || '未命名群组'}
                                             avatarUrl={g?.face_url}
-                                            onDoubleClick={() => invoke('open_class_window', { groupclassId: g.group_id })}
+                                            // onDoubleClick={() => setSelectedNormalGroup({ groupId: g.group_id, groupName: g.group_name || '群聊', isOwner: true })}
+                                            onDoubleClick={() => openNormalChatWindow(g.group_id, g.group_name)}
                                         />
                                     ))}
                                 </TreeNode>
@@ -452,7 +570,8 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
                                             key={`join-n-${idx}`}
                                             label={g?.group_name || '未命名群组'}
                                             avatarUrl={g?.face_url}
-                                            onDoubleClick={() => invoke('open_class_window', { groupclassId: g.group_id })}
+                                            // onDoubleClick={() => setSelectedNormalGroup({ groupId: g.group_id, groupName: g.group_name || '群聊', isOwner: false })}
+                                            onDoubleClick={() => openNormalChatWindow(g.group_id, g.group_name)}
                                         />
                                     ))}
                                 </TreeNode>
@@ -471,37 +590,65 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
                 )}
             </div>
 
+            {/* Notification Modal */}
+            <NotificationCenterModal
+                isOpen={isNotificationCenterOpen}
+                onClose={() => setIsNotificationCenterOpen(false)}
+                notifications={notifications}
+            />
+
+            {/* Normal Group Chat Modal - Removed in favor of Independent Window */}
+            {/* {
+                selectedNormalGroup && (
+                    <NormalGroupChatModal
+                        isOpen={true}
+                        onClose={() => setSelectedNormalGroup(null)}
+                        groupId={selectedNormalGroup.groupId}
+                        groupName={selectedNormalGroup.groupName}
+                        isOwner={selectedNormalGroup.isOwner}
+                        userInfo={userInfo}
+                        friends={friends.map(f => ({
+                            teacher_unique_id: f.teacher_info.teacher_unique_id,
+                            name: f.user_details?.name || f.teacher_info.name,
+                            avatar: f.user_details?.avatar
+                        }))}
+                    />
+                )
+            } */}
+
             {/* Context Menu - Portaled to body to avoid transform issues */}
-            {contextMenu.visible && createPortal(
-                <>
-                    <div className="fixed inset-0 z-50 bg-transparent" onClick={() => setContextMenu(prev => ({ ...prev, visible: false }))} />
-                    <div
-                        className="fixed bg-white/95 backdrop-blur-sm shadow-xl rounded-xl py-1.5 z-50 border border-gray-100 min-w-[160px] animate-in fade-in zoom-in-95 duration-100"
-                        style={{ top: contextMenu.y, left: contextMenu.x }}
-                    >
-                        {contextMenu.type === 'class' && (
-                            <button
-                                onClick={handleLeaveClass}
-                                className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors group"
-                            >
-                                <LogOut size={16} className="text-red-500 group-hover:text-red-600" />
-                                <span className="font-medium">退出班级</span>
-                            </button>
-                        )}
-                        {contextMenu.type === 'friend' && (
-                            <button
-                                onClick={handleUnfriend}
-                                className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors group"
-                            >
-                                <UserMinus size={16} className="text-red-500 group-hover:text-red-600" />
-                                <span className="font-medium">解除好友</span>
-                            </button>
-                        )}
-                    </div>
-                </>,
-                document.body
-            )}
-        </div>
+            {
+                contextMenu.visible && createPortal(
+                    <>
+                        <div className="fixed inset-0 z-50 bg-transparent" onClick={() => setContextMenu(prev => ({ ...prev, visible: false }))} />
+                        <div
+                            className="fixed bg-white/95 backdrop-blur-sm shadow-xl rounded-xl py-1.5 z-50 border border-gray-100 min-w-[160px] animate-in fade-in zoom-in-95 duration-100"
+                            style={{ top: contextMenu.y, left: contextMenu.x }}
+                        >
+                            {contextMenu.type === 'class' && (
+                                <button
+                                    onClick={handleLeaveClass}
+                                    className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors group"
+                                >
+                                    <LogOut size={16} className="text-red-500 group-hover:text-red-600" />
+                                    <span className="font-medium">退出班级</span>
+                                </button>
+                            )}
+                            {contextMenu.type === 'friend' && (
+                                <button
+                                    onClick={handleUnfriend}
+                                    className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors group"
+                                >
+                                    <UserMinus size={16} className="text-red-500 group-hover:text-red-600" />
+                                    <span className="font-medium">解除好友</span>
+                                </button>
+                            )}
+                        </div>
+                    </>,
+                    document.body
+                )
+            }
+        </div >
     );
 };
 

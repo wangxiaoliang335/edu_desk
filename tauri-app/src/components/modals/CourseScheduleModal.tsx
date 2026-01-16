@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { X, Calendar, Download, RefreshCw, FileSpreadsheet } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useDraggable } from '../../hooks/useDraggable';
+import { getCurrentTerm } from '../../utils/term';
 
 interface CourseScheduleModalProps {
     isOpen: boolean;
@@ -12,13 +13,16 @@ interface CourseScheduleModalProps {
 
 // Mock Schedule Data removed
 
-const CURRENT_TERM = "2023-2024 第二学期";
+// Removed static CURRENT_TERM
 
 const CourseScheduleModal = ({ isOpen, onClose, classId }: CourseScheduleModalProps) => {
     const { style, handleMouseDown } = useDraggable();
     const [scheduleData, setScheduleData] = useState<any[]>([]); // Initialize empty
     const [loading, setLoading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const notifyTodayScheduleRefresh = (classId: string) => {
+        window.dispatchEvent(new CustomEvent('refresh-daily-schedule', { detail: { classId } }));
+    };
 
     useEffect(() => {
         if (isOpen && classId) {
@@ -42,9 +46,11 @@ const CourseScheduleModal = ({ isOpen, onClose, classId }: CourseScheduleModalPr
                 }
             }
 
+            const term = getCurrentTerm();
+            console.log('[CourseScheduleModal] Fetching get_course_schedule', { classId, term });
             const res = await invoke<string>('get_course_schedule', {
                 classId,
-                term: CURRENT_TERM,
+                term,
                 token
             });
             console.log("Course Schedule Response:", res);
@@ -169,7 +175,7 @@ const CourseScheduleModal = ({ isOpen, onClose, classId }: CourseScheduleModalPr
 
             const saveRes = await invoke<string>('save_course_schedule', {
                 classId,
-                term: CURRENT_TERM,
+                term: getCurrentTerm(),
                 days,
                 times,
                 cells: cells,
@@ -178,9 +184,8 @@ const CourseScheduleModal = ({ isOpen, onClose, classId }: CourseScheduleModalPr
             console.log("Save Course Schedule Response:", saveRes);
 
             setScheduleData(mappedData);
-            alert("导入并同步成功！");
-
             fetchSchedule();
+            if (classId) notifyTodayScheduleRefresh(classId);
 
         } catch (e) {
             console.error("Import failed", e);
@@ -207,7 +212,7 @@ const CourseScheduleModal = ({ isOpen, onClose, classId }: CourseScheduleModalPr
                     <div className="flex items-center gap-2 font-bold text-lg">
                         <Calendar size={20} />
                         <span>班级课程表</span>
-                        <span className="text-sm font-normal opacity-80 bg-white/20 px-2 py-0.5 rounded ml-2">{CURRENT_TERM}</span>
+                        <span className="text-sm font-normal opacity-80 bg-white/20 px-2 py-0.5 rounded ml-2">{getCurrentTerm()}</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <input
@@ -235,54 +240,70 @@ const CourseScheduleModal = ({ isOpen, onClose, classId }: CourseScheduleModalPr
 
                 {/* Content */}
                 <div className="flex-1 overflow-auto p-4 bg-gray-50/50">
-                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                        <div className="grid grid-cols-6 text-sm">
-                            {/* Header Row */}
-                            <div className="bg-gray-50 p-3 font-bold text-gray-500 text-center border-b border-r border-gray-200">时间</div>
-                            {['周一', '周二', '周三', '周四', '周五'].map(day => (
-                                <div key={day} className="bg-gray-50 p-3 font-bold text-gray-700 text-center border-b border-gray-200 border-r last:border-r-0">
-                                    {day}
-                                </div>
-                            ))}
+                    {scheduleData.length === 0 ? (
+                        /* Empty State */
+                        <div className="h-full flex flex-col items-center justify-center text-center">
+                            <Calendar size={64} className="text-gray-300 mb-4" />
+                            <h3 className="text-lg font-bold text-gray-500 mb-2">暂无课程表数据</h3>
+                            <p className="text-gray-400 text-sm mb-6">请导入Excel课程表文件</p>
+                            <button
+                                onClick={handleImportClick}
+                                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg flex items-center gap-2 transition-all shadow-lg shadow-blue-200"
+                            >
+                                <FileSpreadsheet size={20} />
+                                导入课程表
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                            <div className="grid grid-cols-6 text-sm">
+                                {/* Header Row */}
+                                <div className="bg-gray-50 p-3 font-bold text-gray-500 text-center border-b border-r border-gray-200">时间</div>
+                                {['周一', '周二', '周三', '周四', '周五'].map(day => (
+                                    <div key={day} className="bg-gray-50 p-3 font-bold text-gray-700 text-center border-b border-gray-200 border-r last:border-r-0">
+                                        {day}
+                                    </div>
+                                ))}
 
-                            {/* Schedule Rows */}
-                            {scheduleData.map((row, index) => {
-                                if (row.time === 'lunch') {
+                                {/* Schedule Rows */}
+                                {scheduleData.map((row, index) => {
+                                    if (row.time === 'lunch') {
+                                        return (
+                                            <div key={index} className="col-span-6 bg-orange-50/50 p-2 text-center text-orange-400 font-medium text-xs border-b border-gray-200">
+                                                {row.label}
+                                            </div>
+                                        );
+                                    }
                                     return (
-                                        <div key={index} className="col-span-6 bg-orange-50/50 p-2 text-center text-orange-400 font-medium text-xs border-b border-gray-200">
-                                            {row.label}
-                                        </div>
-                                    );
-                                }
-                                return (
-                                    <Fragment key={index}>
-                                        {/* Time Column */}
-                                        <div className="p-4 flex items-center justify-center text-gray-500 font-medium border-b border-r border-gray-100 text-xs bg-gray-50/30">
-                                            {row.time}
-                                        </div>
-                                        {/* Course Columns */}
-                                        {[row.mon, row.tue, row.wed, row.thu, row.fri].map((course, i) => (
-                                            <div key={i} className="p-2 border-b border-r border-gray-100 last:border-r-0 h-20 relative group hover:bg-blue-50/50 transition-colors">
-                                                <div className={`
+                                        <Fragment key={index}>
+                                            {/* Time Column */}
+                                            <div className="p-4 flex items-center justify-center text-gray-500 font-medium border-b border-r border-gray-100 text-xs bg-gray-50/30">
+                                                {row.time}
+                                            </div>
+                                            {/* Course Columns */}
+                                            {[row.mon, row.tue, row.wed, row.thu, row.fri].map((course, i) => (
+                                                <div key={i} className="p-2 border-b border-r border-gray-100 last:border-r-0 h-20 relative group hover:bg-blue-50/50 transition-colors">
+                                                    <div className={`
                                                     h-full w-full rounded-lg flex flex-col items-center justify-center gap-1 cursor-pointer transition-all hover:shadow-sm
                                                     ${course === '数学' ? 'bg-blue-100 text-blue-700' :
-                                                        course === '语文' ? 'bg-red-100 text-red-700' :
-                                                            course === '英语' ? 'bg-orange-100 text-orange-700' :
-                                                                course === '物理' ? 'bg-indigo-100 text-indigo-700' :
-                                                                    course === '化学' ? 'bg-purple-100 text-purple-700' :
-                                                                        course === '体育' ? 'bg-green-100 text-green-700' :
-                                                                            'bg-gray-100 text-gray-600'}
+                                                            course === '语文' ? 'bg-red-100 text-red-700' :
+                                                                course === '英语' ? 'bg-orange-100 text-orange-700' :
+                                                                    course === '物理' ? 'bg-indigo-100 text-indigo-700' :
+                                                                        course === '化学' ? 'bg-purple-100 text-purple-700' :
+                                                                            course === '体育' ? 'bg-green-100 text-green-700' :
+                                                                                'bg-gray-100 text-gray-600'}
                                                 `}>
-                                                    <span className="font-bold">{course || '-'}</span>
-                                                    {course && <span className="text-[10px] opacity-70">A-302</span>}
+                                                        <span className="font-bold">{course || '-'}</span>
+                                                        {course && <span className="text-[10px] opacity-70">A-302</span>}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
-                                    </Fragment>
-                                );
-                            })}
+                                            ))}
+                                        </Fragment>
+                                    );
+                                })}
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
             </div>
         </div>

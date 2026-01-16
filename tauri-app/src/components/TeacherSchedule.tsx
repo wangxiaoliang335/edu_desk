@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { getCurrentTerm } from '../utils/term';
 import { invoke } from '@tauri-apps/api/core';
+import { useDraggable } from '../hooks/useDraggable';
 
 // API Interfaces
 interface ScheduleCell {
@@ -75,25 +77,58 @@ const TeacherSchedule = () => {
     const [scheduleMap, setScheduleMap] = useState<Record<string, Course[]>>({});
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [currentClassId, setCurrentClassId] = useState('1'); // Default test ID
-    const [currentTerm, setCurrentTerm] = useState('2023-2024-2'); // Default term
+    const [currentTerm, setCurrentTerm] = useState(getCurrentTerm()); // Default term
+    const [currentWeek, setCurrentWeek] = useState(0); // 0 = 本周
+    const [weekInput, setWeekInput] = useState('0');
+    const [termStartDate, setTermStartDate] = useState(() => {
+        return localStorage.getItem('teacher_schedule_term_start') || '';
+    });
+    const [isEditing, setIsEditing] = useState(false);
+    const [scheduleMeta, setScheduleMeta] = useState<{ days: string[]; times: string[] }>({
+        days: WEEKDAYS,
+        times: PERIODS.filter((p) => p.id !== 'noon').map((p) => p.time),
+    });
+    const draggable = useDraggable();
+
+    const teacherId = useMemo(() => {
+        return localStorage.getItem('teacher_unique_id') || '';
+    }, []);
 
     useEffect(() => {
         fetchSchedule();
-    }, [currentClassId, currentTerm]);
+    }, [teacherId, currentTerm, currentWeek]);
+
+    useEffect(() => {
+        setWeekInput(String(currentWeek));
+    }, [currentWeek]);
+
+    useEffect(() => {
+        if (termStartDate) {
+            localStorage.setItem('teacher_schedule_term_start', termStartDate);
+        }
+    }, [termStartDate]);
 
     const fetchSchedule = async () => {
         setLoading(true);
         setError(null);
         try {
+            if (!currentTerm.trim()) {
+                setError('学期不能为空');
+                return;
+            }
+            if (!teacherId) {
+                setError('未获取到教师ID，无法查询个人课表');
+                return;
+            }
             // Retrieve token (mocking for now if not in localStorage, usually passed via login)
             // In a real app, use a context or store
             const token = localStorage.getItem('token') || '';
 
-            const responseStr = await invoke<string>('get_course_schedule', {
-                classId: currentClassId,
+            const responseStr = await invoke<string>('get_teacher_schedule', {
+                teacherId,
                 term: currentTerm,
-                token: token
+                week: currentWeek,
+                token
             });
 
             const response = JSON.parse(responseStr) as ScheduleResponse;
@@ -104,11 +139,19 @@ const TeacherSchedule = () => {
                 // Handle Data Structure (might be object or array)
                 // Assuming 'message: 查询成功' and single object for specific term
                 let cells: ScheduleCell[] = [];
+                let scheduleDays: string[] | null = null;
+                let scheduleTimes: string[] | null = null;
                 if (Array.isArray(response.data)) {
                     // If array, grab first one or flatten? For specific term query it should be object
-                    if (response.data.length > 0) cells = response.data[0].cells;
+                    if (response.data.length > 0) {
+                        cells = response.data[0].cells;
+                        scheduleDays = response.data[0].schedule?.days || null;
+                        scheduleTimes = response.data[0].schedule?.times || null;
+                    }
                 } else if (response.data && response.data.cells) {
                     cells = response.data.cells;
+                    scheduleDays = response.data.schedule?.days || null;
+                    scheduleTimes = response.data.schedule?.times || null;
                 }
 
                 cells.forEach(cell => {
@@ -124,10 +167,10 @@ const TeacherSchedule = () => {
 
                     if (periodObj && periodObj.id !== 'noon') {
                         const cellKey = `${dayKey}-${periodObj.id}`;
-                        const course: Course = {
+                    const course: Course = {
                             id: `srv-${cell.row_index}-${cell.col_index}`,
                             subject: cell.course_name,
-                            class: `${currentClassId}班`, // Placeholder class name
+                        class: '个人课表',
                             color: SUBJECT_COLORS[cell.course_name] || 'bg-gray-100 text-gray-700 border-gray-200',
                             highlight: cell.is_highlight === 1
                         };
@@ -138,6 +181,10 @@ const TeacherSchedule = () => {
                 });
 
                 setScheduleMap(newScheduleMap);
+                setScheduleMeta({
+                    days: scheduleDays && scheduleDays.length ? scheduleDays : WEEKDAYS,
+                    times: scheduleTimes && scheduleTimes.length ? scheduleTimes : PERIODS.filter((p) => p.id !== 'noon').map((p) => p.time),
+                });
             } else {
                 setError(response.message || '获取失败');
             }
@@ -152,36 +199,226 @@ const TeacherSchedule = () => {
         }
     };
 
+    const handleCellEdit = (cellKey: string) => {
+        if (!isEditing) return;
+        const existing = scheduleMap[cellKey]?.[0]?.subject || '';
+        const newName = prompt('请输入课程名称（留空表示清空）', existing);
+        if (newName === null) return;
+        setScheduleMap((prev) => {
+            const next = { ...prev };
+            if (!newName.trim()) {
+                delete next[cellKey];
+                return next;
+            }
+            next[cellKey] = [
+                {
+                    id: `tmp-${cellKey}-${Date.now()}`,
+                    subject: newName.trim(),
+                    class: '个人课表',
+                    color: SUBJECT_COLORS[newName.trim()] || 'bg-gray-100 text-gray-700 border-gray-200',
+                    highlight: true,
+                },
+            ];
+            return next;
+        });
+    };
+
+    const handleSave = async () => {
+        try {
+            if (!currentTerm.trim()) {
+                alert('学期不能为空');
+                return;
+            }
+            if (!teacherId) {
+                alert('未获取到教师ID，无法保存个人课表');
+                return;
+            }
+            const token = localStorage.getItem('token') || '';
+            const cellsPayload: ScheduleCell[] = [];
+
+            Object.entries(scheduleMap).forEach(([key, courses]) => {
+                const [dayIndexStr, periodIdStr] = key.split('-');
+                const dayIndex = parseInt(dayIndexStr, 10) - 1;
+                const periodId = parseInt(periodIdStr, 10);
+                const periodObj = PERIODS.find((p) => p.id === periodId);
+                if (!periodObj || !courses || courses.length === 0) return;
+                const course = courses[0];
+                cellsPayload.push({
+                    row_index: periodObj.rowIndex,
+                    col_index: dayIndex,
+                    course_name: course.subject,
+                    is_highlight: course.highlight ? 1 : 0,
+                });
+            });
+
+            const resp = await invoke<string>('save_teacher_schedule', {
+                teacherId,
+                term: currentTerm,
+                week: currentWeek,
+                days: scheduleMeta.days,
+                times: scheduleMeta.times,
+                cells: cellsPayload,
+                token,
+            });
+            const parsed = JSON.parse(resp);
+            if (parsed?.code === 200) {
+                alert('保存成功');
+                setIsEditing(false);
+            } else {
+                alert(`保存失败：${parsed?.message || resp}`);
+            }
+        } catch (e) {
+            console.error('Save schedule failed:', e);
+            alert('保存失败，请稍后再试');
+        }
+    };
+
+    const weekLabel = currentWeek === 0 ? '本周' : currentWeek > 0 ? `第${currentWeek}周` : `第${currentWeek}周`;
+
+    const getWeekDateRange = (week: number) => {
+        if (!termStartDate || week <= 0) return '';
+        const start = new Date(termStartDate);
+        if (Number.isNaN(start.getTime())) return '';
+        const startMs = start.getTime() + (week - 1) * 7 * 24 * 60 * 60 * 1000;
+        const endMs = startMs + 6 * 24 * 60 * 60 * 1000;
+        const format = (d: Date) => {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        };
+        return `${format(new Date(startMs))} ~ ${format(new Date(endMs))}`;
+    };
+    const weekRangeLabel = getWeekDateRange(currentWeek);
+    const weekInputNumber = Number.parseInt(weekInput, 10);
+    const weekInputRangeLabel = Number.isNaN(weekInputNumber) ? '' : getWeekDateRange(weekInputNumber);
+
     return (
-        <div className="flex flex-col h-full bg-white/50 backdrop-blur-sm rounded-xl">
+        <div
+            className="flex flex-col bg-white/60 backdrop-blur-sm rounded-xl border border-gray-200 shadow-sm resize both overflow-auto min-w-[900px] min-h-[600px]"
+            style={draggable.style}
+        >
             {/* Header Actions */}
-            <div className="flex items-center justify-between mb-4 p-1">
-                <div className="flex items-center gap-2">
-                    <h2 className="text-lg font-bold text-gray-800">课程表</h2>
-                    {/* Term Selector */}
-                    <input
-                        type="text"
-                        value={currentTerm}
-                        onChange={(e) => setCurrentTerm(e.target.value)}
-                        className="ml-2 text-xs border rounded px-2 py-1 w-24 bg-transparent font-medium text-blue-600"
-                        placeholder="Term"
-                    />
-                    {/* Temp Class Selector */}
-                    <input
-                        type="text"
-                        value={currentClassId}
-                        onChange={(e) => setCurrentClassId(e.target.value)}
-                        className="ml-2 text-xs border rounded px-2 py-1 w-20"
-                        placeholder="Class ID"
-                    />
-                    <button onClick={fetchSchedule} className="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600">查询</button>
+            <div className="flex flex-col gap-2 mb-3 px-3 pt-2 cursor-move select-none" onMouseDown={draggable.handleMouseDown}>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <h2 className="text-lg font-bold text-gray-800">教师个人课表</h2>
+                        <div className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-600 border border-blue-100">{weekLabel}</div>
+                        {weekRangeLabel && (
+                            <div className="text-xs px-2 py-1 rounded-full bg-gray-50 text-gray-600 border border-gray-200">
+                                {weekRangeLabel}
+                            </div>
+                        )}
+                        {isEditing && (
+                            <div className="text-xs px-2 py-1 rounded-full bg-orange-50 text-orange-600 border border-orange-100">
+                                临时调课模式
+                            </div>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {loading && <span className="text-sm text-gray-500 flex items-center animate-pulse">加载中...</span>}
+                        {error && <span className="text-sm text-red-500 flex items-center">错误: {error}</span>}
+                    </div>
                 </div>
-                <div className="flex gap-2">
-                    {loading && <span className="text-sm text-gray-500 flex items-center animate-pulse">加载中...</span>}
-                    {error && <span className="text-sm text-red-500 flex items-center">错误: {error}</span>}
-                    <button className="px-3 py-1.5 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 shadow-sm transition-all">上周</button>
-                    <button className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm shadow-blue-500/20 transition-all">本周</button>
-                    <button className="px-3 py-1.5 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 shadow-sm transition-all">下周</button>
+
+                <div className="flex items-start justify-between w-full gap-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <label className="text-xs text-gray-500">学期</label>
+                        <input
+                            type="text"
+                            value={currentTerm}
+                            onChange={(e) => setCurrentTerm(e.target.value)}
+                            className="text-xs border rounded px-2 py-1 w-28 bg-white font-medium text-gray-700"
+                            placeholder="2025-2026-1"
+                        />
+                        <label className="text-xs text-gray-500 ml-1">第1周起始日</label>
+                        <input
+                            type="date"
+                            value={termStartDate}
+                            onChange={(e) => setTermStartDate(e.target.value)}
+                            className="text-xs border rounded px-2 py-1 bg-white text-gray-700"
+                        />
+                        <label className="text-xs text-gray-500 ml-1">教师ID</label>
+                        <input
+                            type="text"
+                            value={teacherId || '未绑定'}
+                            disabled
+                            className="text-xs border rounded px-2 py-1 w-24 bg-gray-100 text-gray-400"
+                            placeholder="Teacher ID"
+                        />
+                        <button onClick={fetchSchedule} className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">
+                            查询
+                        </button>
+                    </div>
+
+                    <div className="flex items-start gap-2">
+                        <button
+                            onClick={() => setIsEditing((v) => !v)}
+                            className={`text-xs px-3 py-1 rounded border ${isEditing ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                        >
+                            临时调课
+                        </button>
+                        {isEditing && (
+                            <button onClick={handleSave} className="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700">
+                                保存
+                            </button>
+                        )}
+
+                        <span className="mx-1 text-gray-300">|</span>
+
+                        <button
+                            onClick={() => setCurrentWeek((w) => w - 1)}
+                            className="px-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 shadow-sm transition-all"
+                        >
+                            上周
+                        </button>
+                        <button
+                            onClick={() => setCurrentWeek(0)}
+                            className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm shadow-blue-500/20 transition-all"
+                        >
+                            本周
+                        </button>
+                        <button
+                            onClick={() => setCurrentWeek((w) => w + 1)}
+                            className="px-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 shadow-sm transition-all"
+                        >
+                            下周
+                        </button>
+                        <div className="flex flex-col items-start gap-1 ml-1">
+                            <div className="flex items-center gap-1">
+                                <input
+                                    type="number"
+                                    min={0}
+                                    value={weekInput}
+                                    onChange={(e) => setWeekInput(e.target.value)}
+                                    className="w-16 text-xs border rounded px-2 py-1 bg-white text-gray-700"
+                                    placeholder="周次"
+                                />
+                                <button
+                                    onClick={() => {
+                                        const n = parseInt(weekInput, 10);
+                                        if (!Number.isNaN(n)) setCurrentWeek(n);
+                                    }}
+                                    className="text-xs px-2 py-1 rounded border bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                                >
+                                    跳转
+                                </button>
+                            </div>
+                            {weekInputRangeLabel ? (
+                                <div className="text-[11px] text-gray-500 mt-2">
+                                    {weekInputRangeLabel}
+                                </div>
+                            ) : (
+                                <div className="text-[11px] text-gray-400 mt-2">
+                                    请输入周次查看日期
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="text-xs text-gray-500">
+                    说明：双击格子可修改课程；空值表示清空。临时调课将自动高亮。
                 </div>
             </div>
 
@@ -221,7 +458,8 @@ const TeacherSchedule = () => {
                                     <div
                                         key={period.id}
                                         onClick={() => setSelectedCell(cellKey)}
-                                        className={`h-24 p-1 transition-colors relative group ${isSelected ? 'bg-blue-50/30' : 'hover:bg-gray-50/30'}`}
+                                        onDoubleClick={() => handleCellEdit(cellKey)}
+                                        className={`h-24 p-1 transition-colors relative group ${isSelected ? 'bg-blue-50/30' : 'hover:bg-gray-50/30'} ${isEditing ? 'cursor-pointer' : ''}`}
                                     >
                                         {courses ? (
                                             courses.map(course => (

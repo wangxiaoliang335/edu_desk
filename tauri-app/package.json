@@ -5,13 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "kill:1420": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/kill-port.ps1 1420",
+    "dev:tauri": "npm run kill:1420 && tauri dev",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-fs": "^2.4.5",
     "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-shell": "^2.3.4",
     "@tencentcloud/chat": "^3.6.3",
     "autoprefixer": "^10.4.17",
     "clsx": "^2.1.1",

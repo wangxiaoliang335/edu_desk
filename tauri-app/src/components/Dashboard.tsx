@@ -10,6 +10,7 @@ import SearchAddModal from './modals/SearchAddModal';
 import UserInfoModal from './modals/UserInfoModal';
 import ChangePasswordModal from './modals/ChangePasswordModal';
 import SchoolInfoModal from './modals/SchoolInfoModal';
+import SchoolCourseScheduleModal from './modals/SchoolCourseScheduleModal';
 
 
 import { invoke } from '@tauri-apps/api/core';
@@ -29,6 +30,7 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
     const [showUserInfo, setShowUserInfo] = useState(false);
     const [showChangePassword, setShowChangePassword] = useState(false);
     const [showSchoolInfo, setShowSchoolInfo] = useState(false);
+    const [showSchoolSchedule, setShowSchoolSchedule] = useState(false);
 
     const handleMinimize = () => getCurrentWindow().minimize();
     const handleClose = () => invoke('exit_app');
@@ -44,9 +46,14 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
         }
     };
 
-    const handleToolClick = (toolId: string) => {
+    const handleToolClick = async (toolId: string) => {
         if (toolId === 'schedule') {
-            setActiveApp('schedule');
+            try {
+                await invoke('open_teacher_schedule_window');
+            } catch (e) {
+                console.error(e);
+                alert('打开教师课程表失败');
+            }
         } else if (toolId === 'class_mgr') {
             setActiveApp('class');
         } else if (toolId === 'create_class_group') {
@@ -57,6 +64,18 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
             setShowSearchAdd(true);
         } else if (toolId === 'school_info') {
             setShowSchoolInfo(true);
+        } else if (toolId === 'school_course_schedule') {
+            setShowSchoolSchedule(true);
+        } else if (toolId === 'file_manager') {
+            try {
+                const { createNewBox } = await import('../utils/DesktopManager');
+                const box = await createNewBox();
+                await invoke('open_file_box_window', { boxId: box.id });
+                // Optional: Minimize main window if desired, or keep as is
+            } catch (e) {
+                console.error(e);
+                alert('创建文件盒子失败');
+            }
         } else {
             console.log('Tool clicked:', toolId);
         }
@@ -130,6 +149,7 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
                                     { id: 'school_info', name: '配置学校信息', icon: '🏫', color: 'bg-emerald-100 text-emerald-600' },
                                     { id: 'wallpaper', name: '壁纸', icon: '🖼️', color: 'bg-pink-100 text-pink-600' },
                                     { id: 'schedule', name: '教师课程表', icon: '📅', color: 'bg-orange-100 text-orange-600' },
+                                    { id: 'school_course_schedule', name: '年级课程表', icon: '📅', color: 'bg-orange-200 text-orange-700' },
                                     { id: 'calendar', name: '校历', icon: '🗓️', color: 'bg-cyan-100 text-cyan-600' },
                                     { id: 'table', name: '表格', icon: '📊', color: 'bg-gray-100 text-gray-600' },
                                     { id: 'text', name: '文本', icon: '📝', color: 'bg-indigo-100 text-indigo-600' },
@@ -297,6 +317,11 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
             <SchoolInfoModal
                 isOpen={showSchoolInfo}
                 onClose={() => setShowSchoolInfo(false)}
+                userInfo={userInfo}
+            />
+            <SchoolCourseScheduleModal
+                isOpen={showSchoolSchedule}
+                onClose={() => setShowSchoolSchedule(false)}
                 userInfo={userInfo}
             />
         </div>

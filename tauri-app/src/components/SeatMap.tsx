@@ -202,8 +202,10 @@ const SeatMap: React.FC<SeatProps> = ({ classId, onViewChange, colorMap, isHeatm
         if (!seat) return null;
 
         // Filter out imported podium placeholders (we already have a hardcoded podium)
-        const name = seat.student_name || seat.name || '';
-        if (name === '讲台' || name.includes('讲台')) {
+        const rawName = seat.student_name || seat.name || '';
+        const cleanName = rawName.replace(/\s+/g, '');
+
+        if (cleanName === '讲台' || cleanName.includes('讲台')) {
             return null;
         }
 

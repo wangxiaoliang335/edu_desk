@@ -272,7 +272,8 @@ const CreateClassGroupModal = ({ isOpen, onClose, onSuccess, userInfo }: CreateC
                         setIsLoading(false);
 
                         if (data.group_id) {
-                            alert(`班级群 "${data.groupname || groupName}" 创建成功`);
+                            // Use the detailed message from server if available
+                            alert(data.message || `班级群 "${data.groupname || groupName}" 创建成功`);
 
                             // Store the newly created group ID for immediate ownership detection
                             // This helps before TIM SDK syncs the owner info

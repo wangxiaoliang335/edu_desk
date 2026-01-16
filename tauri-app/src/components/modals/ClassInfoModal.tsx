@@ -51,6 +51,20 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
     const [isOwner, setIsOwner] = useState(false);
     const [currentUserId, setCurrentUserId] = useState("");
 
+    const normalizeSubjects = (value: any): string[] => {
+        if (Array.isArray(value)) return value.filter((v) => typeof v === 'string' && v.trim());
+        if (typeof value === 'string') {
+            try {
+                const parsed = JSON.parse(value);
+                if (Array.isArray(parsed)) {
+                    return parsed.filter((v) => typeof v === 'string' && v.trim());
+                }
+            } catch { }
+            return value.split(',').map((v) => v.trim()).filter(Boolean);
+        }
+        return [];
+    };
+
     useEffect(() => {
         if (isOpen && groupId) {
             setLoading(true);
@@ -98,7 +112,10 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
                 groupId: groupId,
                 token
             });
+            console.log("[ClassInfoModal] get_group_members 原始响应:", resStr);
             const res = JSON.parse(resStr);
+            console.log("[ClassInfoModal] 解析后响应对象:", res);
+
 
             // Fetch TIM members reliably - Wait for SDK if needed
             let timMembers: any[] = [];
@@ -124,15 +141,26 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
             if (res.code === 200 || (res.data && res.data.code === 200)) {
                 const list = res.data?.members || res.data || [];
 
+                const groupInfo = res.data?.group_info;
+
                 const mappedMembers: GroupMember[] = Array.isArray(list) ? list.map((m: any) => {
                     const userIdStr = String(m.user_id || m.id || m.Member_Account);
                     const timMember = timMembers.find((tm: any) => tm.userID == userIdStr);
+
+                    // Avatar Fallback Logic
+                    let avatarUrl = timMember?.avatar || m.face_url || m.avatar;
+                    // If avatar is missing, and this is the Class bot (matches classid or name is '班级'), use group face_url
+                    if (!avatarUrl && groupInfo) {
+                        if (String(groupInfo.classid) === userIdStr || m.user_name === '班级' || m.name === '班级') {
+                            avatarUrl = groupInfo.face_url;
+                        }
+                    }
 
                     return {
                         user_id: m.user_id || m.id || m.Member_Account,
                         name: m.user_name || m.name || m.student_name || m.NameCard || m.Nick || timMember?.nick || "未知用户",
                         role: m.role || getRoleFromSelfRole(m.self_role) || 'member',
-                        avatar: timMember?.avatar || m.face_url || m.avatar,
+                        avatar: avatarUrl,
                         phone: m.phone,
                         teach_subjects: m.teach_subjects || []
                     };
@@ -172,9 +200,12 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
 
                 // Teach subjects
                 const currentUserObj = mappedMembers.find(m => String(m.user_id) === currentUserIdLocal);
-                if (currentUserObj?.teach_subjects && Array.isArray(currentUserObj.teach_subjects)) {
-                    setTeachSubjects(currentUserObj.teach_subjects);
-                    localStorage.setItem(`teach_subjects_${groupId}`, JSON.stringify(currentUserObj.teach_subjects));
+                if (currentUserObj?.teach_subjects) {
+                    const normalized = normalizeSubjects(currentUserObj.teach_subjects);
+                    if (normalized.length > 0) {
+                        setTeachSubjects(normalized);
+                        localStorage.setItem(`teach_subjects_${groupId}`, JSON.stringify(normalized));
+                    }
                 }
 
                 if (res.data?.group_info) {
@@ -215,9 +246,13 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
     };
 
     const saveTeachSubjects = async (subjects: string[]) => {
-        localStorage.setItem(`teach_subjects_${groupId}`, JSON.stringify(subjects));
+        const normalized = normalizeSubjects(subjects);
+        localStorage.setItem(`teach_subjects_${groupId}`, JSON.stringify(normalized));
 
-        if (!groupId) return;
+        if (!groupId) {
+            alert('任教科目保存失败：缺少群ID');
+            return;
+        }
         try {
             const userInfoStr = localStorage.getItem('user_info');
             let userId = "";
@@ -225,14 +260,34 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
                 const u = JSON.parse(userInfoStr);
                 userId = u.teacher_unique_id || "";
             }
+            if (!userId) {
+                userId = currentUserId || localStorage.getItem('teacher_unique_id') || "";
+            }
+            if (!userId) {
+                alert('任教科目保存失败：缺少教师ID');
+                return;
+            }
 
-            await invoke('save_teach_subjects', {
+            const resp = await invoke<string>('save_teach_subjects', {
                 groupId,
                 userId,
-                teachSubjects: subjects
+                teachSubjects: normalized
             });
+            try {
+                const parsed = JSON.parse(resp);
+                const code = parsed?.data?.code ?? parsed?.code;
+                if (code !== 200) {
+                    alert(`任教科目保存失败：${parsed?.data?.message || parsed?.message || resp}`);
+                }
+            } catch {
+                // If response is not JSON, assume success unless it looks like an error
+                if (typeof resp === 'string' && /error|失败|缺少/i.test(resp)) {
+                    alert(`任教科目保存失败：${resp}`);
+                }
+            }
         } catch (e) {
             console.error("Failed to save subjects", e);
+            alert('任教科目保存失败，请重试');
         }
     }
 
@@ -275,6 +330,12 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
                 const { emit } = await import('@tauri-apps/api/event');
                 await emit('refresh-class-list');
 
+                // Call Server to Leave
+                await invoke('request_server_leave_group', {
+                    groupId: groupId,
+                    userId: currentUserId
+                });
+
                 // Close any open windows for this group (schedule and chat)
                 try {
                     const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
@@ -301,6 +362,11 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
         try {
             await changeGroupOwner(groupId, newOwnerId);
             await quitGroup(groupId);
+            // Call Server to Leave (after transfer and quit)
+            await invoke('request_server_leave_group', {
+                groupId: groupId,
+                userId: currentUserId
+            });
             alert('已成功转让群主并退出群聊');
 
             // Refresh class list (Tauri cross-window event)
@@ -334,7 +400,12 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
 
         try {
             await dismissGroup(groupId);
-            alert('已成功解散群聊');
+            // Call Server to Dismis
+            await invoke('request_server_dismiss_group', {
+                groupId: groupId,
+                userId: currentUserId
+            });
+            // Success - proceed without alert
 
             // Refresh class list (Tauri cross-window event)
             const { emit } = await import('@tauri-apps/api/event');

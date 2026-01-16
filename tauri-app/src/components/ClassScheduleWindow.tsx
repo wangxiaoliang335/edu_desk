@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
-import { Minus, X, Square, Copy, MessageCircle, Calendar, Users, BookOpen, Shuffle, Clock, Grid, LayoutDashboard, Layers, Award, Power, Mic, FileSpreadsheet, BarChart2 } from 'lucide-react';
+import { Minus, X, Square, Copy, MessageCircle, Calendar, Users, BookOpen, Shuffle, Clock, Grid, LayoutDashboard, Layers, Award, Power, Mic, FileSpreadsheet, BarChart2, ArrowUpDown, Bell } from 'lucide-react';
 import { useWebSocket } from '../context/WebSocketContext';
-import { sendMessage, getTIMGroups, isSDKReady, loginTIM } from '../utils/tim';
+import { getTIMGroups, isSDKReady, loginTIM } from '../utils/tim';
 import RandomCallModal from './modals/RandomCallModal';
-import HomeworkModal from './modals/HomeworkModal';
+import HomeworkModal, { PublishedHomework } from './modals/HomeworkModal';
 import CountdownModal from './modals/CountdownModal';
 import CourseScheduleModal from './modals/CourseScheduleModal';
 import DutyRosterModal from './modals/DutyRosterModal';
@@ -16,7 +16,13 @@ import CustomListModal from './modals/CustomListModal';
 import NotificationModal from './modals/NotificationModal';
 import StudentImportModal from './modals/StudentImportModal';
 import ScoreAnalysisModal from './modals/ScoreAnalysisModal';
+import ArrangeSeatModal from './modals/ArrangeSeatModal';
+import PrepareClassModal from './modals/PrepareClassModal';
+import PostEvaluationModal from './modals/PostEvaluationModal';
+import NotificationCenterModal, { NotificationItem } from './modals/NotificationCenterModal';
+import DailySchedule from './DailySchedule';
 import SeatMap from './SeatMap';
+
 
 
 const ClassScheduleWindow = () => {
@@ -44,11 +50,96 @@ const ClassScheduleWindow = () => {
     const [isClassInfoOpen, setIsClassInfoOpen] = useState(false);
     const [isCustomListOpen, setIsCustomListOpen] = useState(false);
     const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+    const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false); // New Notification Center
+    const [notifications, setNotifications] = useState<NotificationItem[]>([]); // Data for Notification Center
     const [isStudentImportOpen, setIsStudentImportOpen] = useState(false);
     const [isScoreAnalysisOpen, setIsScoreAnalysisOpen] = useState(false);
+    const [isArrangeSeatOpen, setIsArrangeSeatOpen] = useState(false);
     const [seatColorMap, setSeatColorMap] = useState<Record<string, string>>({});
     const [seatAnalysisMode, setSeatAnalysisMode] = useState<'none' | 'segment' | 'gradient'>('none');
     const [seatMapKey, setSeatMapKey] = useState(0);
+
+    // PrepareClass / PostEvaluation Modal State
+    const [isPrepareClassOpen, setIsPrepareClassOpen] = useState(false);
+    const [isPostEvaluationOpen, setIsPostEvaluationOpen] = useState(false);
+    const [selectedSubject, setSelectedSubject] = useState("");
+    const [selectedTime, setSelectedTime] = useState("");
+
+    const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
+    const [teachSubjects, setTeachSubjects] = useState<string[]>([]);
+    const [latestHomework, setLatestHomework] = useState<PublishedHomework | null>(null);
+
+    const getHomeworkStorageKey = (classId: string) => `homework_history_${classId}`;
+    const loadLatestHomework = (classId: string) => {
+        try {
+            const data = localStorage.getItem(getHomeworkStorageKey(classId));
+            if (!data) return null;
+            const list = JSON.parse(data) as PublishedHomework[];
+            return list.length > 0 ? list[0] : null;
+        } catch {
+            return null;
+        }
+    };
+
+    const loadTeachSubjects = (groupId?: string) => {
+        if (!groupId) return [];
+        try {
+            const raw = localStorage.getItem(`teach_subjects_${groupId}`);
+            const parsed = raw ? JSON.parse(raw) : [];
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    };
+
+    const openHomeworkModal = () => {
+        if (!teachSubjects || teachSubjects.length === 0) {
+            alert('请先在班级信息中设置任教科目');
+            setIsClassInfoOpen(true);
+            return;
+        }
+        setIsHomeworkOpen(true);
+    };
+
+    // Fetch Wallpaper Logic
+    const fetchWallpaper = async () => {
+        if (!groupclassId) return;
+        try {
+            // 1. Check Weekly Config First
+            const weeklyResStr = await invoke<string>('fetch_weekly_config', { groupId: groupclassId });
+            const weeklyRes = JSON.parse(weeklyResStr);
+
+            if (weeklyRes.code === 200 && weeklyRes.data && weeklyRes.data.is_enabled && weeklyRes.data.weekly_wallpapers) {
+                // Determine today's key (Backend: 0=Mon ... 6=Sun)
+                const jsDay = new Date().getDay(); // 0=Sun, 1=Mon...
+                const backendKey = jsDay === 0 ? "6" : String(jsDay - 1);
+
+                const url = weeklyRes.data.weekly_wallpapers[backendKey];
+                if (url) {
+                    console.log("[ClassSchedule] Using Weekly Wallpaper for day:", backendKey, url);
+                    setBackgroundImage(url);
+                    return; // Priority to weekly
+                }
+            }
+
+            // 2. Fallback to Current Class Wallpaper
+            const wallpapersResStr = await invoke<string>('fetch_class_wallpapers', { groupId: groupclassId });
+            const wallpapersRes = JSON.parse(wallpapersResStr);
+
+            if (wallpapersRes.code === 200 && wallpapersRes.data && wallpapersRes.data.wallpapers) {
+                const current = wallpapersRes.data.wallpapers.find((wp: any) => wp.is_current === 1);
+                if (current) {
+                    console.log("[ClassSchedule] Using Current Class Wallpaper:", current.image_url);
+                    setBackgroundImage(current.image_url);
+                } else {
+                    setBackgroundImage(null);
+                    console.log("[ClassSchedule] No current wallpaper set");
+                }
+            }
+        } catch (e) {
+            console.error("[ClassSchedule] Failed to fetch wallpaper:", e);
+        }
+    };
 
     useEffect(() => {
         const checkMaximized = async () => {
@@ -64,11 +155,54 @@ const ClassScheduleWindow = () => {
 
         // Fetch Class Info
         fetchClassInfo();
+        // Fetch Wallpaper
+        fetchWallpaper();
+        if (groupclassId) {
+            setLatestHomework(loadLatestHomework(groupclassId));
+            setTeachSubjects(loadTeachSubjects(groupclassId));
+        }
 
         return () => {
             unlisten.then(f => f());
         }
     }, [groupclassId]);
+
+    // Listen for WebSocket Messages (Notification Center)
+    useEffect(() => {
+        const handleWSMessage = (event: CustomEvent) => {
+            try {
+                const msg = JSON.parse(event.detail);
+                if (msg.type === "unread_notifications") {
+                    console.log("[ClassSchedule] Received Notifications Payload:", msg.data);
+
+                    // msg.data is an array of objects. We need to cast them to NotificationItem
+                    const newItems = (msg.data || []) as NotificationItem[];
+
+                    setNotifications(prev => {
+                        // Create a map of existing items by ID for easy lookup
+                        const existingMap = new Map(prev.map(item => [item.id, item]));
+
+                        // Merge/Overwrite with new items
+                        newItems.forEach(item => {
+                            existingMap.set(item.id, item);
+                        });
+
+                        // Convert back to array
+                        return Array.from(existingMap.values());
+                    });
+
+                    // Auto-open if important? Maybe just show badge.
+                }
+            } catch (e) {
+                console.error("[ClassSchedule] Error parsing WS message:", e);
+            }
+        };
+
+        window.addEventListener('ws-message', handleWSMessage as EventListener);
+        return () => {
+            window.removeEventListener('ws-message', handleWSMessage as EventListener);
+        };
+    }, []);
 
     const fetchClassInfo = async () => {
         if (!groupclassId) return;
@@ -187,6 +321,7 @@ const ClassScheduleWindow = () => {
         }
     };
 
+
     const handleMinimize = () => getCurrentWindow().minimize();
     const handleMaximize = async () => {
         const win = getCurrentWindow();
@@ -208,20 +343,7 @@ const ClassScheduleWindow = () => {
         }
     };
 
-    const handlePublishHomework = async (data: { subject: string; content: string; date: string }) => {
-        console.log("Publishing Homework:", data);
-        // Mock Implementation: Send notification to Chat
-        if (groupclassId) {
-            try {
-                const msgText = `[作业发布] ${data.subject} (${data.date}): ${data.content}`;
-                await sendMessage(groupclassId, msgText);
-                alert("作业发布成功！(已同步到班级群)");
-            } catch (e) {
-                console.error(e);
-                alert("作业发布失败");
-            }
-        }
-    };
+    // Note: handlePublishHomework removed - HomeworkModal now handles WebSocket messaging internally
 
     const handleRemoteShutdown = async () => {
         if (confirm("确定要关闭当前班级设备吗？此操作将关闭计算机。")) {
@@ -266,9 +388,17 @@ const ClassScheduleWindow = () => {
     };
 
     return (
-        <div className="h-screen w-screen bg-[#f8fbff] flex flex-col overflow-hidden border border-gray-300 select-none text-gray-700 font-sans">
-            {/* Title Bar */}
-            <div data-tauri-drag-region className="h-10 bg-white/50 backdrop-blur-md flex items-center justify-between px-4 border-b border-gray-200/50 z-50">
+        <div
+            className="h-screen w-screen bg-[#f8fbff] flex flex-col overflow-hidden border border-gray-300 select-none text-gray-700 font-sans relative transition-all duration-500 bg-cover bg-center"
+            style={backgroundImage ? { backgroundImage: `url(${backgroundImage})` } : {}}
+        >
+            {/* Overlay to ensure text readability if background is set */}
+            {backgroundImage && (
+                <div className="absolute inset-0 bg-white/75 backdrop-blur-sm z-0 pointer-events-none"></div>
+            )}
+
+            {/* Title Bar - Added z-10 for layering */}
+            <div data-tauri-drag-region className="h-10 bg-white/50 backdrop-blur-md flex items-center justify-between px-4 border-b border-gray-200/50 z-50 relative">
                 <div className="flex items-center gap-4">
                     <div className="font-bold text-gray-700 flex items-center gap-2">
                         <div className="bg-blue-500 text-white p-1 rounded-md shadow-sm shadow-blue-200"><Users size={12} /></div>
@@ -291,6 +421,17 @@ const ClassScheduleWindow = () => {
                     </div>
                 </div>
                 <div className="flex items-center gap-1.5 opacity-80 hover:opacity-100 transition-opacity">
+                    {/* Notification Bell */}
+                    <button
+                        onClick={() => setIsNotificationCenterOpen(true)}
+                        className="p-1 hover:bg-gray-200 rounded text-gray-500 mr-2 relative"
+                    >
+                        <Bell size={16} />
+                        {notifications.length > 0 && notifications.some(n => n.is_read === 0) && (
+                            <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+                        )}
+                    </button>
+
                     <button onClick={() => setIsClassInfoOpen(true)} className="px-2 py-0.5 mr-2 rounded text-gray-500 hover:bg-gray-200 font-bold">...</button>
                     <button onClick={handleMinimize} className="p-1 hover:bg-gray-200 rounded text-gray-500"><Minus size={14} /></button>
                     <button onClick={handleMaximize} className="p-1 hover:bg-gray-200 rounded text-gray-500">{isMaximized ? <Copy size={14} /> : <Square size={14} />}</button>
@@ -298,175 +439,202 @@ const ClassScheduleWindow = () => {
                 </div>
             </div>
 
-            {/* Main Content Area - Fixed Layout (No Scroll) */}
-            <div className="flex-1 overflow-hidden p-4 md:p-6 relative flex flex-col gap-4">
+            {/* Main Content Area - Added z-10 for layering */}
+            <div className="flex-1 overflow-hidden p-4 md:p-6 relative flex flex-col gap-4 z-10">
                 {currentView === 'overview' ? (
-                    <div className="flex-1 grid grid-cols-12 gap-4 h-full">
-                        {/* Left Column (30%) - Class Info & Notifications */}
-                        <div className="col-span-3 flex flex-col gap-4 h-full">
-                            {/* Hero Card */}
-                            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden flex-shrink-0">
-                                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-bl-full -mr-8 -mt-8 opacity-50 pointer-events-none"></div>
-                                <div className="relative z-10">
-                                    <h1 className="text-xl font-bold text-gray-800 mb-1">{className}</h1>
-                                    <p className="text-sm text-gray-500 font-medium">数学</p>
-                                    <div className="mt-4 flex items-center gap-3 text-xs text-gray-400">
-                                        <span className="flex items-center gap-1"><Users size={12} /> {studentCount} 人</span>
-                                        <span className="w-px h-3 bg-gray-200"></span>
-                                        <span className="flex items-center gap-1"><Calendar size={12} /> 2023-2024</span>
+                    <div className="flex-1 flex flex-col gap-4 h-full">
+                        {/* Top Row - Daily Schedule Timeline (Full Width) */}
+                        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex-shrink-0">
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                    <span className="w-1 h-5 bg-blue-500 rounded-full"></span>
+                                    <h3 className="font-bold text-gray-800">今日课程</h3>
+                                </div>
+                                <button
+                                    onClick={() => setIsCourseScheduleOpen(true)}
+                                    className="text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full font-medium transition-colors"
+                                >
+                                    查看完整课表
+                                </button>
+                            </div>
+                            <DailySchedule
+                                classId={groupclassId}
+                                onPrepareClass={(subject, time) => {
+                                    setSelectedSubject(subject);
+                                    setSelectedTime(time);
+                                    setIsPrepareClassOpen(true);
+                                }}
+                                onPostEvaluation={(subject) => {
+                                    setSelectedSubject(subject);
+                                    setIsPostEvaluationOpen(true);
+                                }}
+                            />
+                        </div>
+
+                        {/* Bottom Row - 3 Column Grid */}
+                        <div className="flex-1 grid grid-cols-12 gap-4 min-h-0">
+                            {/* Left Column - Class Info & Notifications */}
+                            <div className="col-span-3 flex flex-col gap-4">
+                                {/* Hero Card */}
+                                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-bl-full -mr-6 -mt-6 opacity-50"></div>
+                                    <div className="relative z-10">
+                                        <h1 className="text-lg font-bold text-gray-800 mb-0.5">{className}</h1>
+                                        <p className="text-sm text-gray-500 font-medium">学科未设置</p>
+                                        <div className="mt-3 flex items-center gap-3 text-xs text-gray-400">
+                                            <span className="flex items-center gap-1"><Users size={12} /> {studentCount} 人</span>
+                                            <span className="w-px h-3 bg-gray-200"></span>
+                                            <span className="flex items-center gap-1"><Calendar size={12} /> 学年未设置</span>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            {/* Notifications Card */}
-                            <div
-                                onClick={() => setIsNotificationOpen(true)}
-                                className="flex-1 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-5 text-white shadow-lg shadow-purple-200 flex flex-col relative overflow-hidden group cursor-pointer transition-transform hover:-translate-y-0.5 active:translate-y-0"
-                            >
-                                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
-                                <div className="relative z-10 flex-1 flex flex-col">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <h3 className="font-bold opacity-90 flex items-center gap-2">
-                                            <span className="bg-white/20 p-1 rounded"><MessageCircle size={14} /></span>
-                                            班级通知
+                                {/* Notifications Card */}
+                                <div
+                                    onClick={() => setIsNotificationOpen(true)}
+                                    className="flex-1 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-4 text-white shadow-lg shadow-purple-200/50 flex flex-col cursor-pointer transition-transform hover:-translate-y-0.5"
+                                >
+                                    <div className="flex items-center justify-between mb-2">
+                                        <h3 className="font-bold text-sm opacity-90 flex items-center gap-2">
+                                            <span className="bg-white/20 p-1 rounded"><MessageCircle size={12} /></span>
+                                            发送班级通知
                                         </h3>
-                                        <span className="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded-full shadow-sm">NEW</span>
                                     </div>
-                                    <p className="text-sm opacity-80 leading-relaxed font-medium line-clamp-4 group-hover:line-clamp-none transition-all">
-                                        请各位同学注意，本周五下午将进行期中考试模拟，请提前做好准备。
-
-                                        下周一班会课将进行“文明礼仪”主题教育，请班长提前准备好PPT。
+                                    <p className="text-xs opacity-80 leading-relaxed line-clamp-3 flex-1">
+                                        教师端发布通知，班级端接收
                                     </p>
+                                    <button className="mt-2 text-xs bg-white/20 hover:bg-white/30 py-1.5 rounded-lg transition-colors font-medium">
+                                        发送通知
+                                    </button>
                                 </div>
-                                <button onClick={(e) => { e.stopPropagation(); setIsNotificationOpen(true); }} className="mt-auto text-xs bg-white/20 hover:bg-white/30 text-center py-2 rounded-lg transition-colors backdrop-blur-sm self-stretch font-medium">
-                                    查看全部通知
-                                </button>
                             </div>
-                        </div>
 
-                        {/* Middle Column (45%) - Schedule & Status */}
-                        <div className="col-span-5 flex flex-col gap-4 h-full">
-                            {/* Featured Schedule Card */}
-                            <div
-                                onClick={() => setIsCourseScheduleOpen(true)}
-                                className="flex-[2] bg-white rounded-2xl p-6 border border-gray-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.04)] transition-all cursor-pointer group relative overflow-hidden"
-                            >
-                                <div className="absolute top-0 right-0 p-4 opacity-50 group-hover:opacity-100 transition-opacity">
-                                    <button className="text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full font-medium">查看完整课表</button>
-                                </div>
-                                <div className="h-full flex flex-col justify-center">
-                                    <div className="flex items-center gap-2 mb-6">
-                                        <span className="w-1.5 h-6 bg-blue-500 rounded-full"></span>
-                                        <h3 className="font-bold text-gray-800 text-lg">当前课程</h3>
-                                    </div>
-
-                                    <div className="flex items-center gap-6">
-                                        <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex flex-col items-center justify-center shadow-xl shadow-blue-200/50">
-                                            <span className="text-xs font-medium opacity-80 mb-1">14:00</span>
-                                            <span className="text-2xl font-bold">数学</span>
-                                            <span className="text-xs font-medium opacity-60 mt-1">进行中</span>
+                            {/* Middle Column - Homework & Stats */}
+                            <div className="col-span-5 flex flex-col gap-4">
+                                {/* Homework Card */}
+                                <div
+                                    onClick={openHomeworkModal}
+                                    className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm flex items-center justify-between hover:border-green-200 transition-all cursor-pointer"
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 bg-green-50 text-green-600 rounded-xl flex items-center justify-center">
+                                            <BookOpen size={24} />
                                         </div>
-                                        <div className="flex-1">
-                                            <h4 className="text-2xl font-bold text-gray-800 mb-2">立体几何</h4>
-                                            <p className="text-gray-500 font-medium mb-1">空间向量的应用与计算</p>
-                                            <div className="flex items-center gap-3 text-sm text-gray-400 mt-3">
-                                                <span className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-md"><Grid size={12} /> 第 3 节</span>
-                                                <span className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-md"><Users size={12} /> 教学楼 A-302</span>
-                                            </div>
+                                        <div>
+                                            <h4 className="font-bold text-gray-800">作业批改</h4>
+                                            {latestHomework ? (
+                                                <p className="text-xs text-gray-500 mt-0.5">
+                                                    最新：{latestHomework.subject} · {latestHomework.date}
+                                                </p>
+                                            ) : (
+                                                <p className="text-xs text-gray-500 mt-0.5">暂无作业数据</p>
+                                            )}
                                         </div>
                                     </div>
+                                    <div className="flex items-end gap-1">
+                                        <span className="text-2xl font-bold text-gray-300">--</span>
+                                        <span className="text-xs text-gray-400 mb-1.5">/ -- 提交</span>
+                                    </div>
+                                </div>
+
+                                {/* Quick Stats */}
+                                <div className="flex-1 grid grid-cols-3 gap-3">
+                                    <div className="bg-white rounded-xl p-4 border border-gray-100 flex flex-col items-center justify-center">
+                                        <span className="text-2xl font-bold text-gray-300">--</span>
+                                        <span className="text-xs text-gray-400 mt-1">出勤率</span>
+                                    </div>
+                                    <div className="bg-white rounded-xl p-4 border border-gray-100 flex flex-col items-center justify-center">
+                                        <span className="text-2xl font-bold text-gray-300">--</span>
+                                        <span className="text-xs text-gray-400 mt-1">平均分</span>
+                                    </div>
+                                    <div className="bg-white rounded-xl p-4 border border-gray-100 flex flex-col items-center justify-center">
+                                        <span className="text-2xl font-bold text-gray-300">--</span>
+                                        <span className="text-xs text-gray-400 mt-1">班级评级</span>
+                                    </div>
                                 </div>
                             </div>
 
-                            {/* Homework Mini Status */}
-                            <div className="flex-1 bg-white rounded-2xl p-5 border border-gray-100 shadow-sm flex items-center justify-between hover:border-green-200 transition-all cursor-pointer" onClick={() => setIsHomeworkOpen(true)}>
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-green-50 text-green-600 rounded-xl flex items-center justify-center">
-                                        <BookOpen size={24} />
-                                    </div>
-                                    <div>
-                                        <h4 className="font-bold text-gray-800">作业批改</h4>
-                                        <p className="text-xs text-gray-500 mt-0.5">今日待批改 3 份</p>
-                                    </div>
+                            {/* Right Column - Tools Grid */}
+                            <div className="col-span-4 bg-white/50 rounded-2xl border border-gray-100 p-4 flex flex-col">
+                                <h3 className="text-sm font-bold text-gray-600 mb-3 flex items-center gap-2">
+                                    <Layers size={14} /> 快捷工具
+                                </h3>
+                                <div className="grid grid-cols-2 gap-2 flex-1 content-start">
+                                    <button onClick={openHomeworkModal} className="h-16 bg-white rounded-xl border border-gray-100 hover:shadow-sm hover:border-purple-200 transition-all flex items-center gap-3 px-3 group">
+                                        <div className="p-2 rounded-lg bg-purple-50 text-purple-500 group-hover:bg-purple-100 transition-all">
+                                            <BookOpen size={16} />
+                                        </div>
+                                        <span className="text-xs font-medium text-gray-600">作业管理</span>
+                                    </button>
+
+                                    <button onClick={handleOpenIntercom} className="h-16 bg-white rounded-xl border border-gray-100 hover:shadow-sm hover:border-red-200 transition-all flex items-center gap-3 px-3 group">
+                                        <div className="p-2 rounded-lg bg-red-50 text-red-500 group-hover:bg-red-100 transition-all">
+                                            <Mic size={16} />
+                                        </div>
+                                        <span className="text-xs font-medium text-gray-600">语音对讲</span>
+                                    </button>
+
+                                    <button onClick={() => setIsCustomListOpen(true)} className="h-16 bg-white rounded-xl border border-gray-100 hover:shadow-sm hover:border-orange-200 transition-all flex items-center gap-3 px-3 group">
+                                        <div className="p-2 rounded-lg bg-orange-50 text-orange-500 group-hover:bg-orange-100 transition-all">
+                                            <FileSpreadsheet size={16} />
+                                        </div>
+                                        <span className="text-xs font-medium text-gray-600">更多导入</span>
+                                    </button>
+
+                                    <button onClick={() => setIsRandomCallOpen(true)} className="h-16 bg-white rounded-xl border border-gray-100 hover:shadow-sm hover:border-cyan-200 transition-all flex items-center gap-3 px-3 group">
+                                        <div className="p-2 rounded-lg bg-cyan-50 text-cyan-500 group-hover:bg-cyan-100 transition-all">
+                                            <Shuffle size={16} />
+                                        </div>
+                                        <span className="text-xs font-medium text-gray-600">随机点名</span>
+                                    </button>
+
+                                    <button onClick={() => setIsCountdownOpen(true)} className="h-16 bg-white rounded-xl border border-gray-100 hover:shadow-sm hover:border-rose-200 transition-all flex items-center gap-3 px-3 group">
+                                        <div className="p-2 rounded-lg bg-rose-50 text-rose-500 group-hover:bg-rose-100 transition-all">
+                                            <Clock size={16} />
+                                        </div>
+                                        <span className="text-xs font-medium text-gray-600">倒计时</span>
+                                    </button>
+
+                                    <button onClick={() => setIsGroupScoreOpen(true)} className="h-16 bg-white rounded-xl border border-gray-100 hover:shadow-sm hover:border-violet-200 transition-all flex items-center gap-3 px-3 group">
+                                        <div className="p-2 rounded-lg bg-violet-50 text-violet-500 group-hover:bg-violet-100 transition-all">
+                                            <Award size={16} />
+                                        </div>
+                                        <span className="text-xs font-medium text-gray-600">小组评价</span>
+                                    </button>
+
+                                    <button onClick={handleRemoteShutdown} className="h-16 bg-white rounded-xl border border-gray-100 hover:shadow-sm hover:border-red-200 transition-all flex items-center gap-3 px-3 group relative">
+                                        <div className="absolute top-2 right-2">
+                                            <div className={`w-1.5 h-1.5 rounded-full ${isWSConnected ? 'bg-green-500' : 'bg-red-400'}`}></div>
+                                        </div>
+                                        <div className="p-2 rounded-lg bg-red-50 text-red-500 group-hover:bg-red-100 transition-all">
+                                            <Power size={16} />
+                                        </div>
+                                        <span className="text-xs font-medium text-gray-600">远程开机</span>
+                                    </button>
+
+                                    <button onClick={() => setIsStudentImportOpen(true)} className="h-16 bg-white rounded-xl border border-gray-100 hover:shadow-sm hover:border-blue-200 transition-all flex items-center gap-3 px-3 group">
+                                        <div className="p-2 rounded-lg bg-blue-50 text-blue-500 group-hover:bg-blue-100 transition-all">
+                                            <Grid size={16} />
+                                        </div>
+                                        <span className="text-xs font-medium text-gray-600">座位导入</span>
+                                    </button>
+
+                                    <button onClick={() => setIsScoreAnalysisOpen(true)} className="h-16 bg-white rounded-xl border border-gray-100 hover:shadow-sm hover:border-indigo-200 transition-all flex items-center gap-3 px-3 group">
+                                        <div className="p-2 rounded-lg bg-indigo-50 text-indigo-500 group-hover:bg-indigo-100 transition-all">
+                                            <BarChart2 size={16} />
+                                        </div>
+                                        <span className="text-xs font-medium text-gray-600">成绩分析</span>
+                                    </button>
+
+
+
+                                    <button onClick={() => setIsArrangeSeatOpen(true)} className="h-16 bg-white rounded-xl border border-gray-100 hover:shadow-sm hover:border-teal-200 transition-all flex items-center gap-3 px-3 group">
+                                        <div className="p-2 rounded-lg bg-teal-50 text-teal-500 group-hover:bg-teal-100 transition-all">
+                                            <ArrowUpDown size={16} />
+                                        </div>
+                                        <span className="text-xs font-medium text-gray-600">排座</span>
+                                    </button>
                                 </div>
-                                <div className="flex items-end gap-1">
-                                    <span className="text-2xl font-bold text-gray-800">12</span>
-                                    <span className="text-xs text-gray-400 mb-1.5">/ 45 提交</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Right Column (25%) - Tools Grid */}
-                        <div className="col-span-4 bg-white/50 rounded-2xl border border-gray-100 p-4 h-full flex flex-col">
-                            <h3 className="text-sm font-bold text-gray-600 mb-4 flex items-center gap-2">
-                                <Layers size={16} /> 快捷工具
-                            </h3>
-                            <div className="grid grid-cols-2 gap-3 flex-1 content-start">
-                                <button onClick={() => setIsHomeworkOpen(true)} className="h-24 bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md hover:border-purple-200 transition-all flex flex-col items-center justify-center gap-2 group">
-                                    <div className="p-2.5 rounded-full bg-purple-50 text-purple-500 group-hover:scale-110 group-hover:bg-purple-100 transition-all">
-                                        <BookOpen size={20} />
-                                    </div>
-                                    <span className="text-xs font-medium text-gray-600">作业管理</span>
-                                </button>
-
-                                <button onClick={handleOpenIntercom} className="h-24 bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md hover:border-red-200 transition-all flex flex-col items-center justify-center gap-2 group">
-                                    <div className="p-2.5 rounded-full bg-red-50 text-red-500 group-hover:scale-110 group-hover:bg-red-100 transition-all">
-                                        <Mic size={20} />
-                                    </div>
-                                    <span className="text-xs font-medium text-gray-600">语音对讲</span>
-                                </button>
-
-                                <button onClick={() => setIsCustomListOpen(true)} className="h-24 bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md hover:border-orange-200 transition-all flex flex-col items-center justify-center gap-2 group">
-                                    <div className="p-2.5 rounded-full bg-orange-50 text-orange-500 group-hover:scale-110 group-hover:bg-orange-100 transition-all">
-                                        <FileSpreadsheet size={20} />
-                                    </div>
-                                    <span className="text-xs font-medium text-gray-600">更多导入</span>
-                                </button>
-
-                                <button onClick={() => setIsRandomCallOpen(true)} className="h-24 bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md hover:border-cyan-200 transition-all flex flex-col items-center justify-center gap-2 group">
-                                    <div className="p-2.5 rounded-full bg-cyan-50 text-cyan-500 group-hover:scale-110 group-hover:bg-cyan-100 transition-all">
-                                        <Shuffle size={20} />
-                                    </div>
-                                    <span className="text-xs font-medium text-gray-600">随机点名</span>
-                                </button>
-
-                                <button onClick={() => setIsCountdownOpen(true)} className="h-24 bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md hover:border-rose-200 transition-all flex flex-col items-center justify-center gap-2 group">
-                                    <div className="p-2.5 rounded-full bg-rose-50 text-rose-500 group-hover:scale-110 group-hover:bg-rose-100 transition-all">
-                                        <Clock size={20} />
-                                    </div>
-                                    <span className="text-xs font-medium text-gray-600">倒计时</span>
-                                </button>
-
-                                <button onClick={() => setIsGroupScoreOpen(true)} className="h-24 bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md hover:border-violet-200 transition-all flex flex-col items-center justify-center gap-2 group">
-                                    <div className="p-2.5 rounded-full bg-violet-50 text-violet-500 group-hover:scale-110 group-hover:bg-violet-100 transition-all">
-                                        <Award size={20} />
-                                    </div>
-                                    <span className="text-xs font-medium text-gray-600">小组评价</span>
-                                </button>
-
-                                <button onClick={handleRemoteShutdown} className="h-24 bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md hover:border-red-200 transition-all flex flex-col items-center justify-center gap-2 group relative">
-                                    <div className="absolute top-2 right-2">
-                                        <div className={`w-2 h-2 rounded-full ${isWSConnected ? 'bg-green-500' : 'bg-red-400'}`}></div>
-                                    </div>
-                                    <div className="p-2.5 rounded-full bg-red-50 text-red-500 group-hover:scale-110 group-hover:bg-red-100 transition-all">
-                                        <Power size={20} />
-                                    </div>
-                                    <span className="text-xs font-medium text-gray-600">远程开机</span>
-                                </button>
-
-                                <button onClick={() => setIsStudentImportOpen(true)} className="h-24 bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md hover:border-blue-200 transition-all flex flex-col items-center justify-center gap-2 group">
-                                    <div className="p-2.5 rounded-full bg-blue-50 text-blue-500 group-hover:scale-110 group-hover:bg-blue-100 transition-all">
-                                        <Grid size={20} />
-                                    </div>
-                                    <span className="text-xs font-medium text-gray-600">座位导入</span>
-                                </button>
-
-                                <button onClick={() => setIsScoreAnalysisOpen(true)} className="h-24 bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all flex flex-col items-center justify-center gap-2 group">
-                                    <div className="p-2.5 rounded-full bg-indigo-50 text-indigo-500 group-hover:scale-110 group-hover:bg-indigo-100 transition-all">
-                                        <BarChart2 size={20} />
-                                    </div>
-                                    <span className="text-xs font-medium text-gray-600">成绩分析</span>
-                                </button>
                             </div>
                         </div>
                     </div>
@@ -497,7 +665,7 @@ const ClassScheduleWindow = () => {
             </div>
 
             {/* Bottom Dock - Glassmorphism */}
-            <div className="h-20 flex items-center justify-center px-10 relative">
+            <div className="h-20 flex items-center justify-center px-10 relative z-10">
                 <div className="absolute inset-0 bg-white/80 backdrop-blur-lg border-t border-white/50 shadow-[0_-10px_40px_rgba(0,0,0,0.03)] z-0"></div>
                 <div className="z-10 bg-white border border-gray-100 p-1.5 px-3 rounded-2xl flex items-center gap-6 shadow-lg shadow-gray-200/50">
                     <button
@@ -515,17 +683,27 @@ const ClassScheduleWindow = () => {
 
                     <div className="w-[1px] h-8 bg-gray-200"></div>
 
-                    {[
-                        { label: '备课', icon: <BookOpen size={18} /> },
-                        { label: '直播', icon: <Calendar size={18} /> },
-                    ].map((btn, i) => (
-                        <button key={i} className="flex flex-col items-center gap-1 group px-2 text-gray-400 hover:text-gray-600 transition-colors">
-                            <div className="w-9 h-9 bg-gray-50 rounded-lg flex items-center justify-center group-hover:bg-gray-100 transition-colors">
-                                {btn.icon}
-                            </div>
-                            <span className="text-[10px] font-medium">{btn.label}</span>
-                        </button>
-                    ))}
+                    {/* Notice Button */}
+                    <button
+                        onClick={() => setIsNotificationOpen(true)}
+                        className="flex flex-col items-center gap-1 group px-2"
+                    >
+                        <div className="w-9 h-9 bg-red-50 text-red-500 rounded-lg flex items-center justify-center group-hover:bg-red-100 group-hover:-translate-y-1 transition-all">
+                            <Bell size={18} />
+                        </div>
+                        <span className="text-[10px] font-medium text-gray-500 group-hover:text-red-600">通知</span>
+                    </button>
+
+                    {/* Homework Button */}
+                    <button
+                        onClick={() => setIsHomeworkOpen(true)}
+                        className="flex flex-col items-center gap-1 group px-2"
+                    >
+                        <div className="w-9 h-9 bg-green-50 text-green-500 rounded-lg flex items-center justify-center group-hover:bg-green-100 group-hover:-translate-y-1 transition-all">
+                            <BookOpen size={18} />
+                        </div>
+                        <span className="text-[10px] font-medium text-gray-500 group-hover:text-green-600">作业</span>
+                    </button>
                 </div>
             </div>
 
@@ -538,7 +716,16 @@ const ClassScheduleWindow = () => {
             <HomeworkModal
                 isOpen={isHomeworkOpen}
                 onClose={() => setIsHomeworkOpen(false)}
-                onPublish={handlePublishHomework}
+                classId={groupclassId}
+                groupId={groupclassId}
+                groupName={className}
+                teachSubjects={teachSubjects}
+                onPublished={(latest, all) => {
+                    setLatestHomework(latest);
+                    if (groupclassId) {
+                        localStorage.setItem(getHomeworkStorageKey(groupclassId), JSON.stringify(all));
+                    }
+                }}
             />
             <CountdownModal
                 isOpen={isCountdownOpen}
@@ -555,10 +742,17 @@ const ClassScheduleWindow = () => {
             <CourseScheduleModal
                 isOpen={isCourseScheduleOpen}
                 onClose={() => setIsCourseScheduleOpen(false)}
+                classId={groupclassId}
             />
             <ClassInfoModal
                 isOpen={isClassInfoOpen}
-                onClose={() => setIsClassInfoOpen(false)}
+                onClose={() => {
+                    setIsClassInfoOpen(false);
+                    fetchWallpaper(); // Refresh wallpaper when settings might have changed
+                    if (groupclassId) {
+                        setTeachSubjects(loadTeachSubjects(groupclassId));
+                    }
+                }}
                 groupId={groupclassId}
                 isClassGroup={true}
             />
@@ -587,6 +781,57 @@ const ClassScheduleWindow = () => {
             <NotificationModal
                 isOpen={isNotificationOpen}
                 onClose={() => setIsNotificationOpen(false)}
+                classId={groupclassId}
+                groupId={groupclassId}
+                groupName={className}
+            />
+            <NotificationCenterModal
+                isOpen={isNotificationCenterOpen}
+                onClose={() => setIsNotificationCenterOpen(false)}
+                notifications={notifications}
+            />
+            <ArrangeSeatModal
+                isOpen={isArrangeSeatOpen}
+                onClose={() => setIsArrangeSeatOpen(false)}
+                classId={groupclassId}
+                onArrange={async (arrangedStudents) => {
+                    // Upload arranged seats to server
+                    try {
+                        const seatData = arrangedStudents.map((s, idx) => ({
+                            student_id: s.id,
+                            student_name: s.name,
+                            row: Math.floor(idx / 11) + 1,
+                            col: (idx % 11) + 1,
+                        }));
+
+                        await invoke('save_seat_arrangement', {
+                            classId: groupclassId,
+                            seatsJson: JSON.stringify(seatData)
+                        });
+
+                        // Refresh seat map
+                        setSeatMapKey(prev => prev + 1);
+                        setCurrentView('seatmap');
+                        console.log('[Arrange] Seat arrangement saved successfully');
+                    } catch (err) {
+                        console.error('[Arrange] Failed to save seat arrangement:', err);
+                        alert('保存座位表失败');
+                    }
+                }}
+            />
+            <PrepareClassModal
+                isOpen={isPrepareClassOpen}
+                onClose={() => setIsPrepareClassOpen(false)}
+                subject={selectedSubject}
+                time={selectedTime}
+                classId={groupclassId}
+                groupId={groupclassId}
+            />
+            <PostEvaluationModal
+                isOpen={isPostEvaluationOpen}
+                onClose={() => setIsPostEvaluationOpen(false)}
+                subject={selectedSubject}
+                classId={groupclassId}
                 groupId={groupclassId}
             />
         </div>
