@@ -20,27 +20,27 @@ interface SchoolInfoModalProps {
 const TabButton = ({ active, icon: Icon, label, onClick }: { active: boolean; icon: any; label: string; onClick: () => void }) => (
     <button
         onClick={onClick}
-        className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200 group relative overflow-hidden ${active
-            ? 'bg-blue-50 text-blue-600 font-semibold shadow-sm ring-1 ring-blue-100'
-            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
+        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group relative overflow-hidden ${active
+            ? 'bg-white text-sage-600 font-bold shadow-md shadow-sage-200/50 ring-1 ring-sage-100'
+            : 'text-ink-400 hover:bg-sage-50/50 hover:text-ink-600'
             }`}
     >
-        <Icon size={20} className={`transition-transform duration-300 ${active ? 'scale-110' : 'group-hover:scale-110'}`} />
-        <span className="font-medium tracking-wide">{label}</span>
-        {active && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-blue-500 rounded-r-full" />}
+        <Icon size={20} className={`transition-transform duration-300 ${active ? 'scale-110 text-sage-500' : 'group-hover:scale-110'}`} />
+        <span className="font-bold tracking-wide">{label}</span>
+        {active && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-sage-400 rounded-r-full" />}
     </button>
 );
 
 const InputField = ({ label, value, onChange, placeholder, readOnly, actionButton }: any) => (
     <div className="group">
-        <label className="block text-xs font-semibold text-gray-500 mb-1.5 ml-1 transition-colors group-focus-within:text-blue-600 uppercase tracking-wider">{label}</label>
+        <label className="block text-xs font-bold text-ink-400 mb-1.5 ml-1 transition-colors group-focus-within:text-sage-600 uppercase tracking-wider">{label}</label>
         <div className="relative flex gap-2">
             <input
                 type="text"
                 value={value}
                 onChange={onChange}
                 readOnly={readOnly}
-                className={`w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all duration-200 shadow-sm ${readOnly ? 'bg-gray-50 cursor-not-allowed text-gray-500' : ''}`}
+                className={`w-full bg-white border border-sage-200 rounded-xl px-4 py-3 text-ink-800 placeholder-sage-300 focus:outline-none focus:border-sage-400 focus:ring-4 focus:ring-sage-100 transition-all duration-300 shadow-sm ${readOnly ? 'bg-sage-50/50 cursor-not-allowed text-ink-400' : ''}`}
                 placeholder={placeholder}
             />
             {actionButton}
@@ -60,37 +60,27 @@ const SchoolInfoTab: React.FC<{
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        console.log("SchoolInfoTab useEffect. UserInfo:", userInfo);
         if (userInfo?.school_name) {
             setSchoolName(userInfo.school_name);
             fetchSchoolInfo(userInfo.school_name);
         }
         if (userInfo?.address) {
-            console.log("Setting address from userInfo:", userInfo.address);
             setAddress(userInfo.address);
         }
     }, [userInfo]);
 
     const fetchSchoolInfo = async (name: string) => {
         try {
-            console.log(`Fetching school info for: ${name}`);
             const response = await invoke<string>('get_school_by_name', { name });
-            console.log("School Info Response:", response);
             const parsed = JSON.parse(response);
             const data = parsed.data || parsed;
 
             if (data.code === 200 && data.schools?.length > 0) {
                 const school = data.schools[0];
-                console.log("School Found:", school);
                 setOrgCode(school.id);
                 if (school.address) {
-                    console.log(`Setting address from server: ${school.address}`);
                     setAddress(school.address);
-                } else {
-                    console.log("No address found in server response");
                 }
-            } else {
-                console.log("No matching school found");
             }
         } catch (error) {
             console.error('Failed to fetch school info:', error);
@@ -135,17 +125,17 @@ const SchoolInfoTab: React.FC<{
 
     return (
         <div className="p-8 max-w-2xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex items-center gap-4 mb-8 p-6 bg-gradient-to-br from-blue-50 to-white rounded-2xl border border-blue-100 shadow-sm">
-                <div className="w-14 h-14 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/30">
-                    <School size={28} />
+            <div className="flex items-center gap-4 mb-8 p-6 bg-gradient-to-br from-sage-50 to-white rounded-3xl border border-sage-100 shadow-sm">
+                <div className="w-16 h-16 rounded-2xl bg-sage-500 text-white flex items-center justify-center shadow-lg shadow-sage-500/30">
+                    <School size={32} />
                 </div>
                 <div>
-                    <h3 className="text-xl font-bold text-gray-900">基础信息配置</h3>
-                    <p className="text-sm text-gray-500 mt-1">完善学校基本资料，获取用于系统识别的唯一组织代码。</p>
+                    <h3 className="text-xl font-bold text-ink-800">基础信息配置</h3>
+                    <p className="text-sm text-ink-400 mt-1 font-medium">完善学校基本资料，获取用于系统识别的唯一组织代码。</p>
                 </div>
             </div>
 
-            <div className="space-y-6 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+            <div className="space-y-6 bg-white/60 p-8 rounded-3xl shadow-sm border border-white/50 ring-1 ring-sage-50 backdrop-blur-sm">
                 <InputField
                     label="学校名称"
                     value={schoolName}
@@ -167,7 +157,7 @@ const SchoolInfoTab: React.FC<{
                         <button
                             onClick={handleGetCode}
                             disabled={loading || !!orgCode}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-6 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shadow-md hover:shadow-lg active:scale-95 flex items-center gap-2"
+                            className="bg-sage-600 hover:bg-sage-700 text-white px-6 rounded-xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shadow-md hover:shadow-lg disabled:shadow-none active:scale-95 flex items-center gap-2"
                         >
                             {loading ? <Activity className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
                             {loading ? '获取中...' : '获取代码'}
@@ -327,80 +317,80 @@ const ClassManagementTab: React.FC<{ schoolId: string }> = ({ schoolId }) => {
     };
 
     return (
-        <div className="flex flex-col h-full bg-white">
+        <div className="flex flex-col h-full">
             {/* Toolbar */}
-            <div className="h-16 flex items-center px-6 gap-3 border-b border-gray-100 bg-white">
-                <button onClick={handleAddRow} className="flex items-center gap-2 px-4 py-2 bg-gray-50 hover:bg-white hover:text-blue-600 rounded-lg text-gray-600 text-sm transition-all border border-gray-200 hover:border-blue-200 shadow-sm">
+            <div className="h-16 flex items-center px-6 gap-3 border-b border-sage-100 bg-white/50 backdrop-blur-sm">
+                <button onClick={handleAddRow} className="flex items-center gap-2 px-4 py-2 bg-sage-50 hover:bg-white hover:text-sage-600 rounded-xl text-ink-500 text-sm transition-all border border-sage-200 hover:border-sage-300 shadow-sm font-bold">
                     <Plus size={16} /> 添加班级
                 </button>
-                <button onClick={handleDelete} className="flex items-center gap-2 px-4 py-2 bg-gray-50 hover:bg-red-50 hover:text-red-600 rounded-lg text-gray-600 text-sm transition-all border border-gray-200 hover:border-red-200 shadow-sm">
+                <button onClick={handleDelete} className="flex items-center gap-2 px-4 py-2 bg-clay-50 hover:bg-clay-100 hover:text-clay-600 rounded-xl text-ink-500 text-sm transition-all border border-clay-100 hover:border-clay-200 shadow-sm font-bold">
                     <Trash2 size={16} /> 删除选中
                 </button>
                 <div className="flex-1" />
-                <button onClick={handleGenerate} className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white text-sm font-medium transition-all shadow-md shadow-blue-500/20 active:scale-95">
+                <button onClick={handleGenerate} className="flex items-center gap-2 px-5 py-2 bg-sage-500 hover:bg-sage-600 rounded-xl text-white text-sm font-bold transition-all shadow-md shadow-sage-500/20 active:scale-95 hover:shadow-lg">
                     <Save size={16} />
                     <span>生成编号并保存</span>
                 </button>
             </div>
 
             {/* Table Area */}
-            <div className="flex-1 overflow-hidden flex flex-col p-6 bg-gray-50/50">
-                <div className="flex-1 bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col shadow-sm">
+            <div className="flex-1 overflow-hidden flex flex-col p-6">
+                <div className="flex-1 bg-white/70 rounded-3xl border border-white/50 ring-1 ring-sage-100 overflow-hidden flex flex-col shadow-sm backdrop-blur-md">
                     {/* Header */}
-                    <div className="flex items-center text-xs font-semibold text-gray-500 bg-gray-50 h-11 border-b border-gray-200">
+                    <div className="flex items-center text-xs font-bold text-ink-400 bg-sage-50/50 h-12 border-b border-sage-100 uppercase tracking-wider">
                         <div className="w-16 flex justify-center">
-                            <input type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer" onChange={(e) => setClasses(classes.map(c => ({ ...c, checked: e.target.checked })))} />
+                            <input type="checkbox" className="rounded border-sage-300 text-sage-600 focus:ring-sage-500 focus:ring-offset-0 cursor-pointer" onChange={(e) => setClasses(classes.map(c => ({ ...c, checked: e.target.checked })))} />
                         </div>
-                        <div className="flex-1 px-4 border-l border-gray-100">学段</div>
-                        <div className="flex-1 px-4 border-l border-gray-100">年级</div>
-                        <div className="flex-1 px-4 border-l border-gray-100">班级名称</div>
-                        <div className="flex-1 px-4 border-l border-gray-100">班级编号</div>
+                        <div className="flex-1 px-4 border-l border-sage-100/50">学段</div>
+                        <div className="flex-1 px-4 border-l border-sage-100/50">年级</div>
+                        <div className="flex-1 px-4 border-l border-sage-100/50">班级名称</div>
+                        <div className="flex-1 px-4 border-l border-sage-100/50">班级编号</div>
                     </div>
 
                     {/* Body */}
                     <div className="flex-1 overflow-y-auto custom-scrollbar p-0">
                         {loading ? (
-                            <div className="flex items-center justify-center h-full text-gray-400 gap-2">
+                            <div className="flex items-center justify-center h-full text-sage-400 gap-2 font-bold">
                                 <Activity className="animate-spin" /> 加载中...
                             </div>
                         ) : classes.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3">
-                                <BookOpen size={40} className="opacity-20" />
-                                <p>暂无班级数据</p>
+                            <div className="flex flex-col items-center justify-center h-full text-sage-300 gap-3">
+                                <BookOpen size={48} className="opacity-20" />
+                                <p className="font-bold">暂无班级数据</p>
                             </div>
                         ) : (
                             classes.map((cls, idx) => (
-                                <div key={idx} className={`group flex items-center text-sm transition-all duration-150 border-b border-gray-50 last:border-0 ${cls.checked ? 'bg-blue-50/50' : 'hover:bg-gray-50'}`}>
+                                <div key={idx} className={`group flex items-center text-sm transition-all duration-150 border-b border-sage-50 last:border-0 ${cls.checked ? 'bg-sage-50/50' : 'hover:bg-white/80'}`}>
                                     <div className="w-16 flex justify-center py-3">
                                         <input
                                             type="checkbox"
                                             checked={!!cls.checked}
                                             onChange={(e) => updateField(idx, 'checked', e.target.checked)}
-                                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+                                            className="rounded border-sage-300 text-sage-600 focus:ring-sage-500 focus:ring-offset-0 cursor-pointer"
                                         />
                                     </div>
                                     <div className="flex-1 px-2">
                                         <input
-                                            className="w-full bg-transparent text-gray-800 focus:bg-white rounded px-2 py-1.5 border-none focus:ring-1 focus:ring-blue-500 transition-all font-medium"
+                                            className="w-full bg-transparent text-ink-800 focus:bg-white rounded px-2 py-1.5 border-none focus:ring-1 focus:ring-sage-400 transition-all font-bold"
                                             value={cls.school_stage}
                                             onChange={e => updateField(idx, 'school_stage', e.target.value)}
                                         />
                                     </div>
                                     <div className="flex-1 px-2">
                                         <input
-                                            className="w-full bg-transparent text-gray-800 focus:bg-white rounded px-2 py-1.5 border-none focus:ring-1 focus:ring-blue-500 transition-all"
+                                            className="w-full bg-transparent text-ink-800 focus:bg-white rounded px-2 py-1.5 border-none focus:ring-1 focus:ring-sage-400 transition-all font-medium"
                                             value={cls.grade}
                                             onChange={e => updateField(idx, 'grade', e.target.value)}
                                         />
                                     </div>
                                     <div className="flex-1 px-2">
                                         <input
-                                            className="w-full bg-transparent text-gray-800 focus:bg-white rounded px-2 py-1.5 border-none focus:ring-1 focus:ring-blue-500 transition-all"
+                                            className="w-full bg-transparent text-ink-800 focus:bg-white rounded px-2 py-1.5 border-none focus:ring-1 focus:ring-sage-400 transition-all font-medium"
                                             value={cls.class_name}
                                             onChange={e => updateField(idx, 'class_name', e.target.value)}
                                         />
                                     </div>
-                                    <div className="flex-1 px-4 py-3 text-gray-400 font-mono text-xs">
+                                    <div className="flex-1 px-4 py-3 text-ink-400 font-mono text-xs font-medium">
                                         {cls.class_code || '---'}
                                     </div>
                                 </div>
@@ -536,69 +526,69 @@ const MemberManagementTab: React.FC<{ schoolId: string }> = ({ schoolId }) => {
     };
 
     return (
-        <div className="flex flex-col h-full bg-white">
+        <div className="flex flex-col h-full">
             {/* Toolbar */}
-            <div className="h-16 flex items-center px-6 gap-3 border-b border-gray-100 bg-white">
-                <button onClick={handleAddRow} className="flex items-center gap-2 px-4 py-2 bg-gray-50 hover:bg-white hover:text-blue-600 rounded-lg text-gray-600 text-sm transition-all border border-gray-200 hover:border-blue-200 shadow-sm">
+            <div className="h-16 flex items-center px-6 gap-3 border-b border-sage-100 bg-white/50 backdrop-blur-sm">
+                <button onClick={handleAddRow} className="flex items-center gap-2 px-4 py-2 bg-sage-50 hover:bg-white hover:text-sage-600 rounded-xl text-ink-500 text-sm transition-all border border-sage-200 hover:border-sage-300 shadow-sm font-bold">
                     <Plus size={16} /> 添加成员
                 </button>
-                <div className="h-6 w-[1px] bg-gray-200 mx-1" />
-                <button className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-50 rounded-lg text-gray-600 text-sm transition-all border border-gray-200 hover:text-gray-900">
+                <div className="h-6 w-[1px] bg-sage-200/50 mx-1" />
+                <button className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-sage-50 rounded-xl text-ink-500 text-sm transition-all border border-sage-200 hover:text-ink-700 font-bold">
                     <Upload size={16} /> 导入
                 </button>
-                <button className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-50 rounded-lg text-gray-600 text-sm transition-all border border-gray-200 hover:text-gray-900">
+                <button className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-sage-50 rounded-xl text-ink-500 text-sm transition-all border border-sage-200 hover:text-ink-700 font-bold">
                     <Download size={16} /> 导出
                 </button>
-                <div className="h-6 w-[1px] bg-gray-200 mx-1" />
-                <button onClick={handleDelete} className="flex items-center gap-2 px-4 py-2 bg-gray-50 hover:bg-red-50 hover:text-red-600 rounded-lg text-gray-600 text-sm transition-all border border-gray-200 hover:border-red-200 shadow-sm">
+                <div className="h-6 w-[1px] bg-sage-200/50 mx-1" />
+                <button onClick={handleDelete} className="flex items-center gap-2 px-4 py-2 bg-clay-50 hover:bg-clay-100 hover:text-clay-600 rounded-xl text-ink-500 text-sm transition-all border border-clay-100 hover:border-clay-200 shadow-sm font-bold">
                     <Trash2 size={16} /> 删除
                 </button>
                 <div className="flex-1" />
-                <button onClick={handleSave} className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white text-sm font-medium transition-all shadow-md shadow-blue-500/20 active:scale-95">
+                <button onClick={handleSave} className="flex items-center gap-2 px-5 py-2 bg-sage-500 hover:bg-sage-600 rounded-xl text-white text-sm font-bold transition-all shadow-md shadow-sage-500/20 active:scale-95 hover:shadow-lg">
                     <Save size={16} />
                     <span>保存并生成</span>
                 </button>
             </div>
 
             {/* Table Area */}
-            <div className="flex-1 overflow-hidden flex flex-col p-6 bg-gray-50/50">
-                <div className="flex-1 bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col shadow-sm">
+            <div className="flex-1 overflow-hidden flex flex-col p-6">
+                <div className="flex-1 bg-white/70 rounded-3xl border border-white/50 ring-1 ring-sage-100 overflow-hidden flex flex-col shadow-sm backdrop-blur-md">
                     {/* Header */}
-                    <div className="flex items-center text-xs font-semibold text-gray-500 bg-gray-50 h-11 border-b border-gray-200">
+                    <div className="flex items-center text-xs font-bold text-ink-400 bg-sage-50/50 h-12 border-b border-sage-100 uppercase tracking-wider">
                         <div className="w-16 p-3 text-center">
-                            <input type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer" onChange={(e) => setMembers(members.map(m => ({ ...m, checked: e.target.checked })))} />
+                            <input type="checkbox" className="rounded border-sage-300 text-sage-600 focus:ring-sage-500 focus:ring-offset-0 cursor-pointer" onChange={(e) => setMembers(members.map(m => ({ ...m, checked: e.target.checked })))} />
                         </div>
-                        <div className="flex-1 px-4 border-l border-gray-100">姓名</div>
-                        <div className="flex-1 px-4 border-l border-gray-100">手机号 (必填)</div>
-                        <div className="w-32 text-center border-l border-gray-100">管理员</div>
-                        <div className="flex-1 px-4 text-center border-l border-gray-100">系统编号</div>
+                        <div className="flex-1 px-4 border-l border-sage-100/50">姓名</div>
+                        <div className="flex-1 px-4 border-l border-sage-100/50">手机号 (必填)</div>
+                        <div className="w-32 text-center border-l border-sage-100/50">管理员</div>
+                        <div className="flex-1 px-4 text-center border-l border-sage-100/50">系统编号</div>
                     </div>
 
                     {/* Body */}
                     <div className="flex-1 overflow-y-auto custom-scrollbar p-0">
                         {loading ? (
-                            <div className="flex items-center justify-center h-full text-gray-400 gap-2">
+                            <div className="flex items-center justify-center h-full text-sage-400 gap-2 font-bold">
                                 <Activity className="animate-spin" /> 加载中...
                             </div>
                         ) : members.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3">
-                                <Users2 size={40} className="opacity-20" />
-                                <p>暂无成员数据</p>
+                            <div className="flex flex-col items-center justify-center h-full text-sage-300 gap-3">
+                                <Users2 size={48} className="opacity-20" />
+                                <p className="font-bold">暂无成员数据</p>
                             </div>
                         ) : (
                             members.map((m, idx) => (
-                                <div key={idx} className={`group flex items-center text-sm transition-all duration-150 border-b border-gray-50 last:border-0 ${m.checked ? 'bg-blue-50/50' : 'hover:bg-gray-50'}`}>
+                                <div key={idx} className={`group flex items-center text-sm transition-all duration-150 border-b border-sage-50 last:border-0 ${m.checked ? 'bg-sage-50/50' : 'hover:bg-white/80'}`}>
                                     <div className="w-16 flex justify-center py-3">
                                         <input
                                             type="checkbox"
                                             checked={!!m.checked}
                                             onChange={(e) => updateField(idx, 'checked', e.target.checked)}
-                                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+                                            className="rounded border-sage-300 text-sage-600 focus:ring-sage-500 focus:ring-offset-0 cursor-pointer"
                                         />
                                     </div>
                                     <div className="flex-1 px-2">
                                         <input
-                                            className="w-full bg-transparent text-gray-800 focus:bg-white rounded px-2 py-1.5 border-none focus:ring-1 focus:ring-blue-500 transition-all font-medium"
+                                            className="w-full bg-transparent text-ink-800 focus:bg-white rounded px-2 py-1.5 border-none focus:ring-1 focus:ring-sage-400 transition-all font-bold"
                                             value={m.name}
                                             onChange={e => updateField(idx, 'name', e.target.value)}
                                             placeholder="姓名"
@@ -606,7 +596,7 @@ const MemberManagementTab: React.FC<{ schoolId: string }> = ({ schoolId }) => {
                                     </div>
                                     <div className="flex-1 px-2">
                                         <input
-                                            className="w-full bg-transparent text-gray-800 focus:bg-white rounded px-2 py-1.5 border-none focus:ring-1 focus:ring-blue-500 transition-all font-mono text-gray-600"
+                                            className="w-full bg-transparent text-ink-800 focus:bg-white rounded px-2 py-1.5 border-none focus:ring-1 focus:ring-sage-400 transition-all font-mono text-ink-600 font-medium tracking-tight"
                                             value={m.phone}
                                             onChange={e => updateField(idx, 'phone', e.target.value)}
                                             placeholder="手机号"
@@ -623,15 +613,15 @@ const MemberManagementTab: React.FC<{ schoolId: string }> = ({ schoolId }) => {
                                             />
                                             <label
                                                 htmlFor={`admin-cb-${idx}`}
-                                                className="cursor-pointer w-9 h-5 bg-gray-200 peer-checked:bg-green-500 rounded-full transition-all peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all shadow-sm"
+                                                className="cursor-pointer w-10 h-6 bg-sage-200 peer-checked:bg-sage-500 rounded-full transition-all peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-sage-200 after:border after:rounded-full after:h-5 after:w-5 after:transition-all shadow-sm"
                                             />
                                         </div>
                                     </div>
-                                    <div className="flex-1 px-4 py-3 text-gray-400 font-mono text-xs text-center">
+                                    <div className="flex-1 px-4 py-3 text-ink-400 font-mono text-xs text-center font-medium">
                                         {m.teacher_unique_id ? (
-                                            <span className="bg-gray-100 px-2 py-1 rounded text-gray-600 border border-gray-200">{m.teacher_unique_id}</span>
+                                            <span className="bg-sage-50 px-2 py-1 rounded text-sage-600 border border-sage-100">{m.teacher_unique_id}</span>
                                         ) : (
-                                            <span className="text-gray-300">待生成</span>
+                                            <span className="text-sage-300">待生成</span>
                                         )}
                                     </div>
                                 </div>
@@ -697,23 +687,23 @@ const SchoolInfoModal: React.FC<SchoolInfoModalProps> = ({ isOpen, onClose, user
         <div className="fixed inset-0 z-50 flex items-center justify-center">
             {/* Backdrop */}
             <div
-                className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300"
+                className="absolute inset-0 bg-ink-900/20 backdrop-blur-sm animate-in fade-in duration-300"
                 onClick={onClose}
             />
 
             {/* Modal Container */}
-            <div className="relative w-[1000px] h-[650px] bg-[#FFFFFF] rounded-[24px] shadow-2xl flex overflow-hidden border border-white/20 ring-1 ring-black/5 animate-in zoom-in-95 duration-300">
+            <div className="relative w-[1000px] h-[650px] bg-paper/95 backdrop-blur-xl rounded-[2rem] shadow-2xl flex overflow-hidden border border-white/40 ring-1 ring-sage-100/50 animate-in zoom-in-95 duration-300">
 
                 {/* Close Button - Floats top right */}
                 <button
                     onClick={onClose}
-                    className="absolute top-5 right-5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 p-2 rounded-full transition-all z-20 group"
+                    className="absolute top-5 right-5 text-sage-400 hover:text-clay-600 hover:bg-clay-50 p-2 rounded-full transition-all z-20 group"
                 >
                     <X size={20} className="group-hover:rotate-90 transition-transform duration-300" />
                 </button>
 
                 {/* Sidebar */}
-                <div className="w-[240px] bg-[#f8f9fa] border-r border-gray-100 flex flex-col pt-10 pb-6 px-4 relative z-10">
+                <div className="w-[260px] bg-white/50 border-r border-sage-100 flex flex-col pt-10 pb-6 px-4 relative z-10 backdrop-blur-md">
                     <div className="flex-1 space-y-2">
                         {tabs.map((tab) => (
                             <TabButton
@@ -727,29 +717,32 @@ const SchoolInfoModal: React.FC<SchoolInfoModalProps> = ({ isOpen, onClose, user
                     </div>
 
                     {/* User Profile Mini - Bottom Sidebar */}
-                    <div className="mt-4 pt-4 border-t border-gray-200 flex items-center gap-3 px-2">
-                        <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-500 p-[2px] shadow-md">
+                    <div className="mt-4 pt-4 border-t border-sage-100 flex items-center gap-3 px-2">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-sage-400 to-sage-600 p-[2px] shadow-md ring-2 ring-white">
                             <img src={userInfo?.avatar || "https://api.dicebear.com/7.x/avataaars/svg?seed=Teacher"} alt="User" className="w-full h-full rounded-full border border-white bg-white object-cover" />
                         </div>
                         <div className="flex flex-col overflow-hidden">
-                            <span className="text-sm font-bold text-gray-800 truncate">{userInfo?.name || '教师'}</span>
-                            <span className="text-xs text-gray-500 truncate">{userInfo?.school_name || '未绑定学校'}</span>
+                            <span className="text-sm font-bold text-ink-800 truncate">{userInfo?.name || '教师'}</span>
+                            <span className="text-xs text-ink-400 truncate">{userInfo?.school_name || '未绑定学校'}</span>
                         </div>
                     </div>
                 </div>
 
                 {/* Main Content Area */}
-                <div className="flex-1 flex flex-col min-w-0 bg-white relative">
+                <div className="flex-1 flex flex-col min-w-0 bg-transparent relative">
 
                     {/* Header - Only Title */}
-                    <div className="h-16 flex items-center justify-center shrink-0 z-10 border-b border-gray-50">
-                        <h2 className="text-lg font-bold text-gray-800 tracking-wide">
-                            {tabs.find(t => t.id === activeTab)?.label}
-                        </h2>
+                    <div className="h-20 flex items-center px-8 shrink-0 z-10 border-b border-sage-100/50 bg-white/30 backdrop-blur-sm">
+                        <div className="flex flex-col">
+                            <h2 className="text-2xl font-bold text-ink-800 tracking-tight">
+                                {tabs.find(t => t.id === activeTab)?.label}
+                            </h2>
+                            <p className="text-xs text-ink-400 font-medium tracking-wide opacity-80">SCHOOL MANAGEMENT</p>
+                        </div>
                     </div>
 
                     {/* Content */}
-                    <div className="flex-1 overflow-hidden flex flex-col relative z-0">
+                    <div className="flex-1 overflow-hidden flex flex-col relative z-0 bg-white/40">
                         {activeTab === 'info' && <SchoolInfoTab userInfo={userInfo} orgCode={orgCode} setOrgCode={setOrgCode} />}
                         {activeTab === 'class' && <ClassManagementTab schoolId={orgCode} />}
                         {activeTab === 'member' && <MemberManagementTab schoolId={orgCode} />}

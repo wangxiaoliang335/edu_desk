@@ -135,25 +135,25 @@ const NotificationModal = ({ isOpen, onClose, classId, groupId, groupName, class
     const displayName = className || groupName || classId || "班级";
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-300 font-sans">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-300 font-sans">
             <div
                 style={style}
-                className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-2xl w-[480px] max-h-[600px] overflow-hidden border border-white/60 ring-1 ring-black/5 flex flex-col transition-all"
+                className="bg-paper/95 backdrop-blur-xl rounded-[2rem] shadow-2xl w-[480px] max-h-[600px] overflow-hidden border border-white/50 ring-1 ring-sage-100/50 flex flex-col transition-all"
             >
                 {/* Header */}
                 <div
                     onMouseDown={handleMouseDown}
-                    className="px-6 py-4 flex items-center justify-between cursor-move select-none border-b border-gray-100 bg-white/50 relative z-10"
+                    className="px-6 py-4 flex items-center justify-between cursor-move select-none border-b border-sage-100/50 bg-white/30 backdrop-blur-md relative z-10"
                 >
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-50 text-blue-600 rounded-lg shadow-sm border border-blue-100">
+                        <div className="w-10 h-10 bg-gradient-to-br from-sage-400 to-sage-600 text-white rounded-xl flex items-center justify-center shadow-lg shadow-sage-500/20">
                             {showHistory ? <History size={20} /> : <Bell size={20} />}
                         </div>
                         <div>
-                            <h3 className="font-bold text-slate-800 text-base tracking-tight">
+                            <h3 className="font-bold text-ink-800 text-base tracking-tight">
                                 {showHistory ? '发送历史记录' : '发送通知消息'}
                             </h3>
-                            <p className="text-xs text-slate-500 font-medium truncate max-w-[200px]">
+                            <p className="text-xs text-ink-400 font-medium truncate max-w-[200px]">
                                 {displayName}
                             </p>
                         </div>
@@ -163,23 +163,23 @@ const NotificationModal = ({ isOpen, onClose, classId, groupId, groupName, class
                         {!showHistory ? (
                             <button
                                 onClick={() => setShowHistory(true)}
-                                className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                className="p-2 text-sage-400 hover:text-sage-600 hover:bg-sage-50 rounded-lg transition-all"
                                 title="查看历史"
                             >
-                                <History size={18} />
+                                <History size={20} />
                             </button>
                         ) : (
                             <button
                                 onClick={() => setShowHistory(false)}
-                                className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                className="p-2 text-sage-400 hover:text-sage-600 hover:bg-sage-50 rounded-lg transition-all"
                                 title="返回发送"
                             >
-                                <ChevronLeft size={18} />
+                                <ChevronLeft size={20} />
                             </button>
                         )}
                         <button
                             onClick={onClose}
-                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                            className="p-2 text-sage-400 hover:text-clay-600 hover:bg-clay-50 rounded-lg transition-colors"
                         >
                             <X size={20} />
                         </button>
@@ -188,84 +188,84 @@ const NotificationModal = ({ isOpen, onClose, classId, groupId, groupName, class
 
                 {showHistory ? (
                     /* History View */
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50 custom-scrollbar">
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-white/40 custom-scrollbar">
                         {notices.length > 0 ? (
                             notices.map(notice => (
-                                <div key={notice.id} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 group relative hover:shadow-md transition-all">
-                                    <div className="flex items-start justify-between gap-2">
-                                        <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">{notice.content}</p>
+                                <div key={notice.id} className="bg-white/90 backdrop-blur-sm rounded-xl p-4 shadow-sm border border-white/60 hover:border-sage-200 group relative hover:shadow-md transition-all">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <p className="text-ink-700 text-sm leading-relaxed whitespace-pre-wrap">{notice.content}</p>
                                         <button
                                             onClick={() => handleDelete(notice.id)}
-                                            className="text-slate-300 hover:text-red-500 p-1.5 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                                            className="text-sage-300 hover:text-clay-600 p-1.5 hover:bg-clay-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
                                             title="删除"
                                         >
-                                            <Trash2 size={14} />
+                                            <Trash2 size={16} />
                                         </button>
                                     </div>
-                                    <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-gray-50">
-                                        <div className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-bold">
-                                            <Clock size={10} />
+                                    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-sage-50">
+                                        <div className="flex items-center gap-1.5 px-2 py-0.5 bg-sage-50 text-sage-600 rounded text-[10px] font-bold border border-sage-100">
+                                            <Check size={10} strokeWidth={3} />
                                             <span>已发送</span>
                                         </div>
-                                        <span className="text-[10px] text-slate-400 font-medium font-mono">
+                                        <span className="text-[10px] text-ink-400 font-medium font-mono">
                                             {new Date(notice.timestamp).toLocaleString()}
                                         </span>
                                     </div>
                                 </div>
                             ))
                         ) : (
-                            <div className="flex flex-col items-center justify-center py-12 text-slate-400 gap-3">
-                                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center">
+                            <div className="flex flex-col items-center justify-center py-12 text-sage-300 gap-3">
+                                <div className="w-16 h-16 bg-sage-50 rounded-full flex items-center justify-center border border-sage-100">
                                     <History size={24} className="opacity-50" />
                                 </div>
-                                <p className="text-sm font-medium">暂无发送历史</p>
+                                <p className="text-sm font-bold text-ink-400">暂无发送历史</p>
                             </div>
                         )}
                     </div>
                 ) : (
                     /* Send View */
-                    <div className="bg-white flex flex-col h-full">
-                        <div className="p-5 flex-1 pb-0">
-                            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">
+                    <div className="bg-white/40 flex flex-col h-full">
+                        <div className="p-6 flex-1 pb-0">
+                            <label className="block text-xs font-bold text-ink-400 mb-2 uppercase tracking-wide px-1">
                                 消息内容
                             </label>
-                            <div className="relative">
+                            <div className="relative group">
                                 <textarea
                                     value={newNotice}
                                     onChange={e => setNewNotice(e.target.value)}
                                     placeholder="请输入需要发送给全班的通知内容..."
-                                    className="w-full h-48 bg-slate-50 text-slate-800 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all outline-none resize-none placeholder:text-slate-400 leading-relaxed scrollbar-thin"
+                                    className="w-full h-48 bg-white text-ink-800 border border-sage-200 rounded-2xl px-5 py-4 text-sm focus:ring-4 focus:ring-sage-100 focus:border-sage-400 transition-all outline-none resize-none placeholder:text-sage-300 leading-relaxed scrollbar-thin shadow-inner"
                                     autoFocus
                                 />
-                                <div className="absolute bottom-3 right-3 text-[10px] text-slate-400 font-medium bg-slate-50/80 px-1.5 py-0.5 rounded border border-slate-100">
+                                <div className="absolute bottom-3 right-3 text-[10px] text-sage-400 font-bold bg-white/90 px-2 py-1 rounded-md border border-sage-100 shadow-sm pointer-events-none">
                                     {newNotice.length} 字
                                 </div>
                             </div>
 
-                            <div className="mt-4 flex items-start gap-2 text-xs text-slate-400 bg-blue-50/50 p-3 rounded-lg border border-blue-100/50">
-                                <div className="mt-0.5 text-blue-500 flex-shrink-0">
-                                    <Clock size={14} />
+                            <div className="mt-4 flex items-start gap-3 text-xs text-ink-500 bg-sage-50/50 p-4 rounded-xl border border-sage-100/50">
+                                <div className="mt-0.5 text-sage-500 flex-shrink-0">
+                                    <Clock size={16} />
                                 </div>
-                                <p>消息将即时发送到班级群，所有在线成员均可收到。</p>
+                                <p className="leading-relaxed">消息将即时发送到班级群，所有在线成员均可收到。</p>
                             </div>
                         </div>
 
-                        <div className="p-5 flex items-center justify-end gap-3 bg-slate-50 border-t border-slate-100 mt-auto">
+                        <div className="p-6 flex items-center justify-end gap-3 bg-white/50 border-t border-white/50 mt-auto backdrop-blur-sm">
                             <button
                                 onClick={onClose}
-                                className="px-5 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-200/50 rounded-xl transition-colors"
+                                className="px-6 py-3 text-sm font-bold text-ink-500 hover:text-ink-700 hover:bg-white border border-transparent hover:border-sage-200 rounded-2xl transition-all"
                             >
                                 取消
                             </button>
                             <button
                                 onClick={handleSend}
                                 disabled={!newNotice.trim() || sendStatus !== 'idle'}
-                                className={`px-8 py-2.5 text-sm font-bold text-white rounded-xl flex items-center gap-2 shadow-lg transition-all transform active:scale-95
+                                className={`px-8 py-3 text-sm font-bold text-white rounded-2xl flex items-center gap-2 shadow-lg transition-all transform active:scale-95
                                     ${!newNotice.trim() && sendStatus === 'idle'
-                                        ? 'bg-slate-300 shadow-none cursor-not-allowed text-slate-500'
+                                        ? 'bg-gray-300 shadow-none cursor-not-allowed text-white/80'
                                         : sendStatus === 'success'
                                             ? 'bg-green-500 hover:bg-green-600 shadow-green-500/30'
-                                            : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 hover:-translate-y-0.5 shadow-blue-500/30'}`}
+                                            : 'bg-gradient-to-r from-sage-500 to-sage-600 hover:from-sage-600 hover:to-sage-700 hover:-translate-y-0.5 shadow-sage-500/30'}`}
                             >
                                 {sendStatus === 'sending' ? (
                                     <>
@@ -274,14 +274,14 @@ const NotificationModal = ({ isOpen, onClose, classId, groupId, groupName, class
                                     </>
                                 ) : sendStatus === 'success' ? (
                                     <>
-                                        <Check size={18} />
+                                        <Check size={18} strokeWidth={3} />
                                         <span>已发送</span>
                                     </>
                                 ) : (
                                     <>
                                         <span>立即发送</span>
-                                        <div className="w-px h-3 bg-white/20 mx-0.5"></div>
-                                        <Clock size={14} className="opacity-80" />
+                                        <div className="w-px h-3 bg-white/20 mx-1"></div>
+                                        <Bell size={16} className="opacity-90" />
                                     </>
                                 )}
                             </button>

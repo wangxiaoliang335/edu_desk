@@ -1,61 +1,50 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { X, Clock, Calendar as CalendarIcon, Save } from 'lucide-react';
-import { useDraggable } from '../../hooks/useDraggable';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { invoke } from '@tauri-apps/api/core';
+import { emit } from '@tauri-apps/api/event';
 
-interface CountdownModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    initialDate?: string; // yyyy-MM-dd
-    initialTitle?: string;
-    onSave?: (config: { title: string; targetDate: string }) => void;
-}
+const loadCountdownConfig = () => {
+    const saved = localStorage.getItem('countdown_config');
+    return saved ? JSON.parse(saved) : {
+        title: '距离高考',
+        targetDate: new Date(new Date().getFullYear(), 5, 7).toISOString().split('T')[0]
+    };
+};
 
-const CountdownModal = ({ isOpen, onClose, initialDate, initialTitle, onSave }: CountdownModalProps) => {
-    const [targetDate, setTargetDate] = useState(initialDate || new Date(new Date().getFullYear(), 5, 7).toISOString().split('T')[0]); // Default to June 7th (Gaokao)
-    const [title, setTitle] = useState(initialTitle || "距高考还有");
+const CountdownEditWindow = () => {
+    const initial = loadCountdownConfig();
+    const [targetDate, setTargetDate] = useState(initial.targetDate);
+    const [title, setTitle] = useState(initial.title);
     const [daysLeft, setDaysLeft] = useState(0);
-    const { style, handleMouseDown } = useDraggable();
 
     useEffect(() => {
-        const calculateDays = () => {
-            const now = new Date();
-            const target = new Date(targetDate);
-            const diffTime = target.getTime() - now.getTime();
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            setDaysLeft(diffDays);
-        };
-        calculateDays();
-        // Recalculate if date changes (in a real app, maybe interval too, but days don't change fast)
+        const now = new Date();
+        const target = new Date(targetDate);
+        const diffTime = target.getTime() - now.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        setDaysLeft(diffDays);
     }, [targetDate]);
 
-    // Re-sync with props when reopen or props change
-    useEffect(() => {
-        if (isOpen) {
-            if (initialDate) setTargetDate(initialDate);
-            if (initialTitle) setTitle(initialTitle);
-        }
-    }, [isOpen, initialDate, initialTitle]);
+    const closeAndReturn = async () => {
+        await invoke('open_countdown_minimal_window');
+        await getCurrentWindow().close();
+    };
 
-    if (!isOpen) return null;
-
-    const handleSave = () => {
-        if (onSave) {
-            onSave({ title, targetDate });
-        }
-        console.log("Saving countdown config:", { title, targetDate });
-        onClose();
+    const handleSave = async () => {
+        const next = { title, targetDate };
+        localStorage.setItem('countdown_config', JSON.stringify(next));
+        await emit('countdown-config-updated');
+        await closeAndReturn();
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-300 font-sans">
-            <div
-                style={style}
-                className="bg-paper/95 backdrop-blur-xl rounded-[2rem] shadow-2xl w-[450px] overflow-hidden border border-white/60 ring-1 ring-sage-100/50 flex flex-col animate-in zoom-in-95 duration-200"
-            >
+        <div className="w-full h-full bg-paper flex items-center justify-center">
+            <div className="bg-paper/95 backdrop-blur-xl rounded-[2rem] shadow-2xl w-[450px] overflow-hidden border border-white/60 ring-1 ring-sage-100/50 flex flex-col">
                 {/* Header */}
                 <div
-                    onMouseDown={handleMouseDown}
-                    className="p-5 flex items-center justify-between border-b border-sage-100/50 bg-white/40 backdrop-blur-md cursor-move select-none"
+                    data-tauri-drag-region="true"
+                    className="p-5 flex items-center justify-between border-b border-sage-100/50 bg-white/40 backdrop-blur-md select-none"
                 >
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-clay-400 to-clay-600 text-white flex items-center justify-center shadow-lg shadow-clay-500/20">
@@ -64,7 +53,7 @@ const CountdownModal = ({ isOpen, onClose, initialDate, initialTitle, onSave }: 
                         <span className="font-bold text-ink-800 text-lg tracking-tight">倒计时设置</span>
                     </div>
                     <button
-                        onClick={onClose}
+                        onClick={closeAndReturn}
                         className="w-9 h-9 flex items-center justify-center rounded-full text-sage-400 hover:text-clay-600 hover:bg-clay-50 transition-all duration-300"
                     >
                         <X size={20} />
@@ -74,8 +63,8 @@ const CountdownModal = ({ isOpen, onClose, initialDate, initialTitle, onSave }: 
                 {/* Content */}
                 <div className="p-8 flex flex-col items-center bg-white/30">
                     {/* Preview Card */}
-                    <div className="bg-gradient-to-br from-white to-clay-50 border border-clay-100 rounded-3xl p-6 w-full flex flex-col items-center justify-center mb-6 shadow-sm relative overflow-hidden group hover:shadow-md transition-all duration-300">
-                        <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <div className="bg-gradient-to-br from-white to-clay-50 border border-clay-100 rounded-3xl p-6 w-full flex flex-col items-center justify-center mb-6 shadow-sm relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-3 opacity-10">
                             <Clock size={80} className="text-clay-500" />
                         </div>
                         <span className="text-ink-500 font-bold mb-2 tracking-wide uppercase text-xs">{title || '事件名称'}</span>
@@ -83,7 +72,9 @@ const CountdownModal = ({ isOpen, onClose, initialDate, initialTitle, onSave }: 
                             <span className="text-7xl font-black text-clay-600 tracking-tighter drop-shadow-sm">{daysLeft > 0 ? daysLeft : 0}</span>
                             <span className="text-clay-400 font-bold text-lg">天</span>
                         </div>
-                        {daysLeft <= 0 && <span className="text-xs text-clay-500 mt-2 font-bold bg-clay-100 px-3 py-1 rounded-full">已到达或过期!</span>}
+                        {daysLeft <= 0 && (
+                            <span className="text-xs text-clay-500 mt-2 font-bold bg-clay-100 px-3 py-1 rounded-full">已到达或过期!</span>
+                        )}
                     </div>
 
                     {/* Settings */}
@@ -115,7 +106,7 @@ const CountdownModal = ({ isOpen, onClose, initialDate, initialTitle, onSave }: 
                 {/* Footer */}
                 <div className="p-5 bg-white/40 border-t border-sage-100/50 flex justify-end gap-3 backdrop-blur-md">
                     <button
-                        onClick={onClose}
+                        onClick={closeAndReturn}
                         className="px-5 py-2.5 text-sm font-bold text-sage-500 hover:bg-white hover:text-sage-700 rounded-xl border border-transparent hover:border-sage-200 transition-all"
                     >
                         取消
@@ -132,4 +123,4 @@ const CountdownModal = ({ isOpen, onClose, initialDate, initialTitle, onSave }: 
     );
 };
 
-export default CountdownModal;
+export default CountdownEditWindow;

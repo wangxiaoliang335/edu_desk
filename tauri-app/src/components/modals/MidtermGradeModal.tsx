@@ -500,85 +500,91 @@ const MidtermGradeModal = ({ isOpen, onClose, fileName, data, classId, file, aut
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-300 font-sans">
             {/* Context Menu */}
             {contextMenu && (
                 <div
-                    className="fixed bg-white border border-gray-300 shadow-lg rounded py-1 z-[80]"
+                    className="fixed bg-white/90 backdrop-blur-xl border border-white/60 shadow-xl rounded-xl py-2 z-[80] ring-1 ring-sage-100"
                     style={{ top: contextMenu.y, left: contextMenu.x }}
                     onClick={(e) => e.stopPropagation()}
                 >
                     <button
-                        className="block w-full text-left px-4 py-2 hover:bg-gray-100 text-sm"
+                        className="block w-full text-left px-5 py-2 hover:bg-sage-50 text-sm font-bold text-ink-700 transition-colors"
                         onClick={handleAddComment}
                     >
-                        编辑注释
+                        ✏️ 编辑注释
                     </button>
                 </div>
             )}
 
-            <div className="bg-white rounded-2xl shadow-2xl w-[1200px] h-[800px] flex flex-col overflow-hidden text-sm select-none relative border border-gray-100">
+            <div className="bg-paper/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl w-[1200px] h-[800px] flex flex-col overflow-hidden text-sm select-none relative border border-white/50 ring-1 ring-sage-100/50">
 
                 {/* Close Button */}
                 <button
                     onClick={onClose}
-                    className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all z-20"
+                    className="absolute top-6 right-6 w-10 h-10 flex items-center justify-center text-sage-400 hover:text-clay-600 hover:bg-clay-50 rounded-full transition-all duration-300 z-50"
                 >
-                    ×
+                    <span className="text-xl font-bold">×</span>
                 </button>
 
                 {/* Header */}
-                <div className="p-6 pb-4 flex flex-col items-center justify-center gap-2 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg">
-                            <span className="text-white text-lg">📊</span>
+                <div className="px-8 py-6 flex flex-col items-start justify-center gap-1 border-b border-sage-100/50 bg-white/30 backdrop-blur-md relative z-10">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                            <span className="text-white text-2xl font-bold">📊</span>
                         </div>
                         <div>
-                            <h2 className="text-gray-800 font-bold text-lg">{fileName}</h2>
-                            <p className="text-xs text-gray-500">学生属性表 · 包含 {headers.filter(h => !['学号', '姓名', '总分'].includes(h)).length} 个评分项</p>
+                            <h2 className="text-ink-800 font-bold text-2xl tracking-tight">{fileName}</h2>
+                            <p className="text-sm font-medium text-ink-400 mt-0.5">
+                                学生属性表 · 包含 <span className="text-emerald-600 font-bold">{headers.filter(h => !['学号', '姓名', '总分'].includes(h)).length}</span> 个评分项
+                            </p>
                         </div>
                     </div>
                 </div>
 
                 {/* Toolbar */}
-                <div className="px-6 py-3 flex gap-2 overflow-x-auto bg-gray-50/50 border-b border-gray-100">
-                    <button onClick={handleAddRow} className="px-4 py-2 rounded-lg text-gray-700 text-xs font-medium whitespace-nowrap bg-white border border-gray-200 hover:border-blue-300 hover:text-blue-600 hover:shadow-sm transition-all">
+                <div className="px-8 py-4 flex gap-3 overflow-x-auto bg-white/40 border-b border-white/50 custom-scrollbar backdrop-blur-sm">
+                    <button onClick={handleAddRow} className="px-5 py-2.5 rounded-xl text-ink-700 text-xs font-bold whitespace-nowrap bg-white border border-sage-200 hover:border-sage-400 hover:text-sage-700 hover:shadow-md hover:-translate-y-0.5 transition-all shadow-sm">
                         + 添加行
                     </button>
-                    <button onClick={handleDeleteRow} className={`px-4 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${selectedRowId !== null ? 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100' : 'bg-white text-gray-700 border border-gray-200 hover:border-gray-300'}`}>
+                    <button onClick={handleDeleteRow} className={`px-5 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all shadow-sm hover:-translate-y-0.5 ${selectedRowId !== null ? 'bg-clay-50 text-clay-600 border border-clay-200 hover:bg-clay-100 hover:shadow-clay-200' : 'bg-white text-gray-400 border border-gray-100 hover:border-gray-300'}`}>
                         {selectedRowId !== null ? '🗑 删除选中行' : '删除行'}
                     </button>
-                    <button onClick={handleDeleteColumn} className={`px-4 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${selectedCol ? 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100' : 'bg-white text-gray-700 border border-gray-200 hover:border-gray-300'}`}>
+                    <button onClick={handleDeleteColumn} className={`px-5 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all shadow-sm hover:-translate-y-0.5 ${selectedCol ? 'bg-clay-50 text-clay-600 border border-clay-200 hover:bg-clay-100 hover:shadow-clay-200' : 'bg-white text-gray-400 border border-gray-100 hover:border-gray-300'}`}>
                         {selectedCol ? `🗑 删除列(${selectedCol})` : '删除列'}
                     </button>
-                    <button onClick={handleAddColumn} className="px-4 py-2 rounded-lg text-gray-700 text-xs font-medium whitespace-nowrap bg-white border border-gray-200 hover:border-blue-300 hover:text-blue-600 hover:shadow-sm transition-all">
+                    <div className="w-px h-8 bg-sage-200/50 mx-2 self-center"></div>
+                    <button onClick={handleAddColumn} className="px-5 py-2.5 rounded-xl text-ink-700 text-xs font-bold whitespace-nowrap bg-white border border-sage-200 hover:border-sage-400 hover:text-sage-700 hover:shadow-md hover:-translate-y-0.5 transition-all shadow-sm">
                         + 添加列
                     </button>
                     <div className="flex-1" />
-                    <button onClick={handleExport} className="px-4 py-2 rounded-lg text-gray-700 text-xs font-medium whitespace-nowrap bg-white border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all">
+                    <button onClick={handleExport} className="px-5 py-2.5 rounded-xl text-ink-700 text-xs font-bold whitespace-nowrap bg-white border border-sage-200 hover:border-sage-400 hover:shadow-md hover:-translate-y-0.5 transition-all shadow-sm">
                         📥 导出
                     </button>
-                    <button onClick={handleUpload} className="px-4 py-2 rounded-lg text-white text-xs font-medium whitespace-nowrap bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 shadow-sm hover:shadow-md transition-all">
+                    <button onClick={handleUpload} className="px-6 py-2.5 rounded-xl text-white text-xs font-bold whitespace-nowrap bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 hover:-translate-y-0.5 transition-all">
                         ☁️ 上传服务器
                     </button>
                 </div>
 
                 {/* Table Area */}
-                <div className="flex-1 overflow-auto mx-6 my-4 rounded-xl border border-gray-200 bg-white shadow-inner">
+                <div className="flex-1 overflow-auto mx-8 my-6 rounded-[1.5rem] border border-white/60 bg-white/50 shadow-sm ring-1 ring-sage-50 backdrop-blur-xl custom-scrollbar">
                     <table className="w-full border-collapse">
-                        <thead className="bg-gray-50 sticky top-0 z-10">
+                        <thead className="bg-sage-50/80 sticky top-0 z-10 backdrop-blur-md">
                             <tr>
-                                <th className="w-10 border-b border-r border-gray-200 p-2 bg-gray-50 text-gray-400 text-xs font-medium">#</th>
+                                <th className="w-12 border-b border-sage-100 p-3 text-sage-400 text-[10px] font-bold uppercase tracking-wider text-center">#</th>
                                 {headers.map(h => (
                                     <th
                                         key={h}
                                         onClick={() => !['学号', '姓名', '总分'].includes(h) && setSelectedCol(h === selectedCol ? null : h)}
-                                        className={`border-b border-r border-gray-200 p-3 text-gray-700 min-w-[80px] font-semibold text-xs uppercase tracking-wide cursor-pointer transition-all ${selectedCol === h
-                                                ? 'bg-blue-50 text-blue-600'
-                                                : 'bg-gray-50 hover:bg-gray-100'
-                                            } ${h === '总分' ? 'bg-emerald-50 text-emerald-700' : ''}`}
+                                        className={`border-b border-sage-100 p-4 min-w-[100px] text-xs font-bold uppercase tracking-wide cursor-pointer transition-all duration-200 ${selectedCol === h
+                                            ? 'bg-sage-100 text-sage-700'
+                                            : 'hover:bg-sage-100/50 text-ink-500'
+                                            } ${h === '总分' ? 'bg-emerald-50/50 text-emerald-700' : ''}`}
                                     >
-                                        {h}
+                                        <div className="flex items-center justify-center gap-1">
+                                            {h}
+                                            {['学号', '姓名', '总分'].includes(h) && <span className="w-1 h-1 rounded-full bg-sage-300"></span>}
+                                        </div>
                                     </th>
                                 ))}
                             </tr>
@@ -588,9 +594,9 @@ const MidtermGradeModal = ({ isOpen, onClose, fileName, data, classId, file, aut
                                 <tr
                                     key={row._id}
                                     onClick={() => setSelectedRowId(row._id)}
-                                    className={`cursor-pointer transition-colors ${selectedRowId === row._id ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                                    className={`cursor-pointer transition-all duration-200 group ${selectedRowId === row._id ? 'bg-sage-50 ring-1 ring-inset ring-sage-200' : 'hover:bg-white/60'}`}
                                 >
-                                    <td className="border-b border-r border-gray-100 bg-gray-50/50 text-center text-gray-400 text-xs font-mono select-none p-2">{idx + 1}</td>
+                                    <td className="border-b border-sage-50 group-hover:border-sage-100 text-center text-sage-300 text-[10px] font-mono select-none p-3 font-bold">{idx + 1}</td>
                                     {headers.map(col => {
                                         const isScore = !['学号', '姓名', '总分'].includes(col);
                                         const val = row[col];
@@ -599,23 +605,28 @@ const MidtermGradeModal = ({ isOpen, onClose, fileName, data, classId, file, aut
                                         return (
                                             <td
                                                 key={col}
-                                                className={`border-b border-r border-gray-100 p-2 text-center ${selectedCol === col ? 'bg-blue-50/50' : ''
-                                                    } ${hasComment ? 'bg-yellow-50' : ''} ${col === '总分' ? 'bg-emerald-50/30' : ''
+                                                className={`border-b border-sage-50 group-hover:border-sage-100 p-2 text-center transition-colors ${selectedCol === col ? 'bg-sage-50/50' : ''
+                                                    } ${hasComment ? 'bg-yellow-50/50 relative' : ''} ${col === '总分' ? 'bg-emerald-50/10 font-bold text-emerald-600' : 'text-ink-600'
                                                     }`}
                                                 onContextMenu={(e) => {
                                                     if (isScore) handleContextMenu(e, row._id, col);
                                                 }}
                                             >
+                                                {hasComment && (
+                                                    <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-yellow-400 ring-2 ring-white"></div>
+                                                )}
+
                                                 {isScore ? (
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); setSelectedRowId(row._id); handleValueClick(row._id, col, val, row['姓名'], row['学号']); }}
-                                                        className={`w-full h-full px-2 py-1 text-gray-700 hover:bg-gray-100 rounded text-sm text-center transition-colors ${hasComment ? 'ring-2 ring-yellow-300 ring-inset' : ''}`}
+                                                        className={`w-full h-full py-2 px-3 rounded-xl transition-all font-medium text-sm hover:scale-105 active:scale-95 ${val === "" || val === null ? "text-sage-300 bg-black/5 hover:bg-black/10" : "hover:bg-white hover:shadow-sm bg-transparent"
+                                                            } ${hasComment ? 'text-ink-800' : ''}`}
                                                         title={row[`_comment_${col}`]}
                                                     >
-                                                        {val || ''}
+                                                        {val === "" || val === null ? "-" : val}
                                                     </button>
                                                 ) : (
-                                                    <span className={`font-medium px-2 ${col === '总分' ? 'text-emerald-600 font-bold' : 'text-gray-800'}`}>
+                                                    <span className={`block py-2 px-3 text-sm ${col === '总分' ? '' : 'font-bold'}`}>
                                                         {val}
                                                     </span>
                                                 )}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Taskbar, { TaskbarItemType } from './Taskbar';
 import { Minus, X, Square, Copy, LogOut } from 'lucide-react'; // Square for Maximize, Copy for Restore (simulated)
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -33,6 +33,21 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
     const [showSchoolInfo, setShowSchoolInfo] = useState(false);
     const [showSchoolSchedule, setShowSchoolSchedule] = useState(false);
     const [showSchoolCalendar, setShowSchoolCalendar] = useState(false);
+
+    // Countdown Config (Now managed mostly by the widget itself, but checking if we need to auto-launch)
+    // Actually, if it's a separate window, Dashboard doesn't need to know its config.
+    // Dashboard just launches it.
+    // But auto-launch?
+    // User said: "If it was there (active), it should be there on startup".
+    // "On Startup" usually means when Dashboard loads, it checks if it should launch the widget.
+    // So we DO need to read 'countdown_visible' and launch it if true.
+
+    useEffect(() => {
+        const shouldShow = localStorage.getItem('countdown_visible') === 'true';
+        if (shouldShow) {
+            invoke('open_countdown_minimal_window');
+        }
+    }, []);
 
     const handleMinimize = () => getCurrentWindow().minimize();
     const handleClose = () => invoke('exit_app');
@@ -80,6 +95,10 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
                 console.error(e);
                 alert('创建文件盒子失败');
             }
+        } else if (toolId === 'countdown') {
+            console.log('Invoking open_countdown_edit_window...');
+            invoke('open_countdown_edit_window').then(() => console.log('Invoke success')).catch(e => console.error('Invoke failed:', e));
+            localStorage.setItem('countdown_visible', 'true');
         } else {
             console.log('Tool clicked:', toolId);
         }
@@ -114,64 +133,61 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
         // Windows 11 Internal Window
         // Animation: Fly upwards slightly + Fade
         return (
-            <div className="absolute inset-4 bottom-20 bg-white/95 backdrop-blur-3xl rounded-lg shadow-[0_0_20px_rgba(0,0,0,0.1),0_0_0_1px_rgba(0,0,0,0.05)] flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200">
+            <div className="absolute inset-4 bottom-24 bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-sage-100 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300">
                 {/* Window Header */}
-                <div className="h-10 flex items-center justify-between px-4 shrink-0 bg-transparent select-none draggable-region">
+                <div className="h-12 flex items-center justify-between px-6 shrink-0 bg-white border-b border-sage-50 select-none draggable-region">
                     <div className="flex items-center gap-3">
-                        <span className="text-sm font-semibold text-gray-700">
-                            {activeApp === 'folder' && '资源云盘'}
+                        <span className="text-base font-bold text-ink-800 tracking-wide">
+                            {activeApp === 'folder' && '桌面资源'}
                             {activeApp === 'class' && '班级管理'}
-                            {activeApp === 'schedule' && '课程表'}
+                            {activeApp === 'schedule' && '我的课表'}
                             {activeApp === 'user' && '个人中心'}
                         </span>
                     </div>
                     {/* Internal Window Controls (simulated) */}
-                    <div className="flex items-center">
-                        <button className="w-9 h-8 flex items-center justify-center hover:bg-black/5 rounded text-gray-500" onClick={() => setActiveApp(null)}>
-                            <Minus size={14} />
+                    <div className="flex items-center gap-2">
+                        <button className="w-8 h-8 flex items-center justify-center hover:bg-sage-50 rounded-full text-ink-400 transition-colors" onClick={() => setActiveApp(null)}>
+                            <Minus size={16} />
                         </button>
-                        <button className="w-9 h-8 flex items-center justify-center hover:bg-black/5 rounded text-gray-500">
-                            <Square size={12} />
+                        <button className="w-8 h-8 flex items-center justify-center hover:bg-sage-50 rounded-full text-ink-400 transition-colors">
+                            <Square size={14} />
                         </button>
-                        <button className="w-9 h-8 flex items-center justify-center hover:bg-red-600 hover:text-white rounded text-gray-500 transition-colors" onClick={() => setActiveApp(null)}>
-                            <X size={16} />
+                        <button className="w-8 h-8 flex items-center justify-center hover:bg-clay-100 hover:text-clay-600 rounded-full text-ink-400 transition-colors" onClick={() => setActiveApp(null)}>
+                            <X size={18} />
                         </button>
                     </div>
                 </div>
 
                 {/* Window Body */}
-                <div className="flex-1 p-6 overflow-auto bg-[#f9f9f9]/80">
+                <div className="flex-1 p-8 overflow-auto bg-paper">
                     {activeApp === 'folder' && (
                         <div className="h-full flex flex-col">
-                            <h2 className="text-xl font-semibold text-gray-800 mb-6 px-2">桌面管理</h2>
-                            <div className="grid grid-cols-4 gap-4">
+                            <h2 className="text-2xl font-bold text-ink-800 mb-8 px-2 tracking-tight">桌面资源</h2>
+                            <div className="grid grid-cols-4 gap-6">
                                 {[
-                                    { id: 'file_manager', name: '文件管理', icon: '📂', color: 'bg-blue-100 text-blue-600' },
-                                    { id: 'new_folder', name: '创建文件夹', icon: '➕', color: 'bg-yellow-100 text-yellow-600' },
-                                    { id: 'countdown', name: '倒计时', icon: '⏳', color: 'bg-red-100 text-red-600' },
-                                    { id: 'time', name: '时间', icon: '🕒', color: 'bg-purple-100 text-purple-600' },
-                                    { id: 'school_info', name: '配置学校信息', icon: '🏫', color: 'bg-emerald-100 text-emerald-600' },
-                                    { id: 'wallpaper', name: '壁纸', icon: '🖼️', color: 'bg-pink-100 text-pink-600' },
-                                    { id: 'schedule', name: '教师课程表', icon: '📅', color: 'bg-orange-100 text-orange-600' },
-                                    { id: 'school_course_schedule', name: '年级课程表', icon: '📅', color: 'bg-orange-200 text-orange-700' },
-                                    { id: 'calendar', name: '校历', icon: '🗓️', color: 'bg-cyan-100 text-cyan-600' },
-                                    { id: 'table', name: '表格', icon: '📊', color: 'bg-gray-100 text-gray-600' },
-                                    { id: 'text', name: '文本', icon: '📝', color: 'bg-indigo-100 text-indigo-600' },
-                                    { id: 'image', name: '图片', icon: '🏞️', color: 'bg-rose-100 text-rose-600' },
+                                    { id: 'file_manager', name: '文件管理', icon: '📂', color: 'bg-orange-100 text-orange-600' },
+                                    { id: 'new_folder', name: '新建文件夹', icon: '➕', color: 'bg-sage-100 text-sage-600' },
+                                    { id: 'countdown', name: '倒计时', icon: '⏳', color: 'bg-clay-500/10 text-clay-600' },
+                                    { id: 'time', name: '时钟', icon: '🕒', color: 'bg-blue-100 text-blue-600' },
+                                    { id: 'school_info', name: '学校配置', icon: '🏫', color: 'bg-emerald-100 text-emerald-600' },
+                                    { id: 'wallpaper', name: '壁纸设置', icon: '🖼️', color: 'bg-pink-100 text-pink-600' },
+                                    { id: 'schedule', name: '我的课表', icon: '📅', color: 'bg-amber-100 text-amber-600' },
+                                    { id: 'school_course_schedule', name: '班级课表', icon: '📅', color: 'bg-amber-200 text-amber-700' },
+                                    { id: 'calendar', name: '校历日程', icon: '🗓️', color: 'bg-cyan-100 text-cyan-600' },
                                     // New Tools
                                     { id: 'create_class_group', name: '创建班级群', icon: '🎓', color: 'bg-blue-100 text-blue-600' },
-                                    { id: 'create_normal_group', name: '创建讨论组', icon: '💬', color: 'bg-green-100 text-green-600' },
+                                    { id: 'create_normal_group', name: '创建讨论组', icon: '💬', color: 'bg-sage-200 text-sage-700' },
                                     { id: 'search_add', name: '查找添加', icon: '🔍', color: 'bg-purple-100 text-purple-600' },
                                 ].map((tool) => (
                                     <button
                                         key={tool.id}
                                         onClick={() => handleToolClick(tool.id)}
-                                        className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-white hover:shadow-sm transition-all duration-200 group active:scale-95 border border-transparent hover:border-gray-200"
+                                        className="flex flex-col items-center justify-center p-6 rounded-2xl bg-white shadow-[0_2px_10px_rgb(0,0,0,0.03)] hover:shadow-[0_8px_20px_rgb(0,0,0,0.06)] hover:-translate-y-1 transition-all duration-300 group border border-transparent hover:border-sage-200"
                                     >
-                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-3xl mb-3 shadow-sm ${tool.color} group-hover:scale-110 transition-transform duration-300`}>
+                                        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-4 ${tool.color} group-hover:scale-110 transition-transform duration-300`}>
                                             {tool.icon}
                                         </div>
-                                        <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">{tool.name}</span>
+                                        <span className="text-base font-bold text-ink-600 group-hover:text-ink-800 tracking-wide">{tool.name}</span>
                                     </button>
                                 ))}
                             </div>
@@ -237,45 +253,59 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
     };
 
     return (
-        <div className={`h-screen w-screen overflow-hidden relative font-['Segoe_UI',system-ui] select-none text-gray-800 bg-[#f3f3f3] transition-all duration-300 ${!isMaximized ? 'rounded-2xl border border-gray-400/30 shadow-[0_0_15px_rgba(0,0,0,0.3)]' : ''}`}>
-            {/* Windows 11 Mica-like Background */}
-            <div className="absolute inset-0 z-0 bg-cover bg-center opacity-80" style={{ backgroundImage: 'url("https://4.bing.com/th?id=OHR.BlueHourParis_EN-US8633396684_1920x1080.jpg&rf=LaDigue_1920x1080.jpg")' }}></div>
-            <div className="absolute inset-0 z-0 bg-white/40 backdrop-blur-[50px]"></div>
+        <div className={`h-screen w-screen overflow-hidden relative font-sans select-none text-ink-600 bg-paper transition-all duration-300 ${!isMaximized ? 'rounded-[2rem] border border-sage-200 shadow-2xl' : ''}`}>
+            {/* Background - Organic Paper Texture */}
+            <div className="absolute inset-0 z-0 bg-paper">
+                <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-sage-50/50 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2"></div>
+                <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-clay-500/5 rounded-full blur-[120px] translate-y-1/2 -translate-x-1/3"></div>
+            </div>
 
-            {/* Custom Title Bar (Windows Style) */}
-            <div data-tauri-drag-region className="absolute top-0 left-0 right-0 h-8 flex items-center justify-between z-[100]">
+            {/* Custom Title Bar (Clean) */}
+            <div data-tauri-drag-region className="absolute top-0 left-0 right-0 h-10 flex items-center justify-between z-[100] px-4">
                 {/* Title */}
-                <div className="px-3 text-xs text-gray-600 flex items-center gap-2 pointer-events-none">
-                    <span className="font-semibold">Teacher Assistant</span>
+                <div className="text-xs font-bold text-ink-400 flex items-center gap-2 pointer-events-none uppercase tracking-widest">
+                    Teacher Assistant
                 </div>
 
-                {/* Window Controls (Windows 11 Style) */}
-                <div className="flex items-start h-full">
-                    <button onClick={handleMinimize} className="w-11 h-full flex items-center justify-center hover:bg-black/5 hover:text-black text-gray-600 transition-colors active:bg-black/10">
-                        <Minus size={16} strokeWidth={1.5} />
+                {/* Window Controls */}
+                <div className="flex items-center gap-2 h-full py-2">
+                    <button onClick={handleMinimize} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-sage-100 text-ink-400 transition-colors">
+                        <Minus size={16} strokeWidth={2} />
                     </button>
-                    <button onClick={handleMaximize} className="w-11 h-full flex items-center justify-center hover:bg-black/5 hover:text-black text-gray-600 transition-colors active:bg-black/10">
-                        {isMaximized ? <Copy size={14} className="rotate-180" strokeWidth={1.5} /> : <Square size={14} strokeWidth={1.5} />}
+                    <button onClick={handleMaximize} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-sage-100 text-ink-400 transition-colors">
+                        {isMaximized ? <Copy size={14} className="rotate-180" strokeWidth={2} /> : <Square size={14} strokeWidth={2} />}
                     </button>
-                    <button onClick={handleClose} className="w-11 h-full flex items-center justify-center hover:bg-[#c42b1c] hover:text-white text-gray-600 transition-colors active:bg-[#b02619]">
-                        <X size={16} strokeWidth={1.5} />
+                    <button onClick={handleClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-clay-100 hover:text-clay-600 text-ink-400 transition-colors">
+                        <X size={16} strokeWidth={2} />
                     </button>
                 </div>
             </div>
 
             {/* Main Desktop Area */}
-            <div className="absolute inset-0 z-10 pt-8 pb-14">
+            <div className="absolute inset-0 z-10 pt-12 pb-24 px-8">
                 {/* Welcome Message (if no app open) */}
                 {activeApp === null && (
-                    <div className="h-full flex flex-col items-center justify-center text-center space-y-4 animate-in fade-in duration-500">
-                        <div className="w-20 h-20 rounded-full bg-blue-100 flex items-center justify-center mb-4 text-blue-600 font-bold text-2xl shadow-xl">
-                            {userInfo?.name?.[0] || 'T'}
+                    <div className="h-full flex flex-col items-center justify-center text-center -mt-10 animate-in fade-in duration-700 slide-in-from-bottom-8">
+                        <div className="w-24 h-24 rounded-3xl bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex items-center justify-center mb-8 border border-sage-50 relative overflow-hidden group hover:scale-105 transition-transform duration-500">
+                            {(userInfo?.avatar || userInfo?.icon || userInfo?.face_url) ? (
+                                <img
+                                    src={userInfo?.avatar || userInfo?.icon || userInfo?.face_url}
+                                    alt="Avatar"
+                                    className="w-full h-full object-cover"
+                                />
+                            ) : (
+                                <div className="w-full h-full bg-gradient-to-br from-sage-50 to-sage-100 flex items-center justify-center text-sage-500 font-bold text-3xl">
+                                    {userInfo?.name?.[0] || '师'}
+                                </div>
+                            )}
+                            {/* Shine effect */}
+                            <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 rotate-45 pointer-events-none"></div>
                         </div>
-                        <h1 className="text-3xl font-semibold text-gray-800 drop-shadow-sm">
+                        <h1 className="text-4xl font-bold text-ink-800 mb-3 tracking-tight">
                             {new Date().getHours() < 12 ? '早上好' : '下午好'}，{userInfo?.name || '老师'}
                         </h1>
-                        <p className="text-gray-600 text-base">
-                            {new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                        <p className="text-ink-400 text-lg font-medium">
+                            {new Date().toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                         </p>
                     </div>
                 )}

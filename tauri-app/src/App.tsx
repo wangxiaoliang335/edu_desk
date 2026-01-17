@@ -9,6 +9,8 @@ import NormalGroupChatWindow from "./components/NormalGroupChatWindow";
 import DesktopFileBox from "./components/DesktopFileBox";
 import TeacherSchedule from "./components/TeacherSchedule";
 import SchoolCalendar from "./components/SchoolCalendar";
+import CountdownWindow from "./components/CountdownWindow";
+import CountdownEditWindow from "./components/CountdownEditWindow";
 
 import { invoke } from "@tauri-apps/api/core";
 import { loginTIM, getTIMGroups, setCachedTIMGroups } from "./utils/tim";
@@ -98,7 +100,7 @@ function MainApp() {
   };
 
   return (
-    <div className="h-screen w-screen overflow-hidden text-white selection:bg-blue-500 selection:text-white">
+    <div className="h-screen w-screen overflow-hidden text-ink-600 selection:bg-sage-500 selection:text-white">
       {!isLoggedIn ? (
         <Login onLoginSuccess={handleLoginSuccess} />
       ) : (
@@ -121,6 +123,8 @@ function App() {
         <Route path="/file-box/:boxId" element={<DesktopFileBox />} />
         <Route path="/teacher-schedule" element={<TeacherSchedule />} />
         <Route path="/school-calendar" element={<SchoolCalendar />} />
+        <Route path="/countdown" element={<CountdownWindow />} />
+        <Route path="/countdown-edit" element={<CountdownEditWindow />} />
       </Routes>
     </BrowserRouter>
   );

@@ -344,35 +344,38 @@ const StudentImportModal = ({ isOpen, onClose, classId, onSuccess }: StudentImpo
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="w-[900px] h-[700px] bg-white dark:bg-[#1a1b1e] rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm font-sans animate-in fade-in duration-300">
+            <div className="w-[900px] h-[750px] bg-paper/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden ring-1 ring-sage-100/50 border border-white/50 animate-in zoom-in-95 duration-300">
 
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800">
-                    <div className="flex items-center gap-2">
-                        <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg">
-                            <FileSpreadsheet className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                <div className="flex items-center justify-between px-8 py-6 border-b border-sage-100/50 bg-white/30 backdrop-blur-md relative z-10">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-gradient-to-br from-sage-400 to-sage-600 rounded-2xl flex items-center justify-center shadow-lg shadow-sage-500/20 text-white">
+                            <FileSpreadsheet className="w-6 h-6" />
                         </div>
-                        <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100">
-                            导入座位表布局
-                        </h2>
+                        <div>
+                            <h2 className="text-2xl font-bold text-ink-800 tracking-tight">
+                                导入座位表布局
+                            </h2>
+                            <p className="text-sm font-medium text-ink-400 mt-0.5">Import Seat Arrangement</p>
+                        </div>
                     </div>
                     <button
                         onClick={onClose}
-                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+                        className="w-10 h-10 flex items-center justify-center hover:bg-clay-50 text-sage-400 hover:text-clay-600 rounded-full transition-all duration-300"
                     >
-                        <X className="w-5 h-5 text-gray-500" />
+                        <X className="w-6 h-6" />
                     </button>
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 p-6 flex flex-col gap-6 overflow-hidden">
+                <div className="flex-1 p-8 flex flex-col gap-8 overflow-hidden bg-white/40">
 
                     {/* File Upload Area */}
                     <div className="flex-none">
                         <div
                             onClick={() => fileInputRef.current?.click()}
-                            className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-blue-500 dark:hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all group"
+                            className="relative group border-2 border-dashed border-sage-200/60 rounded-[2rem] p-10 flex flex-col items-center justify-center gap-4 cursor-pointer hover:border-sage-400 hover:bg-white/60 transition-all duration-300 bg-white/20"
                         >
                             <input
                                 type="file"
@@ -381,15 +384,15 @@ const StudentImportModal = ({ isOpen, onClose, classId, onSuccess }: StudentImpo
                                 accept=".xlsx,.xls"
                                 className="hidden"
                             />
-                            <div className="bg-blue-100 dark:bg-blue-900/50 p-4 rounded-full group-hover:scale-110 transition-transform">
-                                <Upload className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+                            <div className="w-16 h-16 bg-sage-50 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:bg-sage-100 transition-all duration-300 shadow-sm border border-sage-100">
+                                <Upload className="w-8 h-8 text-sage-500 group-hover:text-sage-600" />
                             </div>
                             <div className="text-center">
-                                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                <p className="text-lg font-bold text-ink-700 group-hover:text-sage-700 transition-colors">
                                     {fileName ? fileName : "点击选择座位表 Excel 文件"}
                                 </p>
-                                <p className="text-xs text-gray-500 mt-1">
-                                    支持 .xlsx, .xls 格式，需包含“讲台”标识
+                                <p className="text-sm text-ink-400 mt-1 font-medium bg-white/50 px-3 py-1 rounded-full inline-block mt-2">
+                                    支持 .xlsx, .xls 格式 · 需包含“讲台”标识
                                 </p>
                             </div>
                         </div>
@@ -397,15 +400,19 @@ const StudentImportModal = ({ isOpen, onClose, classId, onSuccess }: StudentImpo
 
                     {/* Preview Grid */}
                     {previewGrid.length > 0 && (
-                        <div className="flex-1 flex flex-col min-h-0">
-                            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-                                布局预览 <span className="text-xs font-normal text-gray-500">({parsedSeats.length} 个座位的学生信息)</span>
+                        <div className="flex-1 flex flex-col min-h-0 bg-white/60 rounded-3xl p-6 border border-white/60 shadow-sm ring-1 ring-sage-50">
+                            <h3 className="text-sm font-bold text-ink-500 mb-4 flex items-center gap-2 px-2">
+                                <span className="w-2 h-2 rounded-full bg-sage-400"></span>
+                                布局预览
+                                <span className="text-xs font-medium text-sage-400 bg-sage-50 px-2 py-0.5 rounded-full border border-sage-100">
+                                    {parsedSeats.length} 个座位
+                                </span>
                             </h3>
-                            <div className="flex-1 overflow-auto border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-gray-50 dark:bg-[#151618]">
+                            <div className="flex-1 overflow-auto custom-scrollbar rounded-xl bg-sage-50/30 p-4 border border-sage-100/50">
                                 <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(11, minmax(60px, 1fr))' }}>
                                     {/* Column Headers (1-11) */}
                                     {Array.from({ length: 11 }).map((_, i) => (
-                                        <div key={`h-${i}`} className="text-center text-xs text-gray-400 font-mono mb-1">
+                                        <div key={`h-${i}`} className="text-center text-[10px] text-sage-400 font-bold mb-1">
                                             {i + 1}
                                         </div>
                                     ))}
@@ -416,14 +423,14 @@ const StudentImportModal = ({ isOpen, onClose, classId, onSuccess }: StudentImpo
                                             <div
                                                 key={`${rIdx}-${cIdx}`}
                                                 className={`
-                                                    h-10 flex items-center justify-center text-xs rounded border transition-colors
+                                                    h-11 flex items-center justify-center text-xs rounded-lg border transition-all duration-200
                                                     ${cell
-                                                        ? 'bg-white dark:bg-[#25262b] border-blue-200 dark:border-blue-800 text-gray-800 dark:text-gray-200 shadow-sm'
-                                                        : 'border-transparent text-gray-300 dark:text-gray-700'
+                                                        ? 'bg-white border-sage-200 text-ink-700 shadow-sm font-bold hover:scale-105 hover:shadow-md hover:border-sage-300 hover:z-10 relative'
+                                                        : 'border-transparent text-sage-200'
                                                     }
                                                 `}
                                             >
-                                                <span className="truncate px-1" title={cell}>{cell || '·'}</span>
+                                                <span className="truncate px-1.5" title={cell}>{cell || '·'}</span>
                                             </div>
                                         ))
                                     ))}
@@ -434,31 +441,31 @@ const StudentImportModal = ({ isOpen, onClose, classId, onSuccess }: StudentImpo
 
                     {/* Messages */}
                     {error && (
-                        <div className="flex items-center gap-2 text-red-600 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg text-sm animate-in slide-in-from-top-2">
-                            <AlertCircle className="w-4 h-4" />
-                            {error}
+                        <div className="flex items-center gap-3 text-clay-600 bg-clay-50 p-4 rounded-2xl text-sm animate-in slide-in-from-bottom-2 border border-clay-100 shadow-sm">
+                            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                            <span className="font-medium">{error}</span>
                         </div>
                     )}
                     {successMsg && (
-                        <div className="flex items-center gap-2 text-green-600 bg-green-50 dark:bg-green-900/20 p-3 rounded-lg text-sm animate-in slide-in-from-top-2">
-                            <CheckCircle2 className="w-4 h-4" />
-                            {successMsg}
+                        <div className="flex items-center gap-3 text-sage-700 bg-sage-50 p-4 rounded-2xl text-sm animate-in slide-in-from-bottom-2 border border-sage-100 shadow-sm">
+                            <CheckCircle2 className="w-5 h-5 flex-shrink-0 text-sage-500" />
+                            <span className="font-bold">{successMsg}</span>
                         </div>
                     )}
                 </div>
 
                 {/* Footer */}
-                <div className="p-6 pt-0 flex justify-end gap-3">
+                <div className="p-8 pt-0 flex justify-end gap-4">
                     <button
                         onClick={onClose}
-                        className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                        className="px-6 py-3 text-sm font-bold text-ink-500 hover:text-ink-700 hover:bg-white border border-transparent hover:border-sage-200 rounded-2xl transition-all"
                     >
                         取消
                     </button>
                     <button
                         onClick={handleConfirm}
                         disabled={loading || parsedSeats.length === 0}
-                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors flex items-center gap-2"
+                        className="px-8 py-3 text-sm font-bold text-white bg-sage-600 hover:bg-sage-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-2xl shadow-lg shadow-sage-500/20 hover:-translate-y-0.5 transition-all flex items-center gap-2 active:scale-95"
                     >
                         {loading && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
                         确认导入

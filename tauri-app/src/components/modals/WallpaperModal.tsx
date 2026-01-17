@@ -387,7 +387,7 @@ const WallpaperModal = ({ isOpen, onClose, groupId }: WallpaperModalProps) => {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-300 font-sans">
             {renderDragGhost()}
 
             {/* Hidden file input for upload */}
@@ -400,51 +400,51 @@ const WallpaperModal = ({ isOpen, onClose, groupId }: WallpaperModalProps) => {
             />
             <div
                 style={style}
-                className="bg-white rounded-2xl shadow-2xl w-[900px] h-[650px] flex flex-col overflow-hidden border border-gray-100"
+                className="bg-paper/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl w-[900px] h-[650px] flex flex-col overflow-hidden border border-white/60 ring-1 ring-sage-100/50 animate-in zoom-in-95 duration-200"
             >
                 {/* Header */}
                 <div
                     onMouseDown={handleMouseDown}
-                    className="h-14 flex items-center justify-between px-5 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100 cursor-move select-none"
+                    className="h-20 flex items-center justify-between px-8 border-b border-sage-100/50 bg-white/40 backdrop-blur-md cursor-move select-none"
                 >
-                    <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 bg-purple-100 rounded-xl flex items-center justify-center">
-                            <ImageIcon size={18} className="text-purple-600" />
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-400 to-violet-600 text-white flex items-center justify-center shadow-lg shadow-violet-500/20">
+                            <ImageIcon size={24} />
                         </div>
-                        <h3 className="font-bold text-gray-800 text-lg">班级壁纸</h3>
+                        <h3 className="font-bold text-ink-800 text-xl tracking-tight">班级壁纸</h3>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
                         {/* Weekly Wallpaper Toggle */}
                         {activeTab === 'class' && (
                             <button
                                 onClick={() => setShowWeeklyPanel(!showWeeklyPanel)}
-                                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 mr-2 ${showWeeklyPanel
-                                    ? 'bg-orange-500 text-white'
-                                    : 'bg-orange-100 text-orange-600 hover:bg-orange-200'
+                                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 mr-2 ${showWeeklyPanel
+                                    ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
+                                    : 'bg-orange-50 text-orange-600 border border-orange-100 hover:bg-orange-100'
                                     }`}
                             >
-                                <Calendar size={14} />
+                                <Calendar size={16} />
                                 一周壁纸
-                                {weeklyEnabled && <span className="w-1.5 h-1.5 bg-green-400 rounded-full" />}
+                                {weeklyEnabled && <span className="w-2 h-2 bg-emerald-400 rounded-full border border-white" />}
                             </button>
                         )}
 
                         {/* Tabs */}
-                        <div className="flex bg-gray-100 rounded-xl p-1 mr-2">
+                        <div className="flex bg-sage-100/50 rounded-xl p-1.5 gap-1 mr-2">
                             <button
                                 onClick={() => setActiveTab('class')}
-                                className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${activeTab === 'class'
-                                    ? 'bg-white text-gray-800 shadow-sm'
-                                    : 'text-gray-500 hover:text-gray-700'
+                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'class'
+                                    ? 'bg-white text-ink-800 shadow-sm'
+                                    : 'text-sage-500 hover:text-sage-700 hover:bg-white/50'
                                     }`}
                             >
                                 班级壁纸
                             </button>
                             <button
                                 onClick={() => setActiveTab('library')}
-                                className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${activeTab === 'library'
-                                    ? 'bg-white text-gray-800 shadow-sm'
-                                    : 'text-gray-500 hover:text-gray-700'
+                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'library'
+                                    ? 'bg-white text-ink-800 shadow-sm'
+                                    : 'text-sage-500 hover:text-sage-700 hover:bg-white/50'
                                     }`}
                             >
                                 壁纸库
@@ -456,9 +456,9 @@ const WallpaperModal = ({ isOpen, onClose, groupId }: WallpaperModalProps) => {
                             <button
                                 onClick={handleAction}
                                 disabled={!selectedId || actionLoading}
-                                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 ${!selectedId
-                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                    : 'bg-purple-500 text-white hover:bg-purple-600 shadow-lg shadow-purple-200'
+                                className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${!selectedId
+                                    ? 'bg-sage-100 text-sage-400 cursor-not-allowed'
+                                    : 'bg-violet-500 text-white hover:bg-violet-600 shadow-lg shadow-violet-500/20 hover:-translate-y-0.5'
                                     }`}
                             >
                                 {actionLoading ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
@@ -468,9 +468,9 @@ const WallpaperModal = ({ isOpen, onClose, groupId }: WallpaperModalProps) => {
                             <button
                                 onClick={handleAction}
                                 disabled={!selectedId || actionLoading}
-                                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 ${!selectedId
-                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                    : 'bg-blue-500 text-white hover:bg-blue-600 shadow-lg shadow-blue-200'
+                                className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${!selectedId
+                                    ? 'bg-sage-100 text-sage-400 cursor-not-allowed'
+                                    : 'bg-blue-500 text-white hover:bg-blue-600 shadow-lg shadow-blue-500/20 hover:-translate-y-0.5'
                                     }`}
                             >
                                 {actionLoading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
@@ -480,39 +480,42 @@ const WallpaperModal = ({ isOpen, onClose, groupId }: WallpaperModalProps) => {
 
                         <button
                             onClick={onClose}
-                            className="ml-1 w-9 h-9 flex items-center justify-center hover:bg-gray-100 rounded-xl text-gray-400 hover:text-gray-600 transition-colors"
+                            className="ml-2 w-10 h-10 flex items-center justify-center rounded-full text-sage-400 hover:text-clay-600 hover:bg-clay-50 transition-all duration-300"
                         >
-                            <X size={18} />
+                            <X size={20} />
                         </button>
                     </div>
                 </div>
 
                 {/* Weekly Wallpaper Panel */}
                 {showWeeklyPanel && activeTab === 'class' && (
-                    <div className="bg-gradient-to-r from-orange-50 to-amber-50 border-b border-orange-200 p-4">
-                        <div className="flex items-center justify-between mb-3">
-                            <span className="text-sm font-semibold text-orange-700">拖拽下方壁纸到对应日期</span>
+                    <div className="bg-violet-50/50 border-b border-violet-100/50 p-5 backdrop-blur-sm animate-in slide-in-from-top-2 duration-200">
+                        <div className="flex items-center justify-between mb-4">
+                            <span className="text-sm font-bold text-violet-800 flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-violet-400"></span>
+                                拖拽下方壁纸到对应日期
+                            </span>
                             <button
                                 onClick={saveWeeklySchedule}
                                 disabled={savingWeekly}
-                                className="px-4 py-1.5 bg-orange-500 text-white rounded-lg text-sm font-semibold hover:bg-orange-600 transition-colors flex items-center gap-1.5"
+                                className="px-5 py-1.5 bg-violet-500 text-white rounded-xl text-xs font-bold hover:bg-violet-600 transition-all shadow-md shadow-violet-500/10 flex items-center gap-1.5"
                             >
                                 {savingWeekly ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                                应用
+                                应用设置
                             </button>
                         </div>
-                        <div className="grid grid-cols-7 gap-2">
+                        <div className="grid grid-cols-7 gap-3">
                             {DAYS.map(day => (
                                 <div
                                     key={day.key}
                                     data-drop-zone={day.key}
                                     className="flex flex-col items-center cursor-default group/day relative z-10"
                                 >
-                                    <span className="text-xs font-semibold text-orange-600 mb-1 pointer-events-none">{day.label}</span>
+                                    <span className="text-xs font-bold text-violet-600 mb-2 pointer-events-none">{day.label}</span>
                                     <div
-                                        className={`w-16 h-20 rounded-lg border-2 border-dashed flex items-center justify-center overflow-hidden transition-all pointer-events-none ${weeklySchedule[day.key]
-                                            ? 'border-orange-300 bg-white'
-                                            : 'border-orange-200 bg-orange-100/50 group-hover/day:border-orange-400'
+                                        className={`w-full aspect-[3/4] rounded-2xl border-2 border-dashed flex items-center justify-center overflow-hidden transition-all pointer-events-none ${weeklySchedule[day.key]
+                                            ? 'border-violet-300 bg-white/80 shadow-sm'
+                                            : 'border-violet-200/60 bg-white/40 group-hover/day:border-violet-400 group-hover/day:bg-white/60'
                                             }`}
                                     >
                                         {weeklySchedule[day.key] ? (
@@ -528,13 +531,13 @@ const WallpaperModal = ({ isOpen, onClose, groupId }: WallpaperModalProps) => {
                                                         e.preventDefault();
                                                         handleRemoveFromDay(day.key);
                                                     }}
-                                                    className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-auto cursor-pointer"
+                                                    className="absolute top-1 right-1 w-5 h-5 bg-clay-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:scale-110 pointer-events-auto cursor-pointer shadow-sm"
                                                 >
-                                                    <X size={10} />
+                                                    <X size={12} strokeWidth={3} />
                                                 </button>
                                             </div>
                                         ) : (
-                                            <ImageIcon size={16} className="text-orange-300 pointer-events-none" />
+                                            <ImageIcon size={20} className="text-violet-200 pointer-events-none" />
                                         )}
                                     </div>
                                 </div>
@@ -544,39 +547,39 @@ const WallpaperModal = ({ isOpen, onClose, groupId }: WallpaperModalProps) => {
                 )}
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-5 bg-gray-50/30">
+                <div className="flex-1 overflow-y-auto p-6 bg-white/30 custom-scrollbar">
                     {loading ? (
                         <div className="flex flex-col items-center justify-center h-full gap-3">
-                            <Loader2 className="animate-spin text-purple-500" size={36} />
-                            <span className="text-gray-400 text-sm">加载中...</span>
+                            <Loader2 className="animate-spin text-violet-500" size={32} />
+                            <span className="text-sage-500 text-sm font-medium">加载中...</span>
                         </div>
                     ) : error ? (
                         <div className="flex flex-col items-center justify-center h-full gap-3">
-                            <span className="text-red-400 font-medium">{error}</span>
-                            <button onClick={fetchWallpapers} className="flex items-center gap-2 text-blue-500 hover:text-blue-600 font-medium">
+                            <span className="text-clay-500 font-bold">{error}</span>
+                            <button onClick={fetchWallpapers} className="flex items-center gap-2 text-violet-500 hover:text-violet-600 font-bold px-4 py-2 hover:bg-violet-50 rounded-xl transition-all">
                                 <RefreshCw size={16} />
                                 重试
                             </button>
                         </div>
                     ) : wallpapers.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-full gap-4">
-                            <div className="w-20 h-20 bg-gray-100 rounded-2xl flex items-center justify-center">
-                                <ImageIcon size={36} className="text-gray-300" />
+                        <div className="flex flex-col items-center justify-center h-full gap-5">
+                            <div className="w-24 h-24 bg-sage-50 rounded-[2rem] flex items-center justify-center border border-sage-100">
+                                <ImageIcon size={40} className="text-sage-300" />
                             </div>
-                            <p className="text-gray-400 font-medium">暂无壁纸</p>
+                            <p className="text-sage-400 font-bold text-lg">暂无壁纸</p>
                             {activeTab === 'class' && (
                                 <button
                                     onClick={handleSelectFile}
                                     disabled={uploading}
-                                    className="px-5 py-2.5 bg-purple-500 text-white rounded-xl font-semibold flex items-center gap-2 hover:bg-purple-600 transition-all shadow-lg shadow-purple-200"
+                                    className="px-6 py-3 bg-violet-500 text-white rounded-2xl font-bold flex items-center gap-2 hover:bg-violet-600 transition-all shadow-lg shadow-violet-500/20 hover:-translate-y-0.5"
                                 >
-                                    {uploading ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+                                    {uploading ? <Loader2 size={20} className="animate-spin" /> : <Upload size={20} />}
                                     上传壁纸
                                 </button>
                             )}
                         </div>
                     ) : (
-                        <div className="grid grid-cols-5 gap-4">
+                        <div className="grid grid-cols-5 gap-5">
                             {wallpapers.map(wp => {
                                 const isSelected = selectedId === wp.id;
                                 const isCurrent = activeTab === 'class' && wp.is_current === 1;
@@ -585,32 +588,32 @@ const WallpaperModal = ({ isOpen, onClose, groupId }: WallpaperModalProps) => {
                                         key={wp.id}
                                         onMouseDown={(e) => startDrag(e, wp)}
                                         onClick={() => setSelectedId(wp.id)}
-                                        className={`group relative aspect-[3/4] bg-white rounded-xl overflow-hidden cursor-pointer border-2 transition-all shadow-sm hover:shadow-md ${isSelected
-                                            ? 'border-purple-500 shadow-purple-100'
-                                            : 'border-gray-100 hover:border-gray-200'
+                                        className={`group relative aspect-[3/4] bg-white rounded-2xl overflow-hidden cursor-pointer border-2 transition-all shadow-sm hover:shadow-lg ${isSelected
+                                            ? 'border-violet-500 shadow-violet-200/50 scale-[1.02]'
+                                            : 'border-white/60 hover:border-violet-200'
                                             } ${activeTab === 'class' && showWeeklyPanel ? 'cursor-grab active:cursor-grabbing' : ''}`}
                                     >
                                         <img src={wp.image_url} alt={wp.name} className="w-full h-full object-cover" />
 
                                         {/* Name Overlay */}
-                                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-3 text-center">
-                                            <span className="text-white text-xs font-medium truncate block">
+                                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 pt-6 text-center transform translate-y-full group-hover:translate-y-0 transition-transform duration-300">
+                                            <span className="text-white text-xs font-bold truncate block">
                                                 {wp.name || `壁纸 ${wp.id}`}
                                             </span>
                                         </div>
 
                                         {/* Current Badge */}
                                         {isCurrent && (
-                                            <div className="absolute top-2 right-2 bg-green-500 text-white text-[10px] px-2 py-1 rounded-lg shadow font-semibold">
-                                                当前使用
+                                            <div className="absolute top-3 right-3 bg-emerald-100/90 backdrop-blur-sm text-emerald-700 text-[10px] px-2.5 py-1 rounded-lg border border-emerald-200 font-bold shadow-sm">
+                                                使用中
                                             </div>
                                         )}
 
-                                        {/* Selected Border */}
+                                        {/* Selected Border/Indicator */}
                                         {isSelected && (
-                                            <div className="absolute inset-0 border-3 border-purple-500 rounded-xl pointer-events-none">
-                                                <div className="absolute top-2 left-2 w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center">
-                                                    <Check size={14} className="text-white" />
+                                            <div className="absolute inset-0 border-[3px] border-violet-500 rounded-2xl pointer-events-none">
+                                                <div className="absolute top-2 left-2 w-7 h-7 bg-violet-500 rounded-full flex items-center justify-center shadow-md">
+                                                    <Check size={16} className="text-white" strokeWidth={3} />
                                                 </div>
                                             </div>
                                         )}
@@ -622,19 +625,19 @@ const WallpaperModal = ({ isOpen, onClose, groupId }: WallpaperModalProps) => {
                             {activeTab === 'class' && (
                                 <div
                                     onClick={handleSelectFile}
-                                    className="aspect-[3/4] bg-white border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-purple-300 hover:bg-purple-50/50 transition-all group"
+                                    className="aspect-[3/4] bg-white/50 border-2 border-dashed border-sage-200 rounded-2xl flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-violet-300 hover:bg-violet-50/50 transition-all group"
                                 >
                                     {uploading ? (
                                         <>
-                                            <Loader2 size={28} className="animate-spin text-purple-500" />
-                                            <span className="text-xs text-gray-400">上传中...</span>
+                                            <Loader2 size={32} className="animate-spin text-violet-500" />
+                                            <span className="text-xs font-bold text-violet-400">上传中...</span>
                                         </>
                                     ) : (
                                         <>
-                                            <div className="w-12 h-12 bg-gray-100 group-hover:bg-purple-100 rounded-xl flex items-center justify-center transition-colors">
-                                                <Upload size={24} className="text-gray-400 group-hover:text-purple-500 transition-colors" />
+                                            <div className="w-14 h-14 bg-white/80 group-hover:bg-violet-100 rounded-2xl flex items-center justify-center transition-colors shadow-sm">
+                                                <Upload size={24} className="text-sage-400 group-hover:text-violet-500 transition-colors" />
                                             </div>
-                                            <span className="text-xs text-gray-400 font-medium">添加壁纸</span>
+                                            <span className="text-xs text-sage-500 font-bold group-hover:text-violet-600 transition-colors">添加壁纸</span>
                                         </>
                                     )}
                                 </div>

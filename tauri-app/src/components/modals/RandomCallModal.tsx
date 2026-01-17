@@ -314,35 +314,38 @@ const RandomCallModal = ({ isOpen, onClose, classId, students: initialStudents =
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/20 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-300 font-sans">
             <div
                 style={style}
-                className="bg-white rounded-2xl shadow-xl w-[500px] overflow-hidden border border-gray-100 flex flex-col"
+                className="bg-paper/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl w-[500px] overflow-hidden border border-white/60 ring-1 ring-sage-100/50 flex flex-col animate-in zoom-in-95 duration-200"
             >
                 {/* Header */}
                 <div
                     onMouseDown={handleMouseDown}
-                    className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 flex items-center justify-between border-b border-gray-100 cursor-move select-none"
+                    className="p-5 flex items-center justify-between border-b border-sage-100/50 bg-white/40 backdrop-blur-md cursor-move select-none"
                 >
-                    <div className="flex items-center gap-2 font-bold text-lg text-blue-700">
-                        <div className="p-1.5 bg-blue-100 rounded-lg">
-                            <Shuffle size={18} className="text-blue-600" />
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-400 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                            <Shuffle size={20} />
                         </div>
-                        <span>随机点名</span>
+                        <span className="font-bold text-ink-800 text-lg tracking-tight">随机点名</span>
                     </div>
-                    <button onClick={onClose} className="p-1.5 hover:bg-white text-gray-400 hover:text-gray-700 rounded-full transition-all">
+                    <button
+                        onClick={onClose}
+                        className="w-9 h-9 flex items-center justify-center rounded-full text-sage-400 hover:text-clay-600 hover:bg-clay-50 transition-all duration-300"
+                    >
                         <X size={20} />
                     </button>
                 </div>
 
                 {/* Filter Section */}
-                <div className="px-6 py-4 bg-white border-b border-gray-50 flex gap-3">
+                <div className="px-6 py-4 bg-white/30 border-b border-sage-100/50 flex gap-3 backdrop-blur-sm">
                     {/* Table Select */}
-                    <div className="flex-1">
-                        <label className="text-xs font-bold text-gray-400 mb-1 block uppercase tracking-wide">筛选表格</label>
+                    <div className="flex-1 group">
+                        <label className="text-xs font-bold text-sage-500 mb-1.5 block uppercase tracking-wide pl-1">筛选表格</label>
                         <div className="relative">
                             <select
-                                className="w-full appearance-none bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg py-2 px-3 pr-8 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium"
+                                className="w-full appearance-none bg-white border border-sage-200 text-ink-700 text-sm rounded-xl py-2.5 px-3 pr-8 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all font-bold shadow-sm"
                                 value={selectedTableId}
                                 onChange={(e) => setSelectedTableId(e.target.value)}
                                 disabled={loading || tables.length === 0}
@@ -350,16 +353,16 @@ const RandomCallModal = ({ isOpen, onClose, classId, students: initialStudents =
                                 {tables.length === 0 && <option>暂无属性表</option>}
                                 {tables.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                             </select>
-                            <Filter className="absolute right-2.5 top-2.5 text-gray-400 pointer-events-none" size={14} />
+                            <Filter className="absolute right-3 top-1/2 -translate-y-1/2 text-sage-400 pointer-events-none group-hover:text-indigo-500 transition-colors" size={14} />
                         </div>
                     </div>
 
                     {/* Attribute Select */}
-                    <div className="w-1/4">
-                        <label className="text-xs font-bold text-gray-400 mb-1 block uppercase tracking-wide">属性</label>
+                    <div className="w-1/4 group">
+                        <label className="text-xs font-bold text-sage-500 mb-1.5 block uppercase tracking-wide pl-1">属性</label>
                         <div className="relative">
                             <select
-                                className="w-full appearance-none bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg py-2 px-3 pr-8 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium"
+                                className="w-full appearance-none bg-white border border-sage-200 text-ink-700 text-sm rounded-xl py-2.5 px-3 pr-8 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all font-bold shadow-sm"
                                 value={selectedAttribute}
                                 onChange={(e) => setSelectedAttribute(e.target.value)}
                                 disabled={availableAttributes.length === 0}
@@ -367,16 +370,16 @@ const RandomCallModal = ({ isOpen, onClose, classId, students: initialStudents =
                                 {availableAttributes.length === 0 && <option>-</option>}
                                 {availableAttributes.map(a => <option key={a} value={a}>{a}</option>)}
                             </select>
-                            <ChevronDown className="absolute right-2.5 top-2.5 text-gray-400 pointer-events-none" size={14} />
+                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-sage-400 pointer-events-none group-hover:text-indigo-500 transition-colors" size={14} />
                         </div>
                     </div>
 
                     {/* Value Select */}
-                    <div className="w-1/4">
-                        <label className="text-xs font-bold text-gray-400 mb-1 block uppercase tracking-wide">条件</label>
+                    <div className="w-1/4 group">
+                        <label className="text-xs font-bold text-sage-500 mb-1.5 block uppercase tracking-wide pl-1">条件</label>
                         <div className="relative">
                             <select
-                                className="w-full appearance-none bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg py-2 px-3 pr-8 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium"
+                                className="w-full appearance-none bg-white border border-sage-200 text-ink-700 text-sm rounded-xl py-2.5 px-3 pr-8 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all font-bold shadow-sm"
                                 value={filterValue}
                                 onChange={(e) => setFilterValue(e.target.value)}
                                 disabled={availableValues.length === 0}
@@ -384,61 +387,61 @@ const RandomCallModal = ({ isOpen, onClose, classId, students: initialStudents =
                                 <option value="ALL">全部</option>
                                 {availableValues.filter(v => v !== 'ALL').map(v => <option key={v} value={v}>{v}</option>)}
                             </select>
-                            <Check className="absolute right-2.5 top-2.5 text-gray-400 pointer-events-none" size={14} />
+                            <Check className="absolute right-3 top-1/2 -translate-y-1/2 text-sage-400 pointer-events-none group-hover:text-indigo-500 transition-colors" size={14} />
                         </div>
                     </div>
                 </div>
 
                 {/* Main Display */}
-                <div className="p-8 flex flex-col items-center justify-center bg-gradient-to-b from-white to-gray-50">
+                <div className="p-8 flex flex-col items-center justify-center bg-white/40">
                     <div className="relative mb-8 group cursor-pointer" onClick={toggleRollCall}>
                         {/* Outer Ring */}
-                        <div className={`w-52 h-52 rounded-full border-4 flex items-center justify-center transition-all duration-300 ${isRunning ? 'border-blue-400 shadow-[0_0_30px_rgba(59,130,246,0.3)]' : 'border-gray-100 shadow-inner'}`}>
+                        <div className={`w-56 h-56 rounded-full border-8 flex items-center justify-center transition-all duration-300 ${isRunning ? 'border-indigo-200 shadow-[0_0_40px_rgba(99,102,241,0.2)]' : 'border-white shadow-inner bg-sage-50/50'}`}>
                             {/* Spinner Ring */}
                             {isRunning && (
-                                <div className="absolute inset-0 rounded-full border-4 border-t-blue-500 border-r-transparent border-b-blue-500 border-l-transparent animate-spin-slow opacity-50"></div>
+                                <div className="absolute inset-0 rounded-full border-8 border-t-indigo-500 border-r-transparent border-b-indigo-500 border-l-transparent animate-spin-slow opacity-60"></div>
                             )}
 
                             {/* Central Text */}
-                            <div className="w-40 h-40 rounded-full bg-white shadow-lg flex items-center justify-center relative z-10">
-                                <span className={`text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-br from-gray-800 to-gray-600 transition-all duration-100 ${isRunning ? 'scale-110 blur-[0.5px]' : 'scale-100'}`}>
+                            <div className="w-44 h-44 rounded-full bg-white shadow-xl flex items-center justify-center relative z-10 border border-white/50">
+                                <span className={`text-4xl font-black bg-clip-text text-transparent bg-gradient-to-br from-ink-800 to-ink-600 transition-all duration-100 px-2 text-center leading-tight ${isRunning ? 'scale-110 blur-[0.5px] opacity-70' : 'scale-100 opacity-100'}`}>
                                     {currentName}
                                 </span>
                             </div>
                         </div>
 
                         {/* Count Badge */}
-                        <div className="absolute top-0 right-0 bg-blue-50 text-blue-600 text-xs font-bold px-2 py-1 rounded-full border border-blue-100 flex items-center gap-1 shadow-sm">
-                            <Users size={10} />
-                            {targetStudents.length}人
+                        <div className="absolute top-0 right-0 bg-indigo-50 text-indigo-600 text-xs font-bold px-3 py-1.5 rounded-full border border-indigo-100 flex items-center gap-1.5 shadow-sm hover:scale-105 transition-transform">
+                            <Users size={12} strokeWidth={2.5} />
+                            {targetStudents.length}人 Available
                         </div>
                     </div>
 
                     <button
                         onClick={toggleRollCall}
                         disabled={targetStudents.length === 0}
-                        className={`w-full max-w-xs py-3.5 rounded-xl font-bold text-white shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 transform hover:-translate-y-0.5 ${isRunning
-                            ? 'bg-gradient-to-r from-red-500 to-pink-600 shadow-red-200'
-                            : 'bg-gradient-to-r from-blue-600 to-indigo-600 shadow-blue-200'}`}
+                        className={`w-full max-w-xs py-4 rounded-2xl font-black text-white text-lg shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2 transform hover:-translate-y-1 ${isRunning
+                            ? 'bg-gradient-to-r from-clay-500 to-red-500 shadow-clay-200 ring-4 ring-clay-100'
+                            : 'bg-gradient-to-r from-indigo-500 to-indigo-600 shadow-indigo-200 ring-4 ring-indigo-100'}`}
                     >
                         {isRunning ? (
-                            <>停止点名</>
+                            <>STOP IT!</>
                         ) : (
-                            <>START</>
+                            <>START RANDOM</>
                         )}
                     </button>
                 </div>
 
                 {/* History */}
                 {history.length > 0 && (
-                    <div className="bg-gray-50 border-t border-gray-100 p-4">
-                        <div className="flex items-center gap-2 text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider">
+                    <div className="bg-sage-50/50 border-t border-sage-100/50 p-5 backdrop-blur-md">
+                        <div className="flex items-center gap-2 text-xs font-bold text-sage-400 mb-3 uppercase tracking-wider">
                             <RotateCcw size={12} />
-                            最近被点到的同学
+                            最近点名历史
                         </div>
                         <div className="flex gap-2 flex-wrap">
                             {history.map((name, i) => (
-                                <span key={i} className="px-3 py-1 bg-white border border-gray-200 text-gray-600 text-xs font-medium rounded-full shadow-sm">
+                                <span key={i} className="px-3 py-1.5 bg-white border border-sage-200 text-ink-600 text-xs font-bold rounded-full shadow-sm animate-in fade-in zoom-in duration-300">
                                     {name}
                                 </span>
                             ))}

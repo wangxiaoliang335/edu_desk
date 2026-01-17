@@ -58,18 +58,18 @@ const TreeNode = ({ label, icon, children, defaultOpen = false, count = 0 }: { l
     return (
         <div className="mb-1">
             <div
-                className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-lg cursor-pointer text-gray-700 select-none transition-colors"
+                className="flex items-center gap-2 p-2 hover:bg-sage-50 rounded-xl cursor-pointer text-ink-600 select-none transition-colors group"
                 onClick={() => setIsOpen(!isOpen)}
             >
-                <div className="text-gray-400">
+                <div className="text-sage-300 group-hover:text-sage-500 transition-colors">
                     {children ? (isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />) : <span className="w-4" />}
                 </div>
-                <div className="text-blue-500/80">{icon}</div>
-                <span className="font-medium text-sm">{label}</span>
-                {count > 0 && <span className="text-xs text-gray-400 ml-auto bg-gray-50 px-2 py-0.5 rounded-full">({count})</span>}
+                <div className="text-sage-500">{icon}</div>
+                <span className="font-bold text-sm">{label}</span>
+                {count > 0 && <span className="text-xs text-sage-400 ml-auto bg-sage-50 px-2 py-0.5 rounded-full font-bold">({count})</span>}
             </div>
             {isOpen && children && (
-                <div className="ml-6 pl-2 border-l border-gray-100 mt-1 space-y-0.5">
+                <div className="ml-6 pl-2 border-l border-sage-100 mt-1 space-y-0.5">
                     {children}
                 </div>
             )}
@@ -83,18 +83,18 @@ const LeafNode = ({ label, subLabel, icon, onClick, onDoubleClick, onContextMenu
             onClick={onClick}
             onDoubleClick={onDoubleClick}
             onContextMenu={onContextMenu}
-            className="flex items-center gap-3 p-2 hover:bg-blue-50 hover:text-blue-600 rounded-lg cursor-pointer transition-all group"
+            className="flex items-center gap-3 p-2 hover:bg-white hover:shadow-sm rounded-xl cursor-pointer transition-all group border border-transparent hover:border-sage-100 bg-transparent"
         >
             {avatarUrl ? (
-                <img src={avatarUrl} alt="" className="w-8 h-8 rounded-full bg-gray-200 object-cover shadow-sm" />
+                <img src={avatarUrl} alt="" className="w-9 h-9 rounded-full bg-sage-100 object-cover shadow-sm ring-2 ring-white" />
             ) : (
-                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
+                <div className="w-9 h-9 rounded-full bg-sage-50 flex items-center justify-center text-sage-400 group-hover:bg-sage-100 group-hover:text-sage-600 transition-all shadow-sm ring-2 ring-transparent group-hover:ring-white">
                     {icon || <User size={16} />}
                 </div>
             )}
             <div className="flex flex-col">
-                <span className="text-sm font-medium text-gray-700 group-hover:text-blue-700">{label}</span>
-                {subLabel && <span className="text-xs text-gray-400 group-hover:text-blue-400">{subLabel}</span>}
+                <span className="text-sm font-bold text-ink-600 group-hover:text-sage-700 transition-colors">{label}</span>
+                {subLabel && <span className="text-xs text-ink-300 group-hover:text-sage-400 transition-colors">{subLabel}</span>}
             </div>
         </div>
     );
@@ -451,33 +451,33 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
     };
 
     return (
-        <div className="flex flex-col h-full bg-white/50 backdrop-blur-sm rounded-xl overflow-hidden border border-white/40 shadow-sm relative">
+        <div className="flex flex-col h-full bg-paper/50 backdrop-blur-xl rounded-2xl overflow-hidden border border-sage-100 shadow-sm relative transition-all">
             {/* Header Tabs */}
-            <div className="flex items-center shrink-0 bg-gray-50/50 p-1 m-2 rounded-lg border border-gray-100">
+            <div className="flex items-center shrink-0 bg-white/40 p-1.5 m-3 rounded-xl border border-sage-100">
                 <button
                     onClick={() => setActiveTab('contacts')}
-                    className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === 'contacts' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'contacts' ? 'bg-white text-sage-600 shadow-sm ring-1 ring-sage-100' : 'text-ink-400 hover:text-ink-600 hover:bg-sage-50/50'}`}
                 >
                     好友 / 班级
                 </button>
-                <div className="w-[1px] h-4 bg-gray-200 mx-1"></div>
+                <div className="w-[1px] h-4 bg-sage-200/50 mx-1"></div>
                 <button
                     onClick={() => setActiveTab('groups')}
-                    className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === 'groups' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'groups' ? 'bg-white text-sage-600 shadow-sm ring-1 ring-sage-100' : 'text-ink-400 hover:text-ink-600 hover:bg-sage-50/50'}`}
                 >
                     群聊
                 </button>
 
                 {/* Notification Bell */}
-                <div className="ml-1 pl-1 border-l border-gray-200">
+                <div className="ml-1 pl-1 border-l border-sage-200/50">
                     <button
                         onClick={() => setIsNotificationCenterOpen(true)}
-                        className="p-1.5 hover:bg-white hover:text-blue-600 rounded-md text-gray-500 transition-all relative"
+                        className="p-2 hover:bg-white hover:text-sage-600 rounded-lg text-sage-400 transition-all relative group"
                         title="消息中心"
                     >
-                        <Bell size={16} />
+                        <Bell size={18} className="group-hover:scale-110 transition-transform" />
                         {notifications.length > 0 && notifications.some(n => n.is_read === 0) && (
-                            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+                            <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-clay-500 rounded-full border-2 border-white animate-pulse"></span>
                         )}
                     </button>
                 </div>
@@ -485,7 +485,12 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
 
             {/* List Content */}
             <div className="flex-1 overflow-auto p-4 pt-0 custom-scrollbar">
-                {loading && <div className="text-center text-gray-400 text-sm py-8">加载中...</div>}
+                {loading && (
+                    <div className="flex flex-col items-center justify-center py-12 text-sage-400 gap-3">
+                        <div className="w-6 h-6 border-2 border-sage-200 border-t-sage-500 rounded-full animate-spin"></div>
+                        <span className="text-sm font-bold">加载中...</span>
+                    </div>
+                )}
 
                 {!loading && activeTab === 'contacts' && (
                     <div className="space-y-1">
@@ -522,7 +527,7 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
                     <div className="space-y-1">
                         <TreeNode label="班级群" count={managedClassGroups.length + joinedClassGroups.length} icon={<Users size={18} />} defaultOpen={true}>
                             {managedClassGroups.length > 0 && (
-                                <TreeNode label="我管理的" count={managedClassGroups.length} icon={<User size={16} className="text-blue-500" />} defaultOpen={true}>
+                                <TreeNode label="我管理的" count={managedClassGroups.length} icon={<User size={16} className="text-sage-500" />} defaultOpen={true}>
                                     {managedClassGroups.slice(0, 50).map((g, idx) => (
                                         <LeafNode
                                             key={`mgr-c-${idx}`}
@@ -551,7 +556,7 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
 
                         <TreeNode label="普通群" count={managedNormalGroups.length + joinedNormalGroups.length} icon={<MessageCircle size={18} />} defaultOpen={true}>
                             {managedNormalGroups.length > 0 && (
-                                <TreeNode label="我管理的" count={managedNormalGroups.length} icon={<User size={16} className="text-blue-500" />} defaultOpen={true}>
+                                <TreeNode label="我管理的" count={managedNormalGroups.length} icon={<User size={16} className="text-sage-500" />} defaultOpen={true}>
                                     {managedNormalGroups.slice(0, 50).map((g, idx) => (
                                         <LeafNode
                                             key={`mgr-n-${idx}`}
@@ -582,7 +587,7 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
 
                 {/* Debug Info */}
                 {classes.length === 0 && friends.length === 0 && managedClassGroups.length === 0 && joinedClassGroups.length === 0 && managedNormalGroups.length === 0 && joinedNormalGroups.length === 0 && (
-                    <div className="p-4 text-xs text-gray-400 border-t border-gray-100 mt-4">
+                    <div className="p-4 text-xs text-ink-300 border-t border-sage-50 mt-4 text-center">
                         状态: {debugMsg === 'UserInfo is null' ? '用户信息为空' : debugMsg} <br />
                         教师ID: {userInfo?.teacher_unique_id ? '已获取' : '未获取'} <br />
                         身份证号: {userInfo?.id_number ? '已获取' : '未获取'}
@@ -597,50 +602,31 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
                 notifications={notifications}
             />
 
-            {/* Normal Group Chat Modal - Removed in favor of Independent Window */}
-            {/* {
-                selectedNormalGroup && (
-                    <NormalGroupChatModal
-                        isOpen={true}
-                        onClose={() => setSelectedNormalGroup(null)}
-                        groupId={selectedNormalGroup.groupId}
-                        groupName={selectedNormalGroup.groupName}
-                        isOwner={selectedNormalGroup.isOwner}
-                        userInfo={userInfo}
-                        friends={friends.map(f => ({
-                            teacher_unique_id: f.teacher_info.teacher_unique_id,
-                            name: f.user_details?.name || f.teacher_info.name,
-                            avatar: f.user_details?.avatar
-                        }))}
-                    />
-                )
-            } */}
-
             {/* Context Menu - Portaled to body to avoid transform issues */}
             {
                 contextMenu.visible && createPortal(
                     <>
                         <div className="fixed inset-0 z-50 bg-transparent" onClick={() => setContextMenu(prev => ({ ...prev, visible: false }))} />
                         <div
-                            className="fixed bg-white/95 backdrop-blur-sm shadow-xl rounded-xl py-1.5 z-50 border border-gray-100 min-w-[160px] animate-in fade-in zoom-in-95 duration-100"
+                            className="fixed bg-white/95 backdrop-blur-xl shadow-[0_4px_20px_rgba(0,0,0,0.1)] rounded-xl py-1.5 z-50 border border-sage-100 min-w-[160px] animate-in fade-in zoom-in-95 duration-100 ring-1 ring-sage-50"
                             style={{ top: contextMenu.y, left: contextMenu.x }}
                         >
                             {contextMenu.type === 'class' && (
                                 <button
                                     onClick={handleLeaveClass}
-                                    className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors group"
+                                    className="w-full text-left px-3 py-2 text-sm text-clay-600 hover:bg-clay-50 flex items-center gap-2.5 transition-colors group font-bold"
                                 >
-                                    <LogOut size={16} className="text-red-500 group-hover:text-red-600" />
-                                    <span className="font-medium">退出班级</span>
+                                    <LogOut size={16} className="text-clay-500 group-hover:text-clay-600" />
+                                    <span className="font-bold">退出班级</span>
                                 </button>
                             )}
                             {contextMenu.type === 'friend' && (
                                 <button
                                     onClick={handleUnfriend}
-                                    className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors group"
+                                    className="w-full text-left px-3 py-2 text-sm text-clay-600 hover:bg-clay-50 flex items-center gap-2.5 transition-colors group font-bold"
                                 >
-                                    <UserMinus size={16} className="text-red-500 group-hover:text-red-600" />
-                                    <span className="font-medium">解除好友</span>
+                                    <UserMinus size={16} className="text-clay-500 group-hover:text-clay-600" />
+                                    <span className="font-bold">解除好友</span>
                                 </button>
                             )}
                         </div>

@@ -70,7 +70,11 @@ const CreateNormalGroupModal = ({ isOpen, onClose, userInfo, onSuccess }: Create
             console.log('[CreateNormalGroup] Creating group via SDK:', groupName.trim());
 
             // Use SDK to create group with initial members
-            const newGroup = await createGroup(groupName.trim(), 'Public', selectedFriends);
+            const newGroup = await createGroup({
+                name: groupName.trim(),
+                type: 'Public',
+                memberList: selectedFriends.map(id => ({ userID: id }))
+            });
 
             console.log('[CreateNormalGroup] Group Created Successfully via SDK. GroupId:', newGroup.groupID);
 
@@ -91,54 +95,59 @@ const CreateNormalGroupModal = ({ isOpen, onClose, userInfo, onSuccess }: Create
     };
 
     return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-xl shadow-2xl w-[400px] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-300 font-sans">
+            <div className="bg-paper/95 backdrop-blur-xl rounded-[2rem] shadow-2xl w-[500px] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 border border-white/50 ring-1 ring-sage-100/50">
 
                 {/* Header */}
-                <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-4 flex items-center justify-between text-white shadow-md">
-                    <div className="flex items-center gap-2">
-                        <Users className="w-5 h-5" />
-                        <span className="font-bold text-lg">创建普通群</span>
+                <div className="px-8 py-6 border-b border-sage-100/50 bg-white/30 backdrop-blur-md flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                            <Users className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                            <span className="font-bold text-xl text-ink-800 tracking-tight">创建普通群</span>
+                            <p className="text-sm font-medium text-ink-400 mt-0.5">邀请好友加入群聊</p>
+                        </div>
                     </div>
                     <button
                         onClick={onClose}
-                        className="text-white/80 hover:text-white hover:bg-white/20 rounded-full p-1 transition-colors"
+                        className="w-10 h-10 flex items-center justify-center text-sage-400 hover:text-clay-600 hover:bg-clay-50 rounded-full transition-all duration-300"
                     >
-                        <X size={20} />
+                        <X size={24} />
                     </button>
                 </div>
 
                 {/* Content */}
-                <div className="p-6 flex flex-col gap-6">
-                    <div className="flex flex-col gap-2">
-                        <label className="text-gray-700 font-medium text-sm">群组名称</label>
+                <div className="p-8 flex flex-col gap-6 bg-white/40">
+                    <div className="flex flex-col gap-2 group">
+                        <label className="text-xs font-bold text-ink-400 ml-1 uppercase tracking-wider group-focus-within:text-sage-600 transition-colors">群组名称</label>
                         <input
                             type="text"
                             value={groupName}
                             onChange={(e) => setGroupName(e.target.value)}
                             placeholder="请输入群组名称..."
-                            className="w-full p-3 rounded-lg border border-gray-300 bg-gray-50 text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all placeholder:text-gray-400"
+                            className="w-full px-5 py-4 rounded-2xl border border-sage-200 bg-white text-ink-800 outline-none focus:ring-4 focus:ring-sage-100 focus:border-sage-400 transition-all placeholder:text-sage-300 font-medium shadow-sm"
                             maxLength={30}
                             autoFocus
                         />
-                        <p className="text-xs text-gray-500 text-right">{groupName.length}/30</p>
+                        <p className="text-xs font-medium text-ink-300 text-right pr-2">{groupName.length}/30</p>
                     </div>
 
                     <div className="flex flex-col gap-2 flex-1 min-h-0">
-                        <label className="text-gray-700 font-medium text-sm">邀请初始成员 ({selectedFriends.length})</label>
-                        <div className="border border-gray-200 rounded-lg bg-gray-50 overflow-y-auto h-[200px] p-2">
+                        <label className="text-xs font-bold text-ink-400 ml-1 uppercase tracking-wider">邀请初始成员 <span className="text-sage-500 bg-sage-50 px-1.5 py-0.5 rounded-md ml-1">{selectedFriends.length}</span></label>
+                        <div className="border border-white/50 ring-1 ring-sage-50 rounded-2xl bg-white/60 overflow-y-auto h-[240px] p-3 custom-scrollbar shadow-inner backdrop-blur-sm">
                             {loadingFriends ? (
-                                <div className="h-full flex items-center justify-center text-gray-400 text-sm">
-                                    <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin mr-2" />
+                                <div className="h-full flex flex-col items-center justify-center text-sage-400 text-sm gap-2 font-bold animate-pulse">
+                                    <div className="w-6 h-6 border-2 border-sage-200 border-t-sage-500 rounded-full animate-spin" />
                                     加载好友列表...
                                 </div>
                             ) : friendList.length === 0 ? (
-                                <div className="h-full flex flex-col items-center justify-center text-gray-400">
-                                    <Users size={24} className="mb-2 opacity-50" />
-                                    <span className="text-sm">暂无好友可邀请</span>
+                                <div className="h-full flex flex-col items-center justify-center text-sage-300 gap-3">
+                                    <Users size={32} className="opacity-50" />
+                                    <span className="text-sm font-bold">暂无好友可邀请</span>
                                 </div>
                             ) : (
-                                <div className="space-y-1">
+                                <div className="space-y-1.5">
                                     {friendList.map(friend => {
                                         const isSelected = selectedFriends.includes(friend.id);
                                         return (
@@ -151,25 +160,26 @@ const CreateNormalGroupModal = ({ isOpen, onClose, userInfo, onSuccess }: Create
                                                             : [...prev, friend.id]
                                                     );
                                                 }}
-                                                className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all ${isSelected
-                                                    ? 'bg-blue-50 border border-blue-200'
-                                                    : 'hover:bg-white border border-transparent'
+                                                className={`flex items-center gap-4 p-3 rounded-xl cursor-pointer transition-all border group ${isSelected
+                                                    ? 'bg-indigo-50 border-indigo-200 shadow-sm'
+                                                    : 'bg-transparent hover:bg-white/80 border-transparent hover:border-sage-50 hover:shadow-sm'
                                                     }`}
                                             >
-                                                {friend.avatar ? (
-                                                    <img src={friend.avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
-                                                ) : (
-                                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">
-                                                        {friend.name.charAt(0)}
-                                                    </div>
-                                                )}
-                                                <span className="flex-1 text-sm text-gray-700 font-medium">{friend.name}</span>
-                                                <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${isSelected
-                                                    ? 'bg-blue-500 border-blue-500'
-                                                    : 'border-gray-300 bg-white'
-                                                    }`}>
-                                                    {isSelected && <Check size={12} className="text-white" />}
+                                                <div className="relative">
+                                                    {friend.avatar ? (
+                                                        <img src={friend.avatar} alt="" className="w-10 h-10 rounded-full object-cover border border-white shadow-sm" />
+                                                    ) : (
+                                                        <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-500 text-sm font-bold border border-white shadow-sm">
+                                                            {friend.name.charAt(0)}
+                                                        </div>
+                                                    )}
+                                                    {isSelected && (
+                                                        <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-indigo-500 rounded-full flex items-center justify-center border-2 border-white shadow-sm animate-in zoom-in-75">
+                                                            <Check size={10} className="text-white" />
+                                                        </div>
+                                                    )}
                                                 </div>
+                                                <span className={`flex-1 text-sm font-bold transition-colors ${isSelected ? 'text-indigo-700' : 'text-ink-700'}`}>{friend.name}</span>
                                             </div>
                                         );
                                     })}
@@ -181,17 +191,17 @@ const CreateNormalGroupModal = ({ isOpen, onClose, userInfo, onSuccess }: Create
 
 
                 {/* Footer */}
-                <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
+                <div className="p-6 bg-white/50 backdrop-blur-md border-t border-sage-100/50 flex justify-end gap-3">
                     <button
                         onClick={onClose}
-                        className="px-5 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors shadow-sm"
+                        className="px-6 py-3 text-ink-500 bg-white border border-sage-200 rounded-2xl hover:bg-sage-50 font-bold text-sm transition-all shadow-sm hover:shadow active:scale-95"
                     >
                         取消
                     </button>
                     <button
                         onClick={handleCreate}
                         disabled={isLoading || !groupName.trim()}
-                        className="px-5 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 font-medium shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-all"
+                        className="px-8 py-3 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-2xl hover:from-indigo-600 hover:to-indigo-700 font-bold shadow-lg shadow-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center gap-2 transition-all active:scale-95"
                     >
                         {isLoading ? (
                             <>

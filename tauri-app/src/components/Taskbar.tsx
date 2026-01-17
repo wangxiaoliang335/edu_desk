@@ -26,21 +26,21 @@ const Taskbar = ({ activeItem, onItemClick }: TaskbarProps) => {
     ] as const;
 
     return (
-        <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pb-2 pointer-events-none">
-            {/* Windows 11 Taskbar Container */}
-            <div className="pointer-events-auto h-12 px-2 bg-[#f3f3f3]/85 backdrop-blur-xl border border-white/40 shadow-lg rounded-lg flex items-center gap-1 transition-all duration-300">
+        <div className="fixed bottom-6 left-0 right-0 z-50 flex justify-center pointer-events-none">
+            {/* Organic Floating Dock */}
+            <div className="pointer-events-auto h-16 px-4 bg-white/90 backdrop-blur-2xl border border-sage-200 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] rounded-full flex items-center gap-3 transition-all duration-300">
 
-                {/* Start Menu Placeholder (Optional, for authentic feel) */}
-                <div className="w-10 h-10 flex items-center justify-center rounded hover:bg-white/50 transition-colors mx-1 cursor-pointer group">
+                {/* Start Menu Placeholder */}
+                <div className="w-12 h-12 flex items-center justify-center rounded-full hover:bg-sage-50 transition-colors cursor-pointer group active:scale-95">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="group-hover:opacity-80 transition-opacity">
-                        <path d="M4 4H11V11H4V4Z" fill="#0078D7" />
-                        <path d="M4 13H11V20H4V13Z" fill="#0078D7" />
-                        <path d="M13 4H20V11H13V4Z" fill="#0078D7" />
-                        <path d="M13 13H20V20H13V13Z" fill="#0078D7" />
+                        <path d="M4 4H11V11H4V4Z" fill="#6b9074" />
+                        <path d="M4 13H11V20H4V13Z" fill="#6b9074" />
+                        <path d="M13 4H20V11H13V4Z" fill="#6b9074" />
+                        <path d="M13 13H20V20H13V13Z" fill="#6b9074" />
                     </svg>
                 </div>
 
-                <div className="w-[1px] h-6 bg-gray-300/50 mx-1"></div>
+                <div className="w-[1px] h-8 bg-sage-200 mx-2"></div>
 
                 {taskbarItems.map((item) => {
                     const Icon = item.icon;
@@ -54,28 +54,28 @@ const Taskbar = ({ activeItem, onItemClick }: TaskbarProps) => {
                             onMouseEnter={() => setHoveredItem(item.id as TaskbarItemType)}
                             onMouseLeave={() => setHoveredItem(null)}
                             className={cn(
-                                "group relative w-10 h-10 flex items-center justify-center rounded hover:bg-white/60 active:bg-white/40 transition-all duration-200",
-                                isActive && "bg-white/60"
+                                "group relative w-12 h-12 flex items-center justify-center rounded-2xl transition-all duration-300",
+                                isActive ? "bg-sage-100 text-sage-700" : "hover:bg-sage-50 text-ink-400"
                             )}
                             title={item.label}
                         >
-                            {/* Active Indicator (Pill at bottom) */}
-                            <div className={cn(
-                                "absolute bottom-1 w-3 h-1 rounded-full bg-blue-500 transition-all duration-300 transform scale-x-0 opacity-0",
-                                isActive && "scale-x-100 opacity-100",
-                                isHovered && !isActive && "scale-x-50 opacity-50 bg-gray-400"
-                            )}></div>
-
                             {/* Icon */}
                             <Icon
-                                size={22}
+                                size={24}
                                 className={cn(
-                                    "text-gray-600 transition-transform duration-200",
-                                    isActive && item.color, // Colorize when active
-                                    "active:scale-95"
+                                    "transition-transform duration-300",
+                                    isActive ? "scale-110" : "group-hover:scale-110",
+                                    isActive ? "text-sage-700" : "text-ink-500"
                                 )}
-                                strokeWidth={2}
+                                strokeWidth={isActive ? 2.5 : 2}
                             />
+
+                            {/* Tooltip (Simple) */}
+                            {isHovered && !isActive && (
+                                <div className="absolute -top-10 bg-ink-800 text-white text-xs px-2 py-1 rounded-md opacity-0 animate-in fade-in zoom-in-95 duration-200 pointer-events-none whitespace-nowrap">
+                                    {item.label}
+                                </div>
+                            )}
                         </button>
                     );
                 })}

@@ -51,20 +51,20 @@ const isSpecialSubject = (subject: string): boolean => {
 
 // Get subject background color
 const getSubjectStyle = (subject: string, isCurrent: boolean, isHighlight: boolean) => {
-    if (isCurrent) return 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-200/50';
-    if (isHighlight) return 'bg-gradient-to-br from-orange-400 to-amber-500 text-white';
+    if (isCurrent) return 'bg-gradient-to-br from-sage-500 to-sage-600 text-white shadow-lg shadow-sage-200/50 border-transparent';
+    if (isHighlight) return 'bg-gradient-to-br from-clay-400 to-clay-500 text-white border-transparent';
 
-    if (subject.includes('语文')) return 'bg-red-50 text-red-600 border-red-200';
-    if (subject.includes('数学')) return 'bg-blue-50 text-blue-600 border-blue-200';
-    if (subject.includes('英语')) return 'bg-amber-50 text-amber-600 border-amber-200';
-    if (subject.includes('物理')) return 'bg-indigo-50 text-indigo-600 border-indigo-200';
-    if (subject.includes('化学')) return 'bg-purple-50 text-purple-600 border-purple-200';
-    if (subject.includes('生物')) return 'bg-green-50 text-green-600 border-green-200';
-    if (subject.includes('历史')) return 'bg-yellow-50 text-yellow-700 border-yellow-200';
-    if (subject.includes('地理')) return 'bg-teal-50 text-teal-600 border-teal-200';
-    if (subject.includes('政治')) return 'bg-rose-50 text-rose-600 border-rose-200';
-    if (subject.includes('体育')) return 'bg-emerald-50 text-emerald-600 border-emerald-200';
-    return 'bg-gray-50 text-gray-600 border-gray-200';
+    if (subject.includes('语文')) return 'bg-red-50 text-red-600 border-red-100';
+    if (subject.includes('数学')) return 'bg-blue-50 text-blue-600 border-blue-100';
+    if (subject.includes('英语')) return 'bg-amber-50 text-amber-600 border-amber-100';
+    if (subject.includes('物理')) return 'bg-indigo-50 text-indigo-600 border-indigo-100';
+    if (subject.includes('化学')) return 'bg-purple-50 text-purple-600 border-purple-100';
+    if (subject.includes('生物')) return 'bg-green-50 text-green-600 border-green-100';
+    if (subject.includes('历史')) return 'bg-yellow-50 text-yellow-700 border-yellow-100';
+    if (subject.includes('地理')) return 'bg-teal-50 text-teal-600 border-teal-100';
+    if (subject.includes('政治')) return 'bg-rose-50 text-rose-600 border-rose-100';
+    if (subject.includes('体育')) return 'bg-emerald-50 text-emerald-600 border-emerald-100';
+    return 'bg-paper text-ink-500 border-sage-100';
 };
 
 const DailySchedule = ({ classId, onPrepareClass, onPostEvaluation }: Props) => {
@@ -287,7 +287,7 @@ const DailySchedule = ({ classId, onPrepareClass, onPostEvaluation }: Props) => 
     if (loading) {
         return (
             <div className="h-full flex items-center justify-center">
-                <div className="w-6 h-6 border-2 border-blue-200 border-t-blue-500 rounded-full animate-spin"></div>
+                <div className="w-6 h-6 border-2 border-sage-200 border-t-sage-500 rounded-full animate-spin"></div>
             </div>
         );
     }
@@ -295,8 +295,8 @@ const DailySchedule = ({ classId, onPrepareClass, onPostEvaluation }: Props) => 
     if (scheduleItems.length === 0) {
         return (
             <div className="h-full flex flex-col items-center justify-center text-center py-6">
-                <Clock size={28} className="text-gray-200 mb-2" />
-                <p className="text-gray-400 text-sm">今日无课程安排</p>
+                <Clock size={28} className="text-sage-200 mb-2" />
+                <p className="text-ink-300 text-sm">今日无课程安排</p>
             </div>
         );
     }
@@ -307,18 +307,15 @@ const DailySchedule = ({ classId, onPrepareClass, onPostEvaluation }: Props) => 
             <div
                 ref={scrollRef}
                 onWheel={handleWheel}
-                className="flex-1 flex items-center gap-2 overflow-x-auto pb-2 scroll-smooth"
-                style={{
-                    scrollbarWidth: 'thin',
-                    scrollbarColor: '#e5e7eb transparent'
-                }}
+                className="flex-1 flex items-center gap-2 overflow-x-auto pb-2 scroll-smooth timeline-scroll"
             >
                 <style>{`
                     .timeline-scroll::-webkit-scrollbar { height: 4px; }
                     .timeline-scroll::-webkit-scrollbar-track { background: transparent; }
-                    .timeline-scroll::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 4px; }
-                    .timeline-scroll::-webkit-scrollbar-thumb:hover { background: #d1d5db; }
+                    .timeline-scroll::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 4px; }
+                    .timeline-scroll::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
                 `}</style>
+// ... (rest is unchanged except class styles which use getSubjectStyle)
 
                 {scheduleItems.map((item, index) => {
                     const isSpecial = item.isHighlight;

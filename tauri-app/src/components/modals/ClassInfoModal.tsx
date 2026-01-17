@@ -438,27 +438,27 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
     );
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-300 font-sans">
             <div
-                className="bg-white rounded-xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+                className="bg-paper/95 backdrop-blur-xl rounded-[2rem] shadow-2xl w-full max-w-sm flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 border border-white/60 ring-1 ring-sage-100/50"
                 style={{ height: '700px' }}
             >
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-gray-50/50">
+                <div className="flex items-center justify-between p-5 border-b border-sage-100/50 bg-white/40 backdrop-blur-md">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm">
-                            {groupName ? groupName[0] : <Users size={20} />}
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-sage-400 to-sage-600 text-white flex items-center justify-center font-bold text-lg shadow-lg shadow-sage-500/20">
+                            {groupName ? groupName[0] : <Users size={24} />}
                         </div>
                         <div>
-                            <h3 className="font-bold text-gray-800 text-lg">
+                            <h3 className="font-bold text-ink-800 text-lg tracking-tight">
                                 {groupName || "班级信息"}
                             </h3>
-                            <p className="text-xs text-gray-400">ID: {groupId}</p>
+                            <p className="text-xs text-ink-400 font-medium tracking-wide">ID: {groupId}</p>
                         </div>
                     </div>
                     <button
                         onClick={onClose}
-                        className="p-1.5 hover:bg-gray-200 rounded-full text-gray-500 transition-colors"
+                        className="w-10 h-10 flex items-center justify-center rounded-full text-sage-400 hover:text-clay-600 hover:bg-clay-50 transition-all duration-300"
                     >
                         <X size={20} />
                     </button>
@@ -466,84 +466,83 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
 
                 {/* Class Tools (Only for Class Groups) */}
                 {isClassGroup && (
-                    <div className="px-4 py-3 flex gap-2">
+                    <div className="px-5 py-4 flex gap-2">
                         <button
                             onClick={handleOpenSchedule}
-                            className="flex-1 bg-gray-800 hover:bg-gray-700 text-white text-xs py-2 rounded-md transition-colors font-medium"
+                            className="flex-1 bg-white border border-sage-200 hover:border-sage-400 text-ink-700 hover:text-sage-700 text-xs py-2.5 rounded-xl transition-all font-bold shadow-sm hover:shadow-md hover:-translate-y-0.5"
                         >
-                            班级课程表
+                            📅 班级课表
                         </button>
                         <button
                             onClick={() => setShowDutyRoster(true)}
-                            className="flex-1 bg-gray-800 hover:bg-gray-700 text-white text-xs py-2 rounded-md transition-colors font-medium"
+                            className="flex-1 bg-white border border-sage-200 hover:border-sage-400 text-ink-700 hover:text-sage-700 text-xs py-2.5 rounded-xl transition-all font-bold shadow-sm hover:shadow-md hover:-translate-y-0.5"
                         >
-                            值日表
+                            🧹 值日表
                         </button>
                         <button
                             onClick={() => setShowWallpaper(true)}
-                            className="flex-1 bg-gray-800 hover:bg-gray-700 text-white text-xs py-2 rounded-md transition-colors font-medium"
+                            className="flex-1 bg-white border border-sage-200 hover:border-sage-400 text-ink-700 hover:text-sage-700 text-xs py-2.5 rounded-xl transition-all font-bold shadow-sm hover:shadow-md hover:-translate-y-0.5"
                         >
-                            壁纸
+                            🖼️ 壁纸
                         </button>
-                        {/* More Import Removed */}
                     </div>
                 )}
 
                 {/* Member List Header */}
-                <div className="px-4 py-2 bg-gray-50 border-y border-gray-100 flex justify-between items-center text-xs font-medium text-gray-500">
+                <div className="px-5 py-2 bg-sage-50/50 border-y border-sage-100/50 flex justify-between items-center text-xs font-bold text-sage-500 uppercase tracking-wide">
                     <span>成员列表 ({members.length})</span>
-                    <button className="text-blue-600 hover:underline">+ 添加好友</button>
+                    <button className="text-sage-600 hover:text-sage-800 hover:underline decoration-sage-300 underline-offset-2 transition-all">+ 添加好友</button>
                 </div>
 
                 {/* Member List (Grid/List) */}
-                <div className="flex-1 overflow-y-auto p-4 bg-white">
+                <div className="flex-1 overflow-y-auto p-5 bg-white/30 custom-scrollbar">
                     {/* Search - simplified */}
-                    <div className="mb-3 relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" size={14} />
+                    <div className="mb-4 relative group">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-sage-400 group-focus-within:text-sage-600 transition-colors" size={16} />
                         <input
                             type="text"
-                            placeholder="搜索..."
+                            placeholder="搜索成员..."
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
-                            className="w-full pl-8 pr-3 py-1.5 bg-gray-100 border-none rounded-md text-sm focus:bg-white focus:ring-1 focus:ring-blue-200 transition-all outline-none"
+                            className="w-full pl-10 pr-4 py-2 bg-white/80 border border-sage-200 rounded-xl text-sm text-ink-700 placeholder:text-sage-300 focus:bg-white focus:ring-2 focus:ring-sage-100 focus:border-sage-400 transition-all outline-none shadow-sm"
                         />
                     </div>
 
                     {/* Error Message */}
                     {error && (
-                        <div className="mb-3 px-3 py-2 bg-red-50 text-red-600 text-xs rounded-md border border-red-100">
+                        <div className="mb-4 px-3 py-2 bg-clay-50 text-clay-600 text-xs rounded-xl border border-clay-100">
                             {error}
                         </div>
                     )}
 
                     {loading ? (
-                        <div className="flex justify-center py-4"><span className="loading loading-spinner loading-sm"></span></div>
+                        <div className="flex justify-center py-8"><span className="loading loading-spinner text-sage-400 loading-md"></span></div>
                     ) : (
-                        <div className="grid grid-cols-6 gap-2">
+                        <div className="grid grid-cols-5 gap-3">
                             {filteredMembers.map(member => (
                                 <div key={member.user_id} className="flex flex-col items-center gap-1 group cursor-pointer" title={member.name}>
-                                    <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold overflow-hidden border border-gray-100 group-hover:border-blue-300 transition-colors">
+                                    <div className="w-11 h-11 rounded-2xl bg-white flex items-center justify-center text-xs font-bold overflow-hidden border-2 border-transparent group-hover:border-sage-300 shadow-sm group-hover:shadow-md transition-all duration-300 relative">
                                         {member.avatar ? (
                                             <img src={member.avatar} alt="" className="w-full h-full object-cover" />
                                         ) : (
-                                            <span className="text-gray-500">{member.name[0]}</span>
+                                            <span className="text-sage-400 text-lg">{member.name[0]}</span>
                                         )}
                                     </div>
-                                    <span className="text-[10px] text-gray-500 truncate w-full text-center scale-90">{member.name}</span>
+                                    <span className="text-[10px] text-ink-500 font-medium truncate w-full text-center group-hover:text-sage-600 transition-colors">{member.name}</span>
                                 </div>
                             ))}
 
                             <button className="flex flex-col items-center gap-1 group">
-                                <div className="w-10 h-10 rounded-full border border-dashed border-gray-300 flex items-center justify-center text-gray-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 transition-colors">
-                                    <Plus size={16} />
+                                <div className="w-11 h-11 rounded-2xl border-2 border-dashed border-sage-200 bg-white/50 flex items-center justify-center text-sage-300 group-hover:border-sage-400 group-hover:text-sage-500 group-hover:bg-sage-50 transition-all shadow-sm">
+                                    <Plus size={20} strokeWidth={2.5} />
                                 </div>
-                                <span className="text-[10px] text-gray-400">添加</span>
+                                <span className="text-[10px] text-sage-300 group-hover:text-sage-500 font-bold transition-colors">添加</span>
                             </button>
                             <button className="flex flex-col items-center gap-1 group">
-                                <div className="w-10 h-10 rounded-full border border-dashed border-gray-300 flex items-center justify-center text-gray-400 hover:border-red-400 hover:text-red-500 hover:bg-red-50 transition-colors">
-                                    <Minus size={16} />
+                                <div className="w-11 h-11 rounded-2xl border-2 border-dashed border-sage-200 bg-white/50 flex items-center justify-center text-sage-300 group-hover:border-clay-300 group-hover:text-clay-500 group-hover:bg-clay-50 transition-all shadow-sm">
+                                    <Minus size={20} strokeWidth={2.5} />
                                 </div>
-                                <span className="text-[10px] text-gray-400">删除</span>
+                                <span className="text-[10px] text-sage-300 group-hover:text-clay-500 font-bold transition-colors">删除</span>
                             </button>
 
                         </div>
@@ -552,41 +551,41 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
 
                 {/* Teach Subjects (Class Groups Only) */}
                 {isClassGroup && (
-                    <div className="p-4 border-t border-gray-100 bg-gray-50">
-                        <div className="flex items-center justify-between mb-2">
-                            <h4 className="text-sm font-bold text-gray-700">任教科目</h4>
+                    <div className="p-5 border-t border-sage-100/50 bg-white/40 backdrop-blur-md">
+                        <div className="flex items-center justify-between mb-3">
+                            <h4 className="text-xs font-bold text-sage-500 uppercase tracking-wide">任教科目</h4>
                             <button
                                 onClick={() => setShowAddSubject(true)}
-                                className="text-xs bg-white border border-gray-200 px-2 py-0.5 rounded hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 transition-colors"
+                                className="text-[10px] font-bold bg-white border border-sage-200 px-2 py-1 rounded-lg hover:bg-sage-50 hover:border-sage-300 hover:text-sage-700 transition-all shadow-sm"
                             >
                                 + 添加
                             </button>
                         </div>
                         <div className="flex flex-wrap gap-2 min-h-[32px]">
                             {teachSubjects.map((subject, idx) => (
-                                <div key={idx} className="flex items-center gap-1 bg-white border border-gray-200 px-2 py-1 rounded-full text-xs text-gray-600 shadow-sm">
+                                <div key={idx} className="flex items-center gap-1 bg-white border border-sage-200 px-3 py-1 rounded-full text-xs text-ink-600 font-medium shadow-sm hover:border-sage-300 hover:shadow-md transition-all cursor-default">
                                     <span>{subject}</span>
-                                    <button onClick={() => removeSubject(idx)} className="hover:text-red-500"><X size={12} /></button>
+                                    <button onClick={() => removeSubject(idx)} className="text-sage-300 hover:text-clay-500 transition-colors ml-1"><X size={12} /></button>
                                 </div>
                             ))}
                             {teachSubjects.length === 0 && !showAddSubject && (
-                                <span className="text-xs text-gray-400 italic">暂无科目</span>
+                                <span className="text-xs text-sage-400 italic">暂无科目</span>
                             )}
                         </div>
 
                         {/* Add Subject Input */}
                         {showAddSubject && (
-                            <div className="mt-2 flex gap-2">
+                            <div className="mt-3 flex gap-2 animate-in slide-in-from-top-2 duration-200">
                                 <input
                                     autoFocus
-                                    className="flex-1 text-xs border border-gray-300 rounded px-2 py-1 outline-none focus:border-blue-500"
+                                    className="flex-1 text-xs border border-sage-300 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-sage-200 focus:border-sage-400 bg-white shadow-sm"
                                     placeholder="输入科目..."
                                     value={newSubject}
                                     onChange={e => setNewSubject(e.target.value)}
                                     onKeyDown={e => e.key === 'Enter' && handleAddSubject()}
                                 />
-                                <button onClick={handleAddSubject} className="bg-blue-600 text-white text-xs px-3 rounded hover:bg-blue-700">确定</button>
-                                <button onClick={() => setShowAddSubject(false)} className="text-gray-500 text-xs px-2 hover:bg-gray-200 rounded">取消</button>
+                                <button onClick={handleAddSubject} className="bg-sage-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-sage-700 shadow-sage-200 shadow-lg font-bold transition-all">确定</button>
+                                <button onClick={() => setShowAddSubject(false)} className="text-sage-500 text-xs px-2 hover:bg-sage-100 rounded-lg transition-colors font-medium">取消</button>
                             </div>
                         )}
                     </div>
@@ -594,36 +593,36 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
 
                 {/* Intercom Toggle (Class Groups Only) - Qt Style */}
                 {isClassGroup && (
-                    <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+                    <div className="px-5 py-4 border-t border-sage-100/50 bg-white/40 flex items-center justify-between backdrop-blur-md">
                         <div className="flex flex-col">
-                            <span className="text-sm font-bold text-gray-700">开启对讲</span>
-                            <span className="text-[10px] text-gray-400">允许老师使用对讲功能</span>
+                            <span className="text-sm font-bold text-ink-800">开启对讲</span>
+                            <span className="text-[10px] text-sage-400 font-medium mt-0.5">允许老师使用对讲功能</span>
                         </div>
                         <button
                             onClick={handleToggleIntercom}
-                            className={`w-10 h-5 rounded-full flex items-center px-0.5 transition-colors duration-300 ${intercomEnabled ? 'bg-blue-500' : 'bg-gray-300'}`}
+                            className={`w-11 h-6 rounded-full flex items-center px-0.5 transition-all duration-300 shadow-inner ${intercomEnabled ? 'bg-sage-500' : 'bg-gray-200'}`}
                         >
-                            <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-300 ${intercomEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                            <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-300 ${intercomEnabled ? 'translate-x-[20px]' : 'translate-x-0'}`} />
                         </button>
                     </div>
                 )}
 
                 {/* Exit / Disband Group Buttons (Class Groups Only) */}
                 {isClassGroup && (
-                    <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 space-y-2">
+                    <div className="px-5 py-4 border-t border-sage-100/50 bg-sage-50/50 space-y-2 backdrop-blur-md">
                         <button
                             onClick={handleExitGroup}
-                            className="w-full py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 flex items-center justify-center gap-2 transition-colors"
+                            className="w-full py-2.5 text-sm rounded-xl border border-gray-200 text-ink-600 hover:bg-white hover:border-gray-300 hover:text-ink-800 flex items-center justify-center gap-2 transition-all font-bold shadow-sm"
                         >
-                            <LogOut size={14} />
+                            <LogOut size={16} />
                             退出群聊
                         </button>
                         {isOwner && (
                             <button
                                 onClick={handleDisbandGroup}
-                                className="w-full py-2 text-sm rounded-lg border border-red-200 text-red-600 hover:bg-red-50 flex items-center justify-center gap-2 transition-colors"
+                                className="w-full py-2.5 text-sm rounded-xl border border-clay-200/50 text-clay-600 bg-clay-50/50 hover:bg-clay-100 hover:border-clay-300 flex items-center justify-center gap-2 transition-all font-bold shadow-sm"
                             >
-                                <Trash2 size={14} />
+                                <Trash2 size={16} />
                                 解散群聊
                             </button>
                         )}
@@ -650,40 +649,40 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
 
             {/* Transfer Ownership Modal (for owner exit) */}
             {showTransferModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-xl shadow-2xl w-[350px] p-5">
-                        <h2 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
-                            <UserCheck size={18} className="text-blue-500" />
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
+                    <div className="bg-paper/95 backdrop-blur-xl rounded-[2rem] shadow-2xl w-[350px] p-6 border border-white/60">
+                        <h2 className="text-lg font-bold text-ink-800 mb-2 flex items-center gap-2">
+                            <UserCheck size={20} className="text-sage-500" />
                             选择新群主
                         </h2>
-                        <p className="text-xs text-gray-500 mb-3">您是群主，退出前需先转让群主身份给其他成员。</p>
-                        <div className="max-h-[200px] overflow-y-auto space-y-1.5 mb-3">
+                        <p className="text-xs text-ink-400 font-medium mb-4">您是群主，退出前需先转让群主身份给其他成员。</p>
+
+                        <div className="max-h-[250px] overflow-y-auto space-y-2 mb-4 custom-scrollbar pr-2">
                             {members.filter(m => String(m.user_id) !== currentUserId && m.name !== '班级' && m.user_id !== 0).map((member) => (
                                 <button
                                     key={member.user_id}
                                     onClick={() => handleTransferAndQuit(String(member.user_id))}
-                                    className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-blue-50 border border-gray-200 transition-colors text-left"
+                                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white hover:shadow-md border border-transparent hover:border-sage-100 transition-all text-left group"
                                 >
-                                    <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-xs text-gray-500 border border-gray-200">
-                                        {member.avatar ? <img src={member.avatar} className="w-full h-full rounded-full" /> : member.name[0]}
+                                    <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-xs text-sage-400 border border-sage-100 group-hover:border-sage-300 transition-colors">
+                                        {member.avatar ? <img src={member.avatar} className="w-full h-full rounded-full object-cover" /> : member.name[0]}
                                     </div>
-                                    <span className="text-sm text-gray-700">{member.name}</span>
-                                    {member.role === 'manager' && <span className="text-[10px] bg-blue-100 text-blue-600 px-1 py-0.5 rounded">管理员</span>}
+                                    <span className="text-sm font-bold text-ink-700 group-hover:text-sage-700 transition-colors">{member.name}</span>
+                                    {member.role === 'manager' && <span className="text-[10px] bg-sage-100 text-sage-600 px-2 py-0.5 rounded-full font-bold ml-auto">管理员</span>}
                                 </button>
                             ))}
                         </div>
                         <button
                             onClick={() => setShowTransferModal(false)}
-                            className="w-full py-1.5 text-xs text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+                            className="w-full py-2.5 text-xs font-bold text-ink-500 hover:bg-white hover:text-ink-700 rounded-xl border border-transparent hover:border-sage-200 transition-all shadow-sm hover:shadow-md"
                         >
                             取消
                         </button>
                     </div>
                 </div>
             )}
-            {/* CustomListModal Removed */}
         </div>
-    );
+    ); {/* CustomListModal Removed */ }
 };
 
 export default ClassInfoModal;

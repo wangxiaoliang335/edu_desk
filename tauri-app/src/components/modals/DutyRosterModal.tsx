@@ -247,23 +247,23 @@ const DutyRosterModal = ({ isOpen, onClose, groupId }: DutyRosterModalProps) => 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200 font-sans">
             <div
                 style={style}
-                className="bg-white rounded-2xl shadow-2xl w-[950px] h-[650px] flex flex-col overflow-hidden border border-gray-100"
+                className="bg-paper/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl w-[950px] h-[650px] flex flex-col overflow-hidden border border-white/60 ring-1 ring-sage-100/50 animate-in zoom-in-95 duration-200"
             >
                 {/* Header */}
                 <div
                     onMouseDown={handleMouseDown}
-                    className="h-14 flex items-center justify-between px-5 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100 cursor-move select-none"
+                    className="h-16 flex items-center justify-between px-6 bg-white/40 border-b border-sage-100/50 cursor-move select-none backdrop-blur-md"
                 >
                     <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 bg-blue-100 rounded-xl flex items-center justify-center">
-                            <Calendar size={18} className="text-blue-600" />
+                        <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20 text-white">
+                            <Calendar size={20} />
                         </div>
-                        <h3 className="font-bold text-gray-800 text-lg">值日表</h3>
+                        <h3 className="font-bold text-ink-800 text-xl tracking-tight">值日表</h3>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
                         <input
                             type="file"
                             ref={fileInputRef}
@@ -272,16 +272,16 @@ const DutyRosterModal = ({ isOpen, onClose, groupId }: DutyRosterModalProps) => 
                             className="hidden"
                         />
                         <button
-                            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-sm font-semibold flex items-center gap-2 transition-colors shadow-sm"
+                            className="px-4 py-2 bg-white border border-sage-200 hover:border-sage-400 text-ink-700 hover:text-sage-700 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
                             onClick={handleImport}
                         >
-                            <FileSpreadsheet size={16} />
-                            导入
+                            <FileSpreadsheet size={16} className="text-sage-500" />
+                            导入 Excel
                         </button>
                         <button
-                            className={`px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 transition-colors ${isMinimalist
-                                    ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5 ${isMinimalist
+                                ? 'bg-sage-100 text-sage-700 border border-sage-200'
+                                : 'bg-white text-ink-600 border border-sage-200 hover:text-sage-600'
                                 }`}
                             onClick={() => setIsMinimalist(!isMinimalist)}
                         >
@@ -290,24 +290,24 @@ const DutyRosterModal = ({ isOpen, onClose, groupId }: DutyRosterModalProps) => 
                         </button>
                         <button
                             onClick={onClose}
-                            className="ml-1 w-9 h-9 flex items-center justify-center hover:bg-gray-100 rounded-xl text-gray-400 hover:text-gray-600 transition-colors"
+                            className="ml-2 w-9 h-9 flex items-center justify-center hover:bg-clay-50 rounded-full text-sage-400 hover:text-clay-600 transition-all duration-300"
                         >
-                            <X size={18} />
+                            <X size={20} />
                         </button>
                     </div>
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-hidden relative bg-gray-50/30">
+                <div className="flex-1 overflow-hidden relative bg-white/30 custom-scrollbar">
                     {loading ? (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-                            <Loader2 className="animate-spin text-blue-500" size={36} />
-                            <span className="text-gray-400 text-sm">加载中...</span>
+                            <span className="loading loading-spinner text-sage-500 loading-lg"></span>
+                            <span className="text-sage-400 text-sm font-medium">加载中...</span>
                         </div>
                     ) : error ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-                            <span className="text-red-400 font-medium">{error}</span>
-                            <button onClick={fetchRoster} className="flex items-center gap-2 text-blue-500 hover:text-blue-600 font-medium">
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+                            <span className="text-clay-500 font-bold bg-clay-50 px-4 py-2 rounded-xl border border-clay-100">{error}</span>
+                            <button onClick={fetchRoster} className="flex items-center gap-2 text-white bg-sage-500 hover:bg-sage-600 px-4 py-2 rounded-xl font-bold shadow-lg shadow-sage-500/20 transition-all">
                                 <RefreshCw size={16} />
                                 重试
                             </button>
@@ -316,13 +316,13 @@ const DutyRosterModal = ({ isOpen, onClose, groupId }: DutyRosterModalProps) => 
                         renderMinimalistView()
                     ) : (
                         <div className="h-full flex flex-col">
-                            <div className="flex-1 overflow-auto p-4">
-                                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                            <div className="flex-1 overflow-auto p-5">
+                                <div className="bg-white/60 backdrop-blur-sm rounded-2xl border border-white/60 ring-1 ring-sage-50 overflow-hidden shadow-sm">
                                     <table className="w-full border-collapse text-sm">
                                         <thead>
                                             <tr>
                                                 {rows[0]?.map((header, idx) => (
-                                                    <th key={idx} className="bg-gray-50 border-b border-gray-100 p-3 text-left font-bold text-gray-600 sticky top-0 z-10 min-w-[100px]">
+                                                    <th key={idx} className="bg-sage-50/80 border-b border-sage-100 p-3 text-left font-bold text-sage-600 sticky top-0 z-10 min-w-[100px] backdrop-blur-md">
                                                         {header}
                                                     </th>
                                                 ))}
@@ -336,10 +336,10 @@ const DutyRosterModal = ({ isOpen, onClose, groupId }: DutyRosterModalProps) => 
                                                 if (isReq) {
                                                     return (
                                                         <tr key={actualRowIndex} className="bg-amber-50/50">
-                                                            <td className="border-b border-gray-100 p-3 font-bold text-amber-600">
+                                                            <td className="border-b border-sage-100 p-3 font-bold text-amber-600">
                                                                 {row[0]?.split(',')[0] || "要求"}
                                                             </td>
-                                                            <td colSpan={Math.max(1, (rows[0]?.length || 1) - 1)} className="border-b border-gray-100 p-3 text-amber-800/70 italic">
+                                                            <td colSpan={Math.max(1, (rows[0]?.length || 1) - 1)} className="border-b border-sage-100 p-3 text-amber-800/70 italic font-medium">
                                                                 {(() => {
                                                                     const content = [];
                                                                     if (row[0] && row[0].includes(',')) content.push(...row[0].split(',').slice(1));
@@ -352,11 +352,11 @@ const DutyRosterModal = ({ isOpen, onClose, groupId }: DutyRosterModalProps) => 
                                                 }
 
                                                 return (
-                                                    <tr key={actualRowIndex} className="hover:bg-blue-50/30 transition-colors">
+                                                    <tr key={actualRowIndex} className="hover:bg-sage-50/30 transition-colors group">
                                                         {row.map((cell, cIdx) => (
-                                                            <td key={cIdx} className="border-b border-gray-100 p-0">
+                                                            <td key={cIdx} className="border-b border-sage-100/50 p-0 relative">
                                                                 <input
-                                                                    className="w-full h-full bg-transparent border-none outline-none p-3 text-gray-700 focus:bg-blue-50 transition-colors"
+                                                                    className="w-full h-full bg-transparent border-none outline-none p-3 text-ink-600 font-medium focus:bg-white focus:ring-2 focus:ring-inset focus:ring-sage-200 focus:text-ink-900 transition-all rounded-sm"
                                                                     value={cell}
                                                                     onChange={(e) => handleCellChange(actualRowIndex, cIdx, e.target.value)}
                                                                     onBlur={handleSave}
@@ -370,14 +370,14 @@ const DutyRosterModal = ({ isOpen, onClose, groupId }: DutyRosterModalProps) => 
                                     </table>
                                 </div>
                             </div>
-                            <div className="h-10 bg-white border-t border-gray-100 flex items-center px-4 text-xs text-gray-400">
+                            <div className="h-12 bg-white/40 border-t border-sage-100/50 flex items-center px-6 text-xs text-sage-400 font-medium backdrop-blur-md">
                                 {saving ? (
-                                    <span className="flex items-center gap-2 text-blue-500">
+                                    <span className="flex items-center gap-2 text-sage-600 bg-sage-50 px-3 py-1 rounded-full animate-pulse">
                                         <Loader2 size={12} className="animate-spin" />
                                         保存中...
                                     </span>
                                 ) : (
-                                    <span>所有更改将自动保存</span>
+                                    <span>💡 所有更改将自动保存</span>
                                 )}
                             </div>
                         </div>

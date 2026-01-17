@@ -57,19 +57,20 @@ const PERIODS = [
     { id: 8, time: '16:55 - 17:40', name: '第8节', rowIndex: 7 },
 ];
 
+// Softer, warmer colors for subjects
 const SUBJECT_COLORS: Record<string, string> = {
-    '语文': 'bg-blue-100 text-blue-700 border-blue-200',
-    '数学': 'bg-emerald-100 text-emerald-700 border-emerald-200',
-    '英语': 'bg-purple-100 text-purple-700 border-purple-200',
-    '物理': 'bg-indigo-100 text-indigo-700 border-indigo-200',
-    '化学': 'bg-cyan-100 text-cyan-700 border-cyan-200',
-    '历史': 'bg-orange-100 text-orange-700 border-orange-200',
-    '地理': 'bg-amber-100 text-amber-700 border-amber-200',
-    '生物': 'bg-lime-100 text-lime-700 border-lime-200',
-    '政治': 'bg-rose-100 text-rose-700 border-rose-200',
-    '体育': 'bg-green-100 text-green-700 border-green-200',
-    '音乐': 'bg-pink-100 text-pink-700 border-pink-200',
-    '美术': 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200',
+    '语文': 'bg-red-50 text-red-700 border-red-100',
+    '数学': 'bg-blue-50 text-blue-700 border-blue-100',
+    '英语': 'bg-violet-50 text-violet-700 border-violet-100',
+    '物理': 'bg-indigo-50 text-indigo-700 border-indigo-100',
+    '化学': 'bg-cyan-50 text-cyan-700 border-cyan-100',
+    '历史': 'bg-orange-50 text-orange-700 border-orange-100',
+    '地理': 'bg-amber-50 text-amber-700 border-amber-100',
+    '生物': 'bg-lime-50 text-lime-700 border-lime-100',
+    '政治': 'bg-rose-50 text-rose-700 border-rose-100',
+    '体育': 'bg-emerald-50 text-emerald-700 border-emerald-100',
+    '音乐': 'bg-pink-50 text-pink-700 border-pink-100',
+    '美术': 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-100',
 };
 
 const TeacherSchedule = () => {
@@ -167,11 +168,11 @@ const TeacherSchedule = () => {
 
                     if (periodObj && periodObj.id !== 'noon') {
                         const cellKey = `${dayKey}-${periodObj.id}`;
-                    const course: Course = {
+                        const course: Course = {
                             id: `srv-${cell.row_index}-${cell.col_index}`,
                             subject: cell.course_name,
-                        class: '个人课表',
-                            color: SUBJECT_COLORS[cell.course_name] || 'bg-gray-100 text-gray-700 border-gray-200',
+                            class: '个人课表',
+                            color: SUBJECT_COLORS[cell.course_name] || 'bg-sage-50 text-ink-600 border-sage-100',
                             highlight: cell.is_highlight === 1
                         };
 
@@ -215,7 +216,7 @@ const TeacherSchedule = () => {
                     id: `tmp-${cellKey}-${Date.now()}`,
                     subject: newName.trim(),
                     class: '个人课表',
-                    color: SUBJECT_COLORS[newName.trim()] || 'bg-gray-100 text-gray-700 border-gray-200',
+                    color: SUBJECT_COLORS[newName.trim()] || 'bg-sage-50 text-ink-600 border-sage-100',
                     highlight: true,
                 },
             ];
@@ -295,58 +296,59 @@ const TeacherSchedule = () => {
 
     return (
         <div
-            className="flex flex-col bg-white/60 backdrop-blur-sm rounded-xl border border-gray-200 shadow-sm resize both overflow-auto min-w-[900px] min-h-[600px]"
+            className="flex flex-col bg-paper rounded-[2rem] border border-sage-200 shadow-xl resize both overflow-auto min-w-[900px] min-h-[600px] font-sans text-ink-600"
             style={draggable.style}
         >
             {/* Header Actions */}
-            <div className="flex flex-col gap-2 mb-3 px-3 pt-2 cursor-move select-none" onMouseDown={draggable.handleMouseDown}>
+            <div className="flex flex-col gap-3 mb-4 px-6 pt-5 cursor-move select-none bg-white/50 border-b border-sage-50 pb-4" onMouseDown={draggable.handleMouseDown}>
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <h2 className="text-lg font-bold text-gray-800">教师个人课表</h2>
-                        <div className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-600 border border-blue-100">{weekLabel}</div>
+                        <span className="text-2xl">👨‍🏫</span>
+                        <h2 className="text-xl font-bold text-ink-800 tracking-tight">教师个人课表</h2>
+                        <div className="text-xs px-3 py-1 rounded-full bg-sage-50 text-sage-600 border border-sage-100 font-bold">{weekLabel}</div>
                         {weekRangeLabel && (
-                            <div className="text-xs px-2 py-1 rounded-full bg-gray-50 text-gray-600 border border-gray-200">
+                            <div className="text-xs px-3 py-1 rounded-full bg-paper text-ink-400 border border-sage-100 font-medium">
                                 {weekRangeLabel}
                             </div>
                         )}
                         {isEditing && (
-                            <div className="text-xs px-2 py-1 rounded-full bg-orange-50 text-orange-600 border border-orange-100">
+                            <div className="text-xs px-3 py-1 rounded-full bg-clay-50 text-clay-600 border border-clay-100 font-bold animate-pulse">
                                 临时调课模式
                             </div>
                         )}
                     </div>
                     <div className="flex items-center gap-2">
-                        {loading && <span className="text-sm text-gray-500 flex items-center animate-pulse">加载中...</span>}
-                        {error && <span className="text-sm text-red-500 flex items-center">错误: {error}</span>}
+                        {loading && <span className="text-sm text-sage-500 flex items-center animate-pulse">加载中...</span>}
+                        {error && <span className="text-sm text-clay-500 flex items-center">错误: {error}</span>}
                     </div>
                 </div>
 
                 <div className="flex items-start justify-between w-full gap-4">
                     <div className="flex flex-wrap items-center gap-2">
-                        <label className="text-xs text-gray-500">学期</label>
+                        <label className="text-xs text-ink-400 font-medium">学期</label>
                         <input
                             type="text"
                             value={currentTerm}
                             onChange={(e) => setCurrentTerm(e.target.value)}
-                            className="text-xs border rounded px-2 py-1 w-28 bg-white font-medium text-gray-700"
+                            className="text-xs border border-sage-200 rounded-lg px-3 py-1.5 w-28 bg-white focus:border-sage-400 outline-none transition-colors font-medium text-ink-700"
                             placeholder="2025-2026-1"
                         />
-                        <label className="text-xs text-gray-500 ml-1">第1周起始日</label>
+                        <label className="text-xs text-ink-400 ml-2 font-medium">第1周起始日</label>
                         <input
                             type="date"
                             value={termStartDate}
                             onChange={(e) => setTermStartDate(e.target.value)}
-                            className="text-xs border rounded px-2 py-1 bg-white text-gray-700"
+                            className="text-xs border border-sage-200 rounded-lg px-2 py-1.5 bg-white text-ink-700 focus:border-sage-400 outline-none"
                         />
-                        <label className="text-xs text-gray-500 ml-1">教师ID</label>
+                        <label className="text-xs text-ink-400 ml-2 font-medium">教师ID</label>
                         <input
                             type="text"
                             value={teacherId || '未绑定'}
                             disabled
-                            className="text-xs border rounded px-2 py-1 w-24 bg-gray-100 text-gray-400"
+                            className="text-xs border border-sage-100 rounded-lg px-3 py-1.5 w-24 bg-sage-50/50 text-ink-300"
                             placeholder="Teacher ID"
                         />
-                        <button onClick={fetchSchedule} className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">
+                        <button onClick={fetchSchedule} className="text-xs bg-sage-600 text-white px-4 py-1.5 rounded-lg hover:bg-sage-700 transition-colors font-bold shadow-sm shadow-sage-200">
                             查询
                         </button>
                     </div>
@@ -354,130 +356,120 @@ const TeacherSchedule = () => {
                     <div className="flex items-start gap-2">
                         <button
                             onClick={() => setIsEditing((v) => !v)}
-                            className={`text-xs px-3 py-1 rounded border ${isEditing ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                            className={`text-xs px-4 py-1.5 rounded-lg border font-medium transition-all ${isEditing ? 'bg-clay-500 text-white border-clay-500 shadow-md shadow-clay-200' : 'bg-white text-ink-500 border-sage-200 hover:bg-sage-50'}`}
                         >
                             临时调课
                         </button>
                         {isEditing && (
-                            <button onClick={handleSave} className="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700">
+                            <button onClick={handleSave} className="text-xs bg-sage-600 text-white px-4 py-1.5 rounded-lg hover:bg-sage-700 font-bold shadow-sm">
                                 保存
                             </button>
                         )}
 
-                        <span className="mx-1 text-gray-300">|</span>
+                        <span className="mx-2 text-sage-200">|</span>
 
-                        <button
-                            onClick={() => setCurrentWeek((w) => w - 1)}
-                            className="px-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 shadow-sm transition-all"
-                        >
-                            上周
-                        </button>
-                        <button
-                            onClick={() => setCurrentWeek(0)}
-                            className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm shadow-blue-500/20 transition-all"
-                        >
-                            本周
-                        </button>
-                        <button
-                            onClick={() => setCurrentWeek((w) => w + 1)}
-                            className="px-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 shadow-sm transition-all"
-                        >
-                            下周
-                        </button>
-                        <div className="flex flex-col items-start gap-1 ml-1">
-                            <div className="flex items-center gap-1">
-                                <input
-                                    type="number"
-                                    min={0}
-                                    value={weekInput}
-                                    onChange={(e) => setWeekInput(e.target.value)}
-                                    className="w-16 text-xs border rounded px-2 py-1 bg-white text-gray-700"
-                                    placeholder="周次"
-                                />
-                                <button
-                                    onClick={() => {
-                                        const n = parseInt(weekInput, 10);
-                                        if (!Number.isNaN(n)) setCurrentWeek(n);
-                                    }}
-                                    className="text-xs px-2 py-1 rounded border bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
-                                >
-                                    跳转
-                                </button>
-                            </div>
-                            {weekInputRangeLabel ? (
-                                <div className="text-[11px] text-gray-500 mt-2">
-                                    {weekInputRangeLabel}
-                                </div>
-                            ) : (
-                                <div className="text-[11px] text-gray-400 mt-2">
-                                    请输入周次查看日期
-                                </div>
-                            )}
+                        <div className="flex bg-white rounded-lg border border-sage-200 p-0.5">
+                            <button
+                                onClick={() => setCurrentWeek((w) => w - 1)}
+                                className="px-3 py-1 text-xs rounded-md hover:bg-sage-50 text-ink-500 transition-colors"
+                            >
+                                上周
+                            </button>
+                            <button
+                                onClick={() => setCurrentWeek(0)}
+                                className="px-3 py-1 text-xs bg-sage-100 text-sage-700 rounded-md font-bold"
+                            >
+                                本周
+                            </button>
+                            <button
+                                onClick={() => setCurrentWeek((w) => w + 1)}
+                                className="px-3 py-1 text-xs rounded-md hover:bg-sage-50 text-ink-500 transition-colors"
+                            >
+                                下周
+                            </button>
+                        </div>
+
+                        <div className="flex items-center gap-1 ml-2">
+                            <input
+                                type="number"
+                                min={0}
+                                value={weekInput}
+                                onChange={(e) => setWeekInput(e.target.value)}
+                                className="w-16 text-xs border border-sage-200 rounded-lg px-2 py-1.5 bg-white text-ink-700 focus:border-sage-400 outline-none text-center"
+                                placeholder="周次"
+                            />
+                            <button
+                                onClick={() => {
+                                    const n = parseInt(weekInput, 10);
+                                    if (!Number.isNaN(n)) setCurrentWeek(n);
+                                }}
+                                className="text-xs px-3 py-1.5 rounded-lg border border-sage-200 bg-white text-ink-500 hover:bg-sage-50 font-medium"
+                            >
+                                跳转
+                            </button>
                         </div>
                     </div>
-                </div>
-
-                <div className="text-xs text-gray-500">
-                    说明：双击格子可修改课程；空值表示清空。临时调课将自动高亮。
                 </div>
             </div>
 
             {/* Schedule Grid */}
-            <div className="flex-1 overflow-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-                <div className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_1fr] divide-x divide-gray-100 h-full min-w-[800px]">
-                    {/* Time Column */}
-                    <div className="bg-gray-50/50 flex flex-col divide-y divide-gray-100 text-xs text-gray-500 font-medium">
-                        <div className="h-10 flex items-center justify-center bg-gray-100/50">时间</div>
-                        {PERIODS.map((period) => (
-                            <div key={period.id} className={`flex flex-col items-center justify-center p-2 ${period.id === 'noon' ? 'h-12 bg-gray-100/30' : 'h-24'}`}>
-                                <span>{period.name}</span>
-                                <span className="scale-90 text-gray-400 mt-1">{period.time}</span>
+            <div className="flex-1 overflow-auto px-6 pb-6">
+                <div className="rounded-2xl border border-sage-100 bg-white shadow-sm overflow-hidden">
+                    <div className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_1fr] divide-x divide-sage-50 h-full min-w-[800px]">
+                        {/* Time Column */}
+                        <div className="bg-sage-50/30 flex flex-col divide-y divide-sage-50 text-xs text-ink-400 font-medium tracking-wide">
+                            <div className="h-10 flex items-center justify-center bg-sage-50/50 text-sage-600 font-bold">时间</div>
+                            {PERIODS.map((period) => (
+                                <div key={period.id} className={`flex flex-col items-center justify-center p-2 ${period.id === 'noon' ? 'h-14 bg-sage-50/50' : 'h-28'}`}>
+                                    <span className="font-bold text-ink-500">{period.name}</span>
+                                    <span className="scale-90 opacity-70 mt-1 font-mono">{period.time}</span>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Weekday Columns */}
+                        {WEEKDAYS.map((day, dayIndex) => (
+                            <div key={day} className="flex flex-col divide-y divide-sage-50 hover:bg-sage-50/10 transition-colors">
+                                {/* Header */}
+                                <div className="h-10 flex items-center justify-center bg-sage-50/30 font-bold text-ink-600 text-sm">
+                                    {day}
+                                </div>
+
+                                {/* Cells */}
+                                {PERIODS.map((period) => {
+                                    if (period.id === 'noon') {
+                                        return <div key="noon" className="h-14 bg-sage-50/20 flex items-center justify-center text-xs text-sage-300 tracking-widest">午休</div>;
+                                    }
+
+                                    const cellKey = `${dayIndex + 1}-${period.id}`;
+                                    const courses = scheduleMap[cellKey];
+                                    const isSelected = selectedCell === cellKey;
+
+                                    return (
+                                        <div
+                                            key={period.id}
+                                            onClick={() => setSelectedCell(cellKey)}
+                                            onDoubleClick={() => handleCellEdit(cellKey)}
+                                            className={`h-28 p-1.5 transition-all relative group ${isSelected ? 'bg-sage-50/50 ring-2 ring-inset ring-sage-200' : ''} ${isEditing ? 'cursor-pointer hover:bg-sage-50' : ''}`}
+                                        >
+                                            {courses ? (
+                                                courses.map(course => (
+                                                    <div key={course.id} className={`h-full w-full rounded-xl p-3 border ${course.color} ${course.highlight ? 'ring-2 ring-clay-400 ring-offset-1' : ''} shadow-sm cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col justify-center gap-1.5`}>
+                                                        <div className="font-bold text-base tracking-tight">{course.subject}</div>
+                                                        <div className="text-xs opacity-75 font-medium bg-white/30 w-fit px-1.5 py-0.5 rounded-md">{course.class}</div>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <div className="h-full w-full rounded-xl border border-transparent group-hover:border-dashed group-hover:border-sage-200 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
+                                                    <span className="text-sage-300 text-2xl font-light hover:scale-110 transition-transform cursor-pointer">+</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         ))}
                     </div>
-
-                    {/* Weekday Columns */}
-                    {WEEKDAYS.map((day, dayIndex) => (
-                        <div key={day} className="flex flex-col divide-y divide-gray-100">
-                            {/* Header */}
-                            <div className="h-10 flex items-center justify-center bg-gray-100/50 font-semibold text-gray-700 text-sm">
-                                {day}
-                            </div>
-
-                            {/* Cells */}
-                            {PERIODS.map((period) => {
-                                if (period.id === 'noon') {
-                                    return <div key="noon" className="h-12 bg-gray-50/20"></div>;
-                                }
-
-                                const cellKey = `${dayIndex + 1}-${period.id}`;
-                                const courses = scheduleMap[cellKey];
-                                const isSelected = selectedCell === cellKey;
-
-                                return (
-                                    <div
-                                        key={period.id}
-                                        onClick={() => setSelectedCell(cellKey)}
-                                        onDoubleClick={() => handleCellEdit(cellKey)}
-                                        className={`h-24 p-1 transition-colors relative group ${isSelected ? 'bg-blue-50/30' : 'hover:bg-gray-50/30'} ${isEditing ? 'cursor-pointer' : ''}`}
-                                    >
-                                        {courses ? (
-                                            courses.map(course => (
-                                                <div key={course.id} className={`h-full w-full rounded-lg p-2 border ${course.color} ${course.highlight ? 'ring-2 ring-orange-400 ring-offset-1' : ''} shadow-sm cursor-pointer hover:shadow-md transition-all flex flex-col justify-center gap-1`}>
-                                                    <div className="font-bold text-sm">{course.subject}</div>
-                                                    <div className="text-xs opacity-90">{course.class}</div>
-                                                </div>
-                                            ))
-                                        ) : (
-                                            <div className="h-full w-full rounded-lg border border-transparent group-hover:border-dashed group-hover:border-gray-300 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
-                                                <span className="text-gray-300 text-2xl font-light">+</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    ))}
                 </div>
             </div>
         </div>

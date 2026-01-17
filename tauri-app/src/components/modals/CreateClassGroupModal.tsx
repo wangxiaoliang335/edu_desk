@@ -332,62 +332,57 @@ const CreateClassGroupModal = ({ isOpen, onClose, onSuccess, userInfo }: CreateC
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-md animate-in fade-in duration-200 font-sans">
-            <div className="bg-white rounded-2xl shadow-2xl w-[500px] max-h-[85vh] flex flex-col overflow-hidden transform scale-100 transition-all">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-300 font-sans">
+            <div className="bg-paper/95 backdrop-blur-xl rounded-[2rem] shadow-2xl w-[600px] max-h-[85vh] flex flex-col overflow-hidden transform scale-100 transition-all border border-white/50 ring-1 ring-sage-100/50">
 
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white">
+                <div className="flex items-center justify-between px-8 py-6 border-b border-sage-100/50 bg-white/30 backdrop-blur-sm">
                     <div>
-                        <h2 className="text-xl font-bold text-gray-800">创建班级群</h2>
-                        <p className="text-xs text-gray-500 mt-1">选择班级和协同教师</p>
+                        <h2 className="text-2xl font-bold text-ink-800 tracking-tight">创建班级群</h2>
+                        <p className="text-sm font-medium text-ink-400 mt-1">选择班级和协同教师，快速建立沟通群组。</p>
                     </div>
                     <button
                         onClick={onClose}
-                        className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-all"
+                        className="w-10 h-10 flex items-center justify-center text-sage-400 hover:text-clay-600 hover:bg-clay-50 rounded-full transition-all duration-300"
                     >
-                        <X size={20} />
+                        <X size={24} />
                     </button>
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 p-6 flex flex-col gap-6 overflow-hidden bg-gray-50/50">
+                <div className="flex-1 p-8 flex flex-col gap-8 overflow-hidden bg-white/40 relative">
 
                     {/* Class Section */}
-                    <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-4">
                         <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                                <Users size={16} className="text-blue-500" />
+                            <div className="flex items-center gap-2 text-sm font-bold text-ink-700 uppercase tracking-wide">
+                                <Users size={18} className="text-sage-500" />
                                 <span>选择班级</span>
-                                {selectedClass && <span className="text-xs font-normal text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full ml-2">已选: {selectedClass.class_name}</span>}
+                                {selectedClass && <span className="text-xs font-bold text-sage-600 bg-sage-50 border border-sage-100 px-2 py-0.5 rounded-lg ml-2 animate-in fade-in slide-in-from-left-2">已选: {selectedClass.class_name}</span>}
                             </div>
 
                             {/* Search within header line */}
-                            <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-2 py-1 shadow-sm focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-400 transition-all">
+                            <div className="flex items-center gap-2 bg-white/80 border border-sage-200 rounded-xl px-3 py-1.5 shadow-sm focus-within:ring-2 focus-within:ring-sage-100 focus-within:border-sage-400 transition-all group">
+                                <Search size={14} className="text-sage-300 group-focus-within:text-sage-500 transition-colors" />
                                 <input
                                     type="text"
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     placeholder="搜索班级..."
-                                    className="w-20 text-xs text-gray-700 outline-none bg-transparent placeholder:text-gray-400"
+                                    className="w-24 text-sm font-medium text-ink-700 outline-none bg-transparent placeholder:text-sage-300"
                                 />
-                                <button
-                                    onClick={() => fetchClasses()}
-                                    className="text-gray-400 hover:text-blue-500 transition-colors"
-                                >
-                                    <Search size={14} />
-                                </button>
                             </div>
                         </div>
 
-                        <div className="bg-white rounded-xl border border-gray-200 h-[180px] overflow-y-auto shadow-sm p-2 custom-scrollbar">
-                            <div className="flex flex-col gap-1">
+                        <div className="bg-white/60 rounded-2xl border border-white/50 ring-1 ring-sage-50 h-[200px] overflow-y-auto shadow-sm p-3 custom-scrollbar backdrop-blur-sm">
+                            <div className="flex flex-col gap-1.5">
                                 {isSearching ? (
-                                    <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2">
-                                        <div className="w-5 h-5 border-2 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
+                                    <div className="flex flex-col items-center justify-center h-full text-sage-400 gap-2 font-bold animate-pulse">
+                                        <div className="w-6 h-6 border-2 border-sage-200 border-t-sage-500 rounded-full animate-spin" />
                                         <div className="text-xs">搜索中...</div>
                                     </div>
                                 ) : classes.length === 0 ? (
-                                    <div className="flex flex-col items-center justify-center h-full text-gray-400 text-xs">
+                                    <div className="flex flex-col items-center justify-center h-full text-sage-300 text-xs font-bold">
                                         <span>未找到班级</span>
                                     </div>
                                 ) : (
@@ -395,26 +390,26 @@ const CreateClassGroupModal = ({ isOpen, onClose, onSuccess, userInfo }: CreateC
                                         <div
                                             key={cls.class_id}
                                             onClick={() => setSelectedClass(cls)}
-                                            className={`flex items-center justify-between p-2.5 rounded-lg cursor-pointer transition-all border ${selectedClass?.class_id === cls.class_id
-                                                ? 'bg-blue-50 border-blue-500/30 shadow-sm'
-                                                : 'bg-white border-transparent hover:bg-gray-50'
+                                            className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all border group ${selectedClass?.class_id === cls.class_id
+                                                ? 'bg-sage-50 border-sage-200 shadow-sm'
+                                                : 'bg-transparent border-transparent hover:bg-white/80 hover:shadow-sm hover:border-sage-50'
                                                 }`}
                                         >
                                             <div className="flex items-center gap-3 overflow-hidden">
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold transition-colors ${selectedClass?.class_id === cls.class_id ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
+                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-sm font-bold transition-all shadow-sm ${selectedClass?.class_id === cls.class_id ? 'bg-sage-500 text-white' : 'bg-white text-sage-400 group-hover:text-sage-600'}`}>
                                                     {cls.class_name.substring(0, 1)}
                                                 </div>
                                                 <div className="flex flex-col min-w-0">
-                                                    <div className={`text-sm font-medium truncate ${selectedClass?.class_id === cls.class_id ? 'text-blue-700' : 'text-gray-700'}`}>
+                                                    <div className={`text-sm font-bold truncate transition-colors ${selectedClass?.class_id === cls.class_id ? 'text-sage-800' : 'text-ink-700'}`}>
                                                         {cls.grade ? cls.grade + cls.class_name : cls.class_name}
                                                     </div>
-                                                    <div className="text-[10px] text-gray-400 truncate">{cls.class_id}</div>
+                                                    <div className="text-[10px] font-mono text-ink-300 truncate tracking-wide">{cls.class_id}</div>
                                                 </div>
                                             </div>
 
                                             {selectedClass?.class_id === cls.class_id && (
-                                                <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center shadow-sm shrink-0">
-                                                    <Check size={12} className="text-white" />
+                                                <div className="w-6 h-6 bg-sage-500 rounded-full flex items-center justify-center shadow-md shrink-0 animate-in zoom-in-75">
+                                                    <Check size={14} className="text-white" />
                                                 </div>
                                             )}
                                         </div>
@@ -425,57 +420,57 @@ const CreateClassGroupModal = ({ isOpen, onClose, onSuccess, userInfo }: CreateC
                     </div>
 
                     {/* Teacher (Friend) Section */}
-                    <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-4">
                         <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                                <User size={16} className="text-purple-500" />
+                            <div className="flex items-center gap-2 text-sm font-bold text-ink-700 uppercase tracking-wide">
+                                <User size={18} className="text-clay-500" />
                                 <span>添加管理员 (可选)</span>
-                                {selectedFriend && <span className="text-xs font-normal text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full ml-2">已选: {selectedFriend.teacher_info.name}</span>}
+                                {selectedFriend && <span className="text-xs font-bold text-clay-600 bg-clay-50 border border-clay-100 px-2 py-0.5 rounded-lg ml-2 animate-in fade-in slide-in-from-left-2">已选: {selectedFriend.teacher_info.name}</span>}
                             </div>
                         </div>
 
-                        <div className="bg-white rounded-xl border border-gray-200 h-[180px] overflow-y-auto shadow-sm p-2 custom-scrollbar">
+                        <div className="bg-white/60 rounded-2xl border border-white/50 ring-1 ring-sage-50 h-[120px] overflow-y-auto shadow-sm p-3 custom-scrollbar backdrop-blur-sm">
                             {isFetchingFriends ? (
-                                <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2">
-                                    <div className="w-5 h-5 border-2 border-purple-500/20 border-t-purple-500 rounded-full animate-spin" />
+                                <div className="flex flex-col items-center justify-center h-full text-sage-400 gap-2 font-bold animate-pulse">
+                                    <div className="w-5 h-5 border-2 border-clay-200 border-t-clay-500 rounded-full animate-spin" />
                                     <div className="text-xs">加载好友列表...</div>
                                 </div>
                             ) : friends.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center h-full text-gray-400 text-xs">
+                                <div className="flex flex-col items-center justify-center h-full text-sage-300 text-xs font-bold">
                                     暂无教师好友
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-2 gap-3">
                                     {friends.map(friend => (
                                         <div
                                             key={friend.teacher_info.teacher_unique_id}
                                             onClick={() => setSelectedFriend(selectedFriend?.teacher_info.teacher_unique_id === friend.teacher_info.teacher_unique_id ? null : friend)}
-                                            className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all border ${selectedFriend?.teacher_info.teacher_unique_id === friend.teacher_info.teacher_unique_id
-                                                ? 'bg-purple-50 border-purple-500/30 shadow-sm'
-                                                : 'bg-white border-transparent hover:bg-gray-50'
+                                            className={`flex items-center gap-3 p-2.5 rounded-xl cursor-pointer transition-all border group ${selectedFriend?.teacher_info.teacher_unique_id === friend.teacher_info.teacher_unique_id
+                                                ? 'bg-clay-50 border-clay-200 shadow-sm'
+                                                : 'bg-transparent border-transparent hover:bg-white/80 hover:shadow-sm hover:border-clay-50'
                                                 }`}
                                         >
                                             <div className="relative shrink-0">
-                                                <div className="w-9 h-9 rounded-full bg-gray-100 overflow-hidden border border-gray-100">
+                                                <div className="w-10 h-10 rounded-full bg-white shadow-sm overflow-hidden border border-white ring-1 ring-sage-50">
                                                     {friend.user_details?.avatar ? (
                                                         <img src={friend.user_details.avatar} className="w-full h-full object-cover" onError={(e) => e.currentTarget.style.display = 'none'} />
                                                     ) : (
-                                                        <div className="w-full h-full flex items-center justify-center text-xs text-gray-400 font-bold bg-gray-100">
+                                                        <div className="w-full h-full flex items-center justify-center text-sm font-bold text-clay-400 bg-clay-50">
                                                             {friend.teacher_info.name.substring(0, 1)}
                                                         </div>
                                                     )}
                                                 </div>
                                                 {selectedFriend?.teacher_info.teacher_unique_id === friend.teacher_info.teacher_unique_id && (
-                                                    <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-purple-500 rounded-full flex items-center justify-center border-2 border-white">
-                                                        <Check size={8} className="text-white" />
+                                                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-clay-500 rounded-full flex items-center justify-center border-2 border-white shadow-sm animate-in zoom-in-75">
+                                                        <Check size={10} className="text-white" />
                                                     </div>
                                                 )}
                                             </div>
                                             <div className="flex flex-col min-w-0">
-                                                <div className={`text-xs font-medium truncate ${selectedFriend?.teacher_info.teacher_unique_id === friend.teacher_info.teacher_unique_id ? 'text-purple-700' : 'text-gray-700'}`}>
+                                                <div className={`text-xs font-bold truncate transition-colors ${selectedFriend?.teacher_info.teacher_unique_id === friend.teacher_info.teacher_unique_id ? 'text-clay-700' : 'text-ink-700'}`}>
                                                     {friend.teacher_info.name}
                                                 </div>
-                                                <div className="text-[10px] text-gray-400 truncate">{friend.user_details?.phone || '无电话'}</div>
+                                                <div className="text-[10px] font-mono text-ink-300 truncate">{friend.user_details?.phone || '无电话'}</div>
                                             </div>
                                         </div>
                                     ))}
@@ -487,17 +482,17 @@ const CreateClassGroupModal = ({ isOpen, onClose, onSuccess, userInfo }: CreateC
                 </div>
 
                 {/* Footer */}
-                <div className="p-4 bg-gray-50 flex justify-end gap-3 border-t border-gray-100">
+                <div className="p-6 bg-white/50 backdrop-blur-md flex justify-end gap-3 border-t border-sage-100/50">
                     <button
                         onClick={onClose}
-                        className="px-5 py-2.5 bg-white text-gray-700 rounded-lg hover:bg-gray-100 font-medium text-sm transition-colors border border-gray-200 shadow-sm"
+                        className="px-6 py-3 bg-white text-ink-500 rounded-2xl hover:bg-sage-50 font-bold text-sm transition-all border border-sage-200 hover:border-sage-300 shadow-sm hover:shadow active:scale-95"
                     >
                         取消
                     </button>
                     <button
                         onClick={handleCreate}
                         disabled={isLoading || !selectedClass}
-                        className="px-6 py-2.5 bg-black text-white rounded-lg hover:bg-gray-800 font-medium text-sm transition-all shadow-lg shadow-gray-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center gap-2"
+                        className="px-8 py-3 bg-sage-600 text-white rounded-2xl hover:bg-sage-700 font-bold text-sm transition-all shadow-md shadow-sage-500/20 hover:shadow-lg hover:shadow-sage-500/30 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center gap-2 active:scale-95"
                     >
                         {isLoading ? (
                             <>

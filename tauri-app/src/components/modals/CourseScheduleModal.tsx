@@ -199,20 +199,26 @@ const CourseScheduleModal = ({ isOpen, onClose, classId }: CourseScheduleModalPr
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-300 font-sans">
             <div
                 style={style}
-                className="bg-white rounded-2xl shadow-2xl w-[900px] h-[650px] flex flex-col overflow-hidden border border-gray-100"
+                className="bg-paper/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl w-[900px] h-[650px] flex flex-col overflow-hidden border border-white/50 ring-1 ring-sage-100/50"
             >
                 {/* Header */}
                 <div
                     onMouseDown={handleMouseDown}
-                    className="bg-gradient-to-r from-blue-500 to-indigo-600 p-4 flex items-center justify-between text-white flex-shrink-0 cursor-move select-none"
+                    className="bg-white/30 px-6 py-4 flex items-center justify-between text-ink-800 flex-shrink-0 cursor-move select-none border-b border-sage-100/50 backdrop-blur-md"
                 >
-                    <div className="flex items-center gap-2 font-bold text-lg">
-                        <Calendar size={20} />
-                        <span>班级课程表</span>
-                        <span className="text-sm font-normal opacity-80 bg-white/20 px-2 py-0.5 rounded ml-2">{getCurrentTerm()}</span>
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-sage-400 to-sage-600 rounded-2xl flex items-center justify-center shadow-lg shadow-sage-500/20 text-white">
+                            <Calendar size={20} />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="font-bold text-lg tracking-tight">班级课程表</span>
+                                <span className="text-xs font-bold text-sage-600 bg-sage-50 px-2 py-0.5 rounded-lg border border-sage-100 shadow-sm">{getCurrentTerm()}</span>
+                            </div>
+                        </div>
                     </div>
                     <div className="flex items-center gap-2">
                         <input
@@ -222,45 +228,49 @@ const CourseScheduleModal = ({ isOpen, onClose, classId }: CourseScheduleModalPr
                             accept=".xlsx, .xls"
                             onChange={handleFileChange}
                         />
-                        <button onClick={handleImportClick} className="p-1.5 hover:bg-white/20 rounded-lg transition-colors text-white/90" title="导入Excel">
-                            <FileSpreadsheet size={18} />
+                        <button onClick={handleImportClick} className="p-2 hover:bg-white hover:text-sage-600 rounded-xl transition-all text-sage-400 hover:shadow-sm" title="导入Excel">
+                            <FileSpreadsheet size={20} />
                         </button>
-                        <button onClick={fetchSchedule} className="p-1.5 hover:bg-white/20 rounded-lg transition-colors text-white/90">
-                            <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
+                        <button onClick={fetchSchedule} className="p-2 hover:bg-white hover:text-sage-600 rounded-xl transition-all text-sage-400 hover:shadow-sm">
+                            <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
                         </button>
-                        <button className="p-1.5 hover:bg-white/20 rounded-lg transition-colors text-white/90">
-                            <Download size={18} />
+                        <button className="p-2 hover:bg-white hover:text-sage-600 rounded-xl transition-all text-sage-400 hover:shadow-sm">
+                            <Download size={20} />
                         </button>
-                        <div className="w-[1px] h-6 bg-white/30 mx-1"></div>
-                        <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition-colors">
-                            <X size={20} />
+                        <div className="w-[1px] h-6 bg-sage-200/50 mx-1"></div>
+                        <button onClick={onClose} className="w-9 h-9 flex items-center justify-center hover:bg-clay-50 hover:text-clay-600 rounded-full transition-all text-sage-400">
+                            <X size={22} />
                         </button>
                     </div>
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-auto p-4 bg-gray-50/50">
+                <div className="flex-1 overflow-auto p-6 bg-white/40 custom-scrollbar">
                     {scheduleData.length === 0 ? (
                         /* Empty State */
-                        <div className="h-full flex flex-col items-center justify-center text-center">
-                            <Calendar size={64} className="text-gray-300 mb-4" />
-                            <h3 className="text-lg font-bold text-gray-500 mb-2">暂无课程表数据</h3>
-                            <p className="text-gray-400 text-sm mb-6">请导入Excel课程表文件</p>
+                        <div className="h-full flex flex-col items-center justify-center text-center gap-4">
+                            <div className="w-24 h-24 bg-sage-50 rounded-full flex items-center justify-center border border-sage-100 shadow-inner">
+                                <Calendar size={48} className="text-sage-300" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-ink-600 mb-1">暂无课程表数据</h3>
+                                <p className="text-ink-400 text-sm font-medium">请导入Excel课程表文件以开始使用</p>
+                            </div>
                             <button
                                 onClick={handleImportClick}
-                                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg flex items-center gap-2 transition-all shadow-lg shadow-blue-200"
+                                className="mt-4 px-6 py-3 bg-sage-600 hover:bg-sage-700 text-white font-bold rounded-2xl flex items-center gap-2 transition-all shadow-lg shadow-sage-500/20 active:scale-95"
                             >
                                 <FileSpreadsheet size={20} />
                                 导入课程表
                             </button>
                         </div>
                     ) : (
-                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                        <div className="bg-white/80 rounded-2xl border border-white/60 shadow-sm overflow-hidden ring-1 ring-sage-50 backdrop-blur-sm">
                             <div className="grid grid-cols-6 text-sm">
                                 {/* Header Row */}
-                                <div className="bg-gray-50 p-3 font-bold text-gray-500 text-center border-b border-r border-gray-200">时间</div>
+                                <div className="bg-sage-50/80 p-3 font-bold text-sage-500 text-center border-b border-r border-sage-100">时间</div>
                                 {['周一', '周二', '周三', '周四', '周五'].map(day => (
-                                    <div key={day} className="bg-gray-50 p-3 font-bold text-gray-700 text-center border-b border-gray-200 border-r last:border-r-0">
+                                    <div key={day} className="bg-sage-50/80 p-3 font-bold text-ink-700 text-center border-b border-sage-100 border-r last:border-r-0">
                                         {day}
                                     </div>
                                 ))}
@@ -269,7 +279,7 @@ const CourseScheduleModal = ({ isOpen, onClose, classId }: CourseScheduleModalPr
                                 {scheduleData.map((row, index) => {
                                     if (row.time === 'lunch') {
                                         return (
-                                            <div key={index} className="col-span-6 bg-orange-50/50 p-2 text-center text-orange-400 font-medium text-xs border-b border-gray-200">
+                                            <div key={index} className="col-span-6 bg-orange-50/30 p-2 text-center text-orange-400 font-bold text-xs border-b border-sage-100 tracking-wider">
                                                 {row.label}
                                             </div>
                                         );
@@ -277,24 +287,25 @@ const CourseScheduleModal = ({ isOpen, onClose, classId }: CourseScheduleModalPr
                                     return (
                                         <Fragment key={index}>
                                             {/* Time Column */}
-                                            <div className="p-4 flex items-center justify-center text-gray-500 font-medium border-b border-r border-gray-100 text-xs bg-gray-50/30">
+                                            <div className="p-4 flex items-center justify-center text-sage-500 font-bold border-b border-r border-sage-100 text-xs bg-sage-50/30">
                                                 {row.time}
                                             </div>
                                             {/* Course Columns */}
                                             {[row.mon, row.tue, row.wed, row.thu, row.fri].map((course, i) => (
-                                                <div key={i} className="p-2 border-b border-r border-gray-100 last:border-r-0 h-20 relative group hover:bg-blue-50/50 transition-colors">
+                                                <div key={i} className="p-2 border-b border-r border-sage-100 last:border-r-0 h-24 relative group hover:bg-white transition-colors">
                                                     <div className={`
-                                                    h-full w-full rounded-lg flex flex-col items-center justify-center gap-1 cursor-pointer transition-all hover:shadow-sm
-                                                    ${course === '数学' ? 'bg-blue-100 text-blue-700' :
-                                                            course === '语文' ? 'bg-red-100 text-red-700' :
-                                                                course === '英语' ? 'bg-orange-100 text-orange-700' :
-                                                                    course === '物理' ? 'bg-indigo-100 text-indigo-700' :
-                                                                        course === '化学' ? 'bg-purple-100 text-purple-700' :
-                                                                            course === '体育' ? 'bg-green-100 text-green-700' :
-                                                                                'bg-gray-100 text-gray-600'}
+                                                    h-full w-full rounded-xl flex flex-col items-center justify-center gap-1 cursor-pointer transition-all hover:shadow-md border border-transparent hover:border-white/50
+                                                    ${course === '数学' ? 'bg-blue-50 text-blue-700' :
+                                                            course === '语文' ? 'bg-red-50 text-red-700' :
+                                                                course === '英语' ? 'bg-orange-50 text-orange-700' :
+                                                                    course === '物理' ? 'bg-indigo-50 text-indigo-700' :
+                                                                        course === '化学' ? 'bg-purple-50 text-purple-700' :
+                                                                            course === '体育' ? 'bg-green-50 text-green-700' :
+                                                                                course ? 'bg-sage-50 text-sage-700' :
+                                                                                    'hover:bg-sage-50/30'}
                                                 `}>
-                                                        <span className="font-bold">{course || '-'}</span>
-                                                        {course && <span className="text-[10px] opacity-70">A-302</span>}
+                                                        <span className="font-bold text-base">{course || ''}</span>
+                                                        {course && <span className="text-[10px] opacity-70 font-medium">Classroom</span>}
                                                     </div>
                                                 </div>
                                             ))}

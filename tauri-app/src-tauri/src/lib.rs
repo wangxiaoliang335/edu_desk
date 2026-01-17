@@ -1841,6 +1841,125 @@ async fn open_teacher_schedule_window(app: tauri::AppHandle) -> Result<(), Strin
     }
 }
 
+fn position_countdown_minimal_window(window: &tauri::WebviewWindow) {
+    const MINIMAL_WIDTH: f64 = 320.0;
+    const TOP_OFFSET: f64 = 50.0;
+
+    if let Ok(Some(monitor)) = window.current_monitor() {
+        let scale = monitor.scale_factor();
+        let size = monitor.size();
+        let logical_width = size.width as f64 / scale;
+        let x = ((logical_width - MINIMAL_WIDTH) / 2.0).max(0.0);
+        let _ = window.set_position(tauri::LogicalPosition::new(x, TOP_OFFSET));
+    }
+}
+
+#[tauri::command]
+async fn open_countdown_minimal_window(app: tauri::AppHandle) -> Result<(), String> {
+    println!("Backend: open_countdown_minimal_window called");
+    let window_label = "countdown_minimal";
+    let url = "/countdown?mode=minimal";
+    if let Some(other) = app.get_webview_window("countdown_full") {
+        let _ = other.hide();
+    }
+
+    if let Some(window) = app.get_webview_window(window_label) {
+        let _ = window.show();
+        let _ = window.set_focus();
+        position_countdown_minimal_window(&window);
+        return Ok(());
+    }
+
+    let builder = tauri::WebviewWindowBuilder::new(&app, window_label, tauri::WebviewUrl::App(url.into()))
+        .title("倒计时")
+        .inner_size(320.0, 44.0)
+        .resizable(false)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(true); // Helper widget behavior
+
+    match builder.build() {
+        Ok(window) => {
+            position_countdown_minimal_window(&window);
+            Ok(())
+        }
+        Err(e) => Err(format!("Failed to create window: {}", e)),
+    }
+}
+
+#[tauri::command]
+async fn open_countdown_full_window(app: tauri::AppHandle) -> Result<(), String> {
+    println!("Backend: open_countdown_full_window called");
+    let window_label = "countdown_full";
+    let url = "/countdown?mode=full";
+    if let Some(other) = app.get_webview_window("countdown_minimal") {
+        let _ = other.hide();
+    }
+
+    if let Some(window) = app.get_webview_window(window_label) {
+        let _ = window.show();
+        let _ = window.set_focus();
+        return Ok(());
+    }
+
+    let builder = tauri::WebviewWindowBuilder::new(&app, window_label, tauri::WebviewUrl::App(url.into()))
+        .title("倒计时")
+        .inner_size(320.0, 240.0)
+        .resizable(false)
+        .decorations(false)
+        .transparent(false)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(true); // Helper widget behavior
+
+    match builder.build() {
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("Failed to create window: {}", e)),
+    }
+}
+
+#[tauri::command]
+async fn open_countdown_edit_window(app: tauri::AppHandle) -> Result<(), String> {
+    println!("Backend: open_countdown_edit_window called");
+    let window_label = "countdown_edit";
+    let url = "/countdown-edit";
+
+    if let Some(other) = app.get_webview_window("countdown_full") {
+        let _ = other.hide();
+    }
+    if let Some(other) = app.get_webview_window("countdown_minimal") {
+        let _ = other.hide();
+    }
+
+    if let Some(window) = app.get_webview_window(window_label) {
+        let _ = window.show();
+        let _ = window.set_focus();
+        return Ok(());
+    }
+
+    let builder = tauri::WebviewWindowBuilder::new(&app, window_label, tauri::WebviewUrl::App(url.into()))
+        .title("倒计时设置")
+        .inner_size(480.0, 560.0)
+        .resizable(false)
+        .decorations(false)
+        .transparent(false)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(true);
+
+    match builder.build() {
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("Failed to create window: {}", e)),
+    }
+}
+
+#[tauri::command]
+async fn open_countdown_window(app: tauri::AppHandle) -> Result<(), String> {
+    open_countdown_minimal_window(app).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1912,6 +2031,10 @@ pub fn run() {
             get_school_course_schedule,
             open_file_box_window,
             open_teacher_schedule_window,
+            open_countdown_minimal_window,
+            open_countdown_full_window,
+            open_countdown_edit_window,
+            open_countdown_window,
             exit_app
         ])
         .run(tauri::generate_context!())

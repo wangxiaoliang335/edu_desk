@@ -1,5 +1,5 @@
-import { X, Check, Bell, User, Users, Clock } from "lucide-react";
-import { useEffect, useState } from "react";
+import { X, Bell, User, Users, Clock } from "lucide-react";
+import { useState } from "react";
 
 export interface NotificationItem {
     id: number;
@@ -33,69 +33,72 @@ const NotificationCenterModal = ({ isOpen, onClose, notifications }: Props) => {
     });
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-start justify-end p-4 pt-16 bg-transparent pointer-events-none">
+        <div className="fixed inset-0 z-[100] flex items-start justify-end p-4 pt-16 bg-transparent pointer-events-none font-sans">
             {/* Modal Container - Pointer events auto to capture clicks */}
-            <div className="bg-white pointer-events-auto rounded-2xl shadow-2xl w-[380px] max-h-[600px] flex flex-col border border-gray-100 overflow-hidden animate-in slide-in-from-right-5 duration-300">
+            <div className="bg-paper/95 backdrop-blur-xl pointer-events-auto rounded-[2rem] shadow-2xl w-[380px] max-h-[600px] flex flex-col border border-white/50 ring-1 ring-sage-100/50 overflow-hidden animate-in slide-in-from-right-5 duration-300">
                 {/* Header */}
-                <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-red-50 text-red-500 rounded-lg flex items-center justify-center">
-                            <Bell size={16} />
+                <div className="px-6 py-4 border-b border-sage-100/50 bg-white/30 backdrop-blur-md flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-red-400 to-red-500 text-white rounded-xl flex items-center justify-center shadow-lg shadow-red-500/20">
+                            <Bell size={18} />
                         </div>
                         <div>
-                            <h3 className="font-bold text-gray-800">消息中心</h3>
-                            <span className="text-xs text-gray-400">{sorted.length} 条通知</span>
+                            <h3 className="font-bold text-ink-800 text-lg">消息中心</h3>
+                            <span className="text-xs font-bold text-sage-500 bg-sage-50 px-2 py-0.5 rounded-full border border-sage-100">{sorted.length} 条通知</span>
                         </div>
                     </div>
                     <button
                         onClick={onClose}
-                        className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-400 hover:text-gray-600 transition-colors"
+                        className="w-8 h-8 flex items-center justify-center hover:bg-clay-50 rounded-full text-sage-400 hover:text-clay-600 transition-colors"
                     >
-                        <X size={18} />
+                        <X size={20} />
                     </button>
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-2 bg-gray-50/30">
+                <div className="flex-1 overflow-y-auto p-4 bg-white/30 custom-scrollbar">
                     {sorted.length === 0 ? (
-                        <div className="h-64 flex flex-col items-center justify-center text-gray-400 gap-2">
-                            <Bell size={32} className="opacity-20" />
-                            <span className="text-sm">暂无新消息</span>
+                        <div className="h-64 flex flex-col items-center justify-center text-sage-300 gap-3">
+                            <div className="w-16 h-16 rounded-full bg-sage-50 flex items-center justify-center border border-sage-100">
+                                <Bell size={32} className="opacity-50" />
+                            </div>
+                            <span className="text-sm font-bold">暂无新消息</span>
                         </div>
                     ) : (
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                             {sorted.map(item => (
-                                <div key={item.id} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all">
-                                    <div className="flex items-start justify-between gap-3">
+                                <div key={item.id} className="bg-white/80 backdrop-blur-md p-4 rounded-2xl border border-white/60 shadow-sm hover:shadow-md transition-all group hover:border-sage-200">
+                                    <div className="flex items-start justify-between gap-4">
                                         {/* Icon */}
-                                        <div className="mt-0.5">
+                                        <div className="mt-1">
                                             {item.content_text === 3 ? ( // 3 = Group Invite
-                                                <div className="w-9 h-9 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center border border-blue-100">
-                                                    <Users size={16} />
+                                                <div className="w-10 h-10 bg-indigo-50 text-indigo-500 rounded-xl flex items-center justify-center border border-indigo-100 shadow-sm">
+                                                    <Users size={20} />
                                                 </div>
                                             ) : (
-                                                <div className="w-9 h-9 bg-purple-50 text-purple-500 rounded-full flex items-center justify-center border border-purple-100">
-                                                    <User size={16} />
+                                                <div className="w-10 h-10 bg-sage-50 text-sage-600 rounded-xl flex items-center justify-center border border-sage-100 shadow-sm">
+                                                    <User size={20} />
                                                 </div>
                                             )}
                                         </div>
 
                                         {/* Content */}
                                         <div className="flex-1 min-w-0">
-                                            <div className="flex items-center justify-between mb-0.5">
-                                                <span className="font-bold text-gray-700 text-sm truncate pr-2">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="font-bold text-ink-800 text-sm truncate pr-2">
                                                     {/* Display Group Name if available, else Sender */}
                                                     {item.group_name || item.sender_name}
                                                 </span>
-                                                <span className="text-[10px] text-gray-400 flex-shrink-0 flex items-center gap-1">
+                                                <span className="text-[10px] text-ink-400 font-medium flex-shrink-0 flex items-center gap-1 bg-white/50 px-1.5 py-0.5 rounded-md border border-black/5">
                                                     <Clock size={10} />
                                                     {/* Format date: Remove seconds? Or just show time if today? For now split space */}
                                                     {item.created_at.split(' ')[0]}
                                                 </span>
                                             </div>
 
-                                            <p className="text-xs text-gray-500 mb-2 leading-relaxed">
-                                                <span className="font-medium text-gray-900">{item.sender_name}</span> {item.content}
+                                            <p className="text-xs text-ink-500 mb-2 leading-relaxed bg-sage-50/50 p-2 rounded-lg border border-sage-50">
+                                                <span className="font-bold text-ink-700 mr-1">{item.sender_name}</span>
+                                                {item.content}
                                             </p>
 
                                             {/* Action Buttons Removed - Default Agreed */}

@@ -214,24 +214,24 @@ const SeatMap: React.FC<SeatProps> = ({ classId, onViewChange, colorMap, isHeatm
 
     if (loading) {
         return (
-            <div className="w-full h-full flex items-center justify-center p-4 bg-gray-50/50 rounded-2xl border border-gray-200 shadow-inner">
-                <Loader2 className="animate-spin text-blue-500" size={32} />
+            <div className="w-full h-full flex items-center justify-center p-4 bg-paper/50 rounded-2xl border border-sage-200 shadow-inner">
+                <Loader2 className="animate-spin text-sage-500" size={32} />
             </div>
         );
     }
 
     return (
-        <div className="w-full h-full p-4 bg-gray-50/50 rounded-2xl border border-gray-200 shadow-inner flex flex-col overflow-hidden">
+        <div className="w-full h-full p-4 bg-paper/50 rounded-2xl border border-sage-200 shadow-inner flex flex-col overflow-hidden">
 
             {/* Toolbar - Static Layout to avoid blocking seats */}
             <div className="flex justify-end gap-2 mb-2 shrink-0">
-                <button onClick={handleAutoArrange} className="bg-white p-2 rounded-lg shadow-sm border border-gray-200 text-gray-600 hover:text-blue-500 hover:border-blue-300 transition-all flex items-center gap-1 text-xs font-medium" title="自动排座">
+                <button onClick={handleAutoArrange} className="bg-white/80 p-2 rounded-lg shadow-sm border border-sage-200 text-ink-500 hover:text-blue-500 hover:border-blue-300 transition-all flex items-center gap-1 text-xs font-bold" title="自动排座">
                     <Users size={16} /> 自动排座
                 </button>
-                <button onClick={handleClear} className="bg-white p-2 rounded-lg shadow-sm border border-gray-200 text-gray-600 hover:text-red-500 hover:border-red-300 transition-all flex items-center gap-1 text-xs font-medium" title="清空">
+                <button onClick={handleClear} className="bg-white/80 p-2 rounded-lg shadow-sm border border-sage-200 text-ink-500 hover:text-red-500 hover:border-red-300 transition-all flex items-center gap-1 text-xs font-bold" title="清空">
                     <Trash2 size={16} /> 清空
                 </button>
-                <button onClick={handleSave} className="bg-blue-500 p-2 rounded-lg shadow-md text-white hover:bg-blue-600 transition-all flex items-center gap-1 text-xs font-medium" title="保存">
+                <button onClick={handleSave} className="bg-clay-500 p-2 rounded-lg shadow-md text-white hover:bg-clay-600 transition-all flex items-center gap-1 text-xs font-bold" title="保存">
                     <Save size={16} /> 保存
                 </button>
             </div>
@@ -301,7 +301,7 @@ const SeatMap: React.FC<SeatProps> = ({ classId, onViewChange, colorMap, isHeatm
                                     return (
                                         <div
                                             key={`podium-${rIndex}-${cIndex}`}
-                                            className="bg-[#8B4513] text-white rounded-lg shadow-md flex items-center justify-center font-bold text-sm select-none"
+                                            className="bg-clay-600 text-white rounded-xl shadow-lg shadow-clay-200 flex items-center justify-center font-bold text-sm select-none tracking-widest border border-clay-500"
                                             style={{ gridColumn: 'span 3' }}
                                         >
                                             讲 台
@@ -316,9 +316,7 @@ const SeatMap: React.FC<SeatProps> = ({ classId, onViewChange, colorMap, isHeatm
                                 const isSeat = isSeatSlot(rIndex, cIndex);
                                 const data = getSeatContent(rIndex, cIndex);
 
-                                // Aisles are just empty divs (but not null, to keep grid structure if needed, or null if using gap)
-                                // Since we use strict grid placement by order, empty divs are needed to push next items if we don't coordinate coords.
-                                // But here we map R,C.
+                                // Aisles are just empty divs
                                 if (!isSeat) {
                                     return <div key={`${rIndex}-${cIndex}`} className="invisible" />;
                                 }
@@ -329,23 +327,23 @@ const SeatMap: React.FC<SeatProps> = ({ classId, onViewChange, colorMap, isHeatm
                                     <div
                                         key={`${rIndex}-${cIndex}`}
                                         className={`
-                                            relative rounded-md border shadow-sm flex flex-col items-center justify-center p-1 cursor-pointer transition-all hover:scale-105 active:scale-95
-                                            ${data ? (seatColor ? 'text-white border-transparent' : 'bg-white border-blue-200 hover:border-blue-400 hover:shadow-md') : 'bg-gray-100 border-gray-200 text-gray-400'}
+                                            relative rounded-xl border shadow-sm flex flex-col items-center justify-center p-1 cursor-pointer transition-all hover:scale-105 active:scale-95
+                                            ${data ? (seatColor ? 'text-white border-transparent' : 'bg-white border-sage-200 hover:border-sage-400 hover:shadow-md') : 'bg-white/50 border-sage-100 text-sage-200'}
                                         `}
                                         style={seatColor ? { backgroundColor: isHeatmapMode ? `${seatColor}` : seatColor } : {}}
                                         title={data ? `${data.student_name || data.name} (${data.row + 1},${data.col + 1})` : `空座位 (${rIndex + 1},${cIndex + 1})`}
                                     >
                                         {data ? (
                                             <>
-                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center mb-0.5 ${seatColor ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-600'}`}>
+                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center mb-0.5 ${seatColor ? 'bg-white/20 text-white' : 'bg-sage-50 text-sage-500'}`}>
                                                     <User size={14} />
                                                 </div>
-                                                <span className="text-xs font-medium truncate w-full text-center leading-tight">
+                                                <span className="text-xs font-bold text-ink-600 truncate w-full text-center leading-tight">
                                                     {data.student_name || data.name || data.student_id}
                                                 </span>
                                             </>
                                         ) : (
-                                            <div className="w-2 h-2 rounded-full bg-gray-300" />
+                                            <div className="w-1.5 h-1.5 rounded-full bg-sage-200/50" />
                                         )}
                                     </div>
                                 );

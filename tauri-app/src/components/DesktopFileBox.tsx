@@ -461,7 +461,7 @@ const DesktopFileBox = () => {
 
     return (
         <div
-            className={`h-screen w-screen flex flex-col overflow-hidden select-none transition-all duration-300 ${isDragOver ? 'bg-blue-50/95 ring-4 ring-inset ring-blue-400' : 'bg-white/90'} backdrop-blur-2xl shadow-[0_0_40px_rgba(0,0,0,0.1)] rounded-xl border border-white/20 text-gray-800`}
+            className={`h-screen w-screen flex flex-col overflow-hidden select-none transition-all duration-300 ${isDragOver ? 'bg-sage-50/95 ring-4 ring-inset ring-sage-400' : 'bg-paper/95'} backdrop-blur-2xl shadow-[0_0_40px_rgba(0,0,0,0.1)] rounded-2xl border border-sage-200 text-ink-600`}
             onContextMenu={(e) => handleContextMenu(e)}
             onClick={() => { setContextMenu(null); setSelectedPaths([]); }}
             onDragOver={(e) => {
@@ -483,30 +483,30 @@ const DesktopFileBox = () => {
             }}
         >
             {/* Header / Drag Region */}
-            <div data-tauri-drag-region className="flex items-center justify-between px-4 py-3 bg-gradient-to-b from-white/50 to-white/10 border-b border-gray-200/50 cursor-move shrink-0">
+            <div data-tauri-drag-region className="flex items-center justify-between px-4 py-3 bg-white/50 border-b border-sage-100 cursor-move shrink-0">
                 <div className="flex items-center gap-3 pointer-events-none">
                     <div className="flex gap-1.5">
-                        <span className="w-3 h-3 rounded-full bg-red-400 hover:bg-red-500 transition-colors shadow-sm"></span>
-                        <span className="w-3 h-3 rounded-full bg-yellow-400 hover:bg-yellow-500 transition-colors shadow-sm"></span>
-                        <span className="w-3 h-3 rounded-full bg-green-400 hover:bg-green-500 transition-colors shadow-sm"></span>
+                        <span className="w-3 h-3 rounded-full bg-clay-400 hover:bg-clay-500 transition-colors shadow-sm"></span>
+                        <span className="w-3 h-3 rounded-full bg-sage-400 hover:bg-sage-500 transition-colors shadow-sm"></span>
+                        <span className="w-3 h-3 rounded-full bg-paper-400 hover:bg-paper-500 transition-colors shadow-sm ring-1 ring-sage-200"></span>
                     </div>
-                    <div className="h-4 w-[1px] bg-gray-300 mx-1"></div>
-                    <span className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
-                        <Layers size={14} className="text-blue-500" />
+                    <div className="h-4 w-[1px] bg-sage-200 mx-1"></div>
+                    <span className="text-xs font-bold text-ink-500 flex items-center gap-1.5">
+                        <Layers size={14} className="text-sage-500" />
                         文件盒子
                     </span>
                 </div>
                 <div className="flex items-center gap-1">
                     <button
                         onClick={loadFiles}
-                        className="p-1.5 hover:bg-black/5 rounded-lg text-gray-400 hover:text-blue-500 transition-colors"
+                        className="p-1.5 hover:bg-sage-100 rounded-lg text-sage-400 hover:text-sage-600 transition-colors"
                         title="刷新"
                     >
                         <RotateCcw size={14} />
                     </button>
                     <button
                         onClick={handleRelease}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 hover:bg-red-50 text-xs font-medium text-gray-500 hover:text-red-500 rounded-lg transition-all group"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 hover:bg-clay-50 text-xs font-bold text-ink-400 hover:text-clay-500 rounded-lg transition-all group"
                         title="释放到桌面"
                     >
                         <span>释放</span>
@@ -514,7 +514,7 @@ const DesktopFileBox = () => {
                     </button>
                     <button
                         onClick={() => getCurrentWebviewWindow().close()}
-                        className="p-1.5 hover:bg-red-100/50 rounded-lg text-gray-400 hover:text-red-600 transition-colors ml-1"
+                        className="p-1.5 hover:bg-clay-100 rounded-lg text-sage-400 hover:text-clay-600 transition-colors ml-1"
                     >
                         <X size={16} />
                     </button>
@@ -532,30 +532,29 @@ const DesktopFileBox = () => {
                 `}</style>
 
                 {isDragOver && (
-                    <div className="col-span-4 flex flex-col items-center justify-center h-48 border-2 border-dashed border-blue-400/50 rounded-2xl bg-blue-50/50 animate-in fade-in zoom-in-95 duration-200">
-                        <Plus size={32} className="text-blue-500 mb-2" />
-                        <span className="text-base font-medium text-blue-600">释放以添加文件</span>
+                    <div className="col-span-4 flex flex-col items-center justify-center h-48 border-2 border-dashed border-sage-400/50 rounded-2xl bg-sage-50/50 animate-in fade-in zoom-in-95 duration-200">
+                        <Plus size={32} className="text-sage-500 mb-2" />
+                        <span className="text-base font-bold text-sage-600">释放以添加文件</span>
                     </div>
                 )}
 
                 {!loading && files.length === 0 && !isDragOver && (
                     <div className="col-span-4 flex flex-col items-center justify-center h-52 opacity-40 space-y-3 pointer-events-none select-none">
-                        <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center">
-                            <LayoutGrid size={32} className="text-gray-400" />
+                        <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center border border-sage-100">
+                            <LayoutGrid size={32} className="text-sage-300" />
                         </div>
-                        <span className="text-sm font-medium text-gray-500">暂无内容</span>
-                        <span className="text-xs text-gray-400">拖入文件或右键新建</span>
+                        <span className="text-sm font-medium text-ink-300">暂无内容</span>
+                        <span className="text-xs text-ink-200">拖入文件或右键新建</span>
                     </div>
                 )}
 
                 {files.map(file => (
                     <div
                         key={file.name}
-                        className={`flex flex-col items-center gap-2 group cursor-pointer p-3 rounded-xl transition-all duration-200 active:scale-95 ring-1 ${
-                            selectedPaths.includes(file.path)
-                                ? 'bg-blue-50 ring-blue-300 shadow-lg shadow-blue-100/40'
-                                : 'hover:bg-white hover:shadow-lg hover:shadow-gray-200/50 ring-transparent hover:ring-gray-100'
-                        }`}
+                        className={`flex flex-col items-center gap-2 group cursor-pointer p-3 rounded-2xl transition-all duration-200 active:scale-95 ring-1 ${selectedPaths.includes(file.path)
+                                ? 'bg-sage-50 ring-sage-300 shadow-lg shadow-sage-100/40'
+                                : 'hover:bg-white hover:shadow-lg hover:shadow-sage-200/50 ring-transparent hover:ring-sage-100'
+                            }`}
                         onDoubleClick={() => handleOpenFile(file)}
                         onContextMenu={(e) => {
                             e.stopPropagation();
@@ -600,7 +599,7 @@ const DesktopFileBox = () => {
                                             )}
                                             {ext && (
                                                 <div className="absolute -bottom-1 -right-1 bg-white/95 backdrop-blur rounded-full px-1.5 py-0.5 shadow-sm ring-1 ring-black/5">
-                                                    <span className="text-[9px] font-bold text-gray-700">{ext.toUpperCase()}</span>
+                                                    <span className="text-[9px] font-bold text-ink-500">{ext.toUpperCase()}</span>
                                                 </div>
                                             )}
                                         </div>
@@ -608,7 +607,7 @@ const DesktopFileBox = () => {
                                 })()
                             )}
                         </div>
-                        <span className="text-xs font-medium text-center text-gray-600 w-full truncate px-2 py-0.5 rounded group-hover:text-gray-900 transition-colors" title={file.name}>
+                        <span className="text-xs font-bold text-center text-ink-500 w-full truncate px-2 py-0.5 rounded group-hover:text-ink-900 transition-colors" title={file.name}>
                             {file.name}
                         </span>
                     </div>
@@ -618,13 +617,13 @@ const DesktopFileBox = () => {
             {/* Custom Context Menu */}
             {contextMenu && (
                 <div
-                    className="fixed z-50 bg-white/90 backdrop-blur-xl border border-gray-100/50 rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] py-1.5 min-w-[150px] animate-in fade-in zoom-in-95 duration-100 ring-1 ring-black/5"
+                    className="fixed z-50 bg-white/90 backdrop-blur-xl border border-sage-100 rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] py-1.5 min-w-[150px] animate-in fade-in zoom-in-95 duration-100 ring-1 ring-black/5"
                     style={{ left: contextMenu.x, top: contextMenu.y }}
                     onClick={(e) => e.stopPropagation()}
                 >
                     {contextMenu.file ? (
                         <>
-                            <button onClick={handleOpenFile.bind(null, contextMenu.file)} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2.5 transition-colors font-medium">
+                            <button onClick={handleOpenFile.bind(null, contextMenu.file)} className="w-full text-left px-3 py-2 text-sm text-ink-600 hover:bg-sage-50 hover:text-sage-600 flex items-center gap-2.5 transition-colors font-bold">
                                 <File size={15} /> 打开
                             </button>
                             <button
@@ -632,7 +631,7 @@ const DesktopFileBox = () => {
                                     await moveItemToDesktop(contextMenu.file!, 'move');
                                     setContextMenu(null);
                                 }}
-                                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2.5 transition-colors font-medium"
+                                className="w-full text-left px-3 py-2 text-sm text-ink-600 hover:bg-sage-50 hover:text-sage-600 flex items-center gap-2.5 transition-colors font-bold"
                             >
                                 <ArrowRight size={15} /> 移动到桌面
                             </button>
@@ -641,17 +640,17 @@ const DesktopFileBox = () => {
                                     await moveItemToDesktop(contextMenu.file!, 'copy');
                                     setContextMenu(null);
                                 }}
-                                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2.5 transition-colors font-medium"
+                                className="w-full text-left px-3 py-2 text-sm text-ink-600 hover:bg-sage-50 hover:text-sage-600 flex items-center gap-2.5 transition-colors font-bold"
                             >
                                 <ArrowRight size={15} /> 复制到桌面
                             </button>
-                            <div className="h-[1px] bg-gray-100 my-1 mx-2"></div>
-                            <button onClick={handleRename} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2.5 transition-colors font-medium">
+                            <div className="h-[1px] bg-sage-100 my-1 mx-2"></div>
+                            <button onClick={handleRename} className="w-full text-left px-3 py-2 text-sm text-ink-600 hover:bg-sage-50 hover:text-sage-600 flex items-center gap-2.5 transition-colors font-bold">
                                 <FileText size={15} /> 重命名
                             </button>
                         </>
                     ) : (
-                        <button onClick={handleNewFolder} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2.5 transition-colors font-medium">
+                        <button onClick={handleNewFolder} className="w-full text-left px-3 py-2 text-sm text-ink-600 hover:bg-sage-50 hover:text-sage-600 flex items-center gap-2.5 transition-colors font-bold">
                             <Plus size={15} /> 新建文件夹
                         </button>
                     )}

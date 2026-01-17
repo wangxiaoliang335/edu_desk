@@ -489,54 +489,57 @@ const CustomListModal = ({ isOpen, onClose, classId }: CustomListModalProps) => 
     };
 
     return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl shadow-2xl w-[700px] max-h-[500px] flex flex-col overflow-hidden border border-gray-100">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-300 font-sans">
+            <div className="bg-paper/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl w-[700px] max-h-[600px] flex flex-col overflow-hidden border border-white/50 ring-1 ring-sage-100/50">
 
                 {/* Header */}
-                <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
-                            <FileSpreadsheet className="text-white" size={20} />
+                <div className="flex items-center justify-between px-8 py-6 border-b border-sage-100/50 bg-white/30 backdrop-blur-md">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-sage-400 to-sage-600 flex items-center justify-center shadow-lg shadow-sage-500/20">
+                            <FileSpreadsheet className="text-white" size={24} />
                         </div>
                         <div>
-                            <h2 className="font-bold text-lg text-gray-800">学生统计表导入</h2>
-                            <p className="text-xs text-gray-500">管理成绩表、小组评价表等数据</p>
+                            <h2 className="font-bold text-2xl text-ink-800 tracking-tight">学生统计表导入</h2>
+                            <p className="text-sm font-medium text-ink-400 mt-0.5">Manage Statistics & Grades</p>
                         </div>
                     </div>
                     <button
                         onClick={onClose}
-                        className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all"
+                        className="w-10 h-10 flex items-center justify-center text-sage-400 hover:text-clay-600 hover:bg-clay-50 rounded-full transition-all duration-300"
                     >
-                        <X size={20} />
+                        <X size={24} />
                     </button>
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 p-6 overflow-y-auto bg-gray-50/50">
+                <div className="flex-1 p-8 overflow-y-auto bg-white/40 custom-scrollbar">
                     <div className="grid grid-cols-4 gap-4">
                         {importedFiles.map(file => (
                             <div
                                 key={file.id}
                                 onClick={() => handleFileClick(file)}
-                                className="relative group bg-white rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200 border border-gray-100 hover:border-blue-200"
+                                className="relative group bg-white/80 backdrop-blur-sm rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border border-white/60 hover:border-sage-300 ring-1 ring-sage-50 hover:ring-sage-200"
                             >
+                                /* Decorative shine */
+                                <div className="absolute inset-0 rounded-2xl bg-gradient-to-tr from-white/0 to-white/40 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+
                                 {/* Icon */}
-                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 shadow-sm ${file.type === 'midterm_grade'
-                                        ? 'bg-gradient-to-br from-emerald-400 to-teal-500'
-                                        : 'bg-gradient-to-br from-blue-400 to-indigo-500'
+                                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-3 shadow-lg transform group-hover:scale-105 transition-all duration-300 ${file.type === 'midterm_grade'
+                                    ? 'bg-gradient-to-br from-emerald-400 to-teal-500 shadow-emerald-500/20'
+                                    : 'bg-gradient-to-br from-blue-400 to-indigo-500 shadow-blue-500/20'
                                     }`}>
-                                    <FileSpreadsheet className="text-white" size={24} />
+                                    <FileSpreadsheet className="text-white" size={28} strokeWidth={2} />
                                 </div>
 
                                 {/* Name */}
-                                <span className="text-gray-700 text-xs font-medium text-center line-clamp-2 leading-tight">
+                                <span className="text-ink-700 text-xs font-bold text-center line-clamp-2 leading-tight min-h-[2.5em] flex items-center justify-center w-full px-1">
                                     {file.name}
                                 </span>
 
                                 {/* Type Badge */}
-                                <span className={`mt-2 text-[10px] px-2 py-0.5 rounded-full font-medium ${file.type === 'midterm_grade'
-                                        ? 'bg-emerald-50 text-emerald-600'
-                                        : 'bg-blue-50 text-blue-600'
+                                <span className={`mt-3 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider ${file.type === 'midterm_grade'
+                                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                                    : 'bg-indigo-50 text-indigo-600 border border-indigo-100'
                                     }`}>
                                     {file.type === 'midterm_grade' ? '个人成绩' : '小组评价'}
                                 </span>
@@ -544,9 +547,9 @@ const CustomListModal = ({ isOpen, onClose, classId }: CustomListModalProps) => 
                                 {/* Delete Button (Hover) */}
                                 <button
                                     onClick={(e) => deleteFile(e, file.id)}
-                                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-md hover:bg-red-600 hover:scale-110"
+                                    className="absolute -top-2 -right-2 bg-clay-500 text-white rounded-full p-2 opacity-0 group-hover:opacity-100 transition-all duration-300 shadow-md hover:bg-clay-600 hover:scale-110 z-10"
                                 >
-                                    <Trash2 size={12} />
+                                    <Trash2 size={14} />
                                 </button>
                             </div>
                         ))}
@@ -554,29 +557,31 @@ const CustomListModal = ({ isOpen, onClose, classId }: CustomListModalProps) => 
                         {/* Add Button */}
                         <button
                             onClick={() => fileInputRef.current?.click()}
-                            className="min-h-[120px] bg-white rounded-xl flex flex-col items-center justify-center cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 border-2 border-dashed border-gray-200 hover:border-blue-300 text-gray-400 hover:text-blue-500 group"
+                            className="min-h-[160px] bg-white/40 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 border-2 border-dashed border-sage-200 hover:border-sage-400 text-sage-400 hover:text-sage-600 group hover:bg-white/60"
                         >
-                            <div className="w-12 h-12 rounded-xl bg-gray-50 group-hover:bg-blue-50 flex items-center justify-center mb-2 transition-colors">
-                                <Plus size={24} />
+                            <div className="w-14 h-14 rounded-full bg-sage-50 group-hover:bg-sage-100 flex items-center justify-center mb-3 transition-colors shadow-sm">
+                                <Plus size={28} />
                             </div>
-                            <span className="text-xs font-medium">导入表格</span>
+                            <span className="text-sm font-bold">导入表格</span>
                         </button>
                     </div>
 
                     {/* Empty State */}
                     {importedFiles.length === 0 && (
-                        <div className="text-center py-8 text-gray-400">
-                            <FileSpreadsheet size={48} className="mx-auto mb-3 opacity-50" />
-                            <p className="text-sm">暂无数据表</p>
-                            <p className="text-xs">点击上方按钮导入 Excel 文件</p>
+                        <div className="text-center py-12 text-sage-300 flex flex-col items-center">
+                            <div className="w-20 h-20 bg-sage-50 rounded-full flex items-center justify-center mb-4 border border-sage-100">
+                                <FileSpreadsheet size={40} className="opacity-50 text-sage-400" />
+                            </div>
+                            <p className="text-base font-bold text-ink-500">暂无数据表</p>
+                            <p className="text-xs font-medium mt-1">点击上方按钮导入 Excel 文件</p>
                         </div>
                     )}
                 </div>
 
                 {/* Footer */}
-                <div className="px-6 py-3 border-t border-gray-100 bg-white flex items-center justify-between">
-                    <span className="text-xs text-gray-400">支持 .xlsx, .xls, .csv 格式</span>
-                    <span className="text-xs text-gray-500">共 {importedFiles.length} 个表格</span>
+                <div className="px-8 py-4 border-t border-sage-100/50 bg-white/50 flex items-center justify-between backdrop-blur-sm">
+                    <span className="text-xs font-bold text-sage-400 bg-sage-50 px-2 py-1 rounded-lg border border-sage-100">支持 .xlsx, .xls, .csv 格式</span>
+                    <span className="text-xs font-bold text-ink-400">共 {importedFiles.length} 个表格</span>
                 </div>
 
                 {/* Hidden Input */}

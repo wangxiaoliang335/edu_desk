@@ -174,24 +174,24 @@ const SchoolCalendar = ({ onClose }: SchoolCalendarProps) => {
 
     return (
         <div
-            className="flex flex-col bg-white/80 backdrop-blur-md rounded-2xl border border-gray-200 shadow-2xl overflow-hidden w-[900px] h-[700px] text-gray-800"
+            className="flex flex-col bg-white rounded-3xl border border-sage-200 shadow-[0_8px_30px_rgb(0,0,0,0.06)] overflow-hidden w-[900px] h-[700px] text-ink-600 font-sans"
             style={draggable.style}
         >
             {/* Header */}
             <div
-                className="h-14 bg-white/90 border-b border-gray-100 flex items-center justify-between px-6 select-none cursor-move"
+                className="h-16 bg-white border-b border-sage-50 flex items-center justify-between px-8 select-none cursor-move"
                 onMouseDown={draggable.handleMouseDown}
             >
                 <div className="flex items-center gap-3">
                     <span className="text-2xl pt-1">🗓️</span>
-                    <span className="text-lg font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                        校历系统
+                    <span className="text-xl font-bold text-ink-800 tracking-tight">
+                        校历日程
                     </span>
-                    <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-xs border border-blue-100">
-                        {date.getFullYear()}年
+                    <span className="bg-sage-50 text-sage-600 px-3 py-1 rounded-lg text-sm font-semibold border border-sage-100">
+                        {date.getFullYear()}
                     </span>
                 </div>
-                <div className="flex items-center gap-4 text-sm text-gray-500">
+                <div className="flex items-center gap-4 text-sm text-ink-400 font-medium">
                     <input
                         type="file"
                         ref={fileInputRef}
@@ -201,24 +201,24 @@ const SchoolCalendar = ({ onClose }: SchoolCalendarProps) => {
                     />
                     <button
                         onClick={handleImportClick}
-                        className="flex items-center gap-1 hover:bg-gray-100 px-3 py-1.5 rounded-lg transition-colors text-gray-600"
+                        className="flex items-center gap-2 hover:bg-sage-50 px-4 py-2 rounded-xl transition-colors text-ink-600 font-bold"
                     >
-                        <Upload size={16} />
-                        <span>导入校历</span>
+                        <Upload size={18} />
+                        <span>导入数据</span>
                     </button>
 
-                    <div className="h-4 w-px bg-gray-300"></div>
+                    <div className="h-6 w-px bg-sage-100"></div>
 
-                    <span className="font-medium mr-2">{format(date, 'yyyy年MM月dd日', { locale: zhCN })}</span>
+                    <span className="text-ink-600">{format(date, 'yyyy年MM月dd日', { locale: zhCN })}</span>
 
                     <button
                         onClick={() => {
                             if (onClose) onClose();
                             else window.close();
                         }}
-                        className="hover:bg-red-50 hover:text-red-600 p-1.5 rounded-full transition-colors"
+                        className="hover:bg-clay-50 hover:text-clay-600 p-2 rounded-full transition-colors"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
                             <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                         </svg>
                     </button>
@@ -226,10 +226,10 @@ const SchoolCalendar = ({ onClose }: SchoolCalendarProps) => {
             </div>
 
             {/* Split View Content */}
-            <div className="flex-1 overflow-hidden flex">
+            <div className="flex-1 overflow-hidden flex bg-paper">
                 {/* Left: Calendar */}
-                <div className="flex-1 p-6 overflow-auto bg-gradient-to-br from-white to-blue-50/30 overflow-y-auto custom-scrollbar">
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                <div className="flex-1 p-8 overflow-auto custom-scrollbar">
+                    <div className="bg-white rounded-3xl shadow-sm border border-sage-50 p-6">
                         <Calendar
                             onChange={handleDateChange}
                             value={date}
@@ -246,47 +246,47 @@ const SchoolCalendar = ({ onClose }: SchoolCalendarProps) => {
                 </div>
 
                 {/* Right: Info Panel */}
-                <div className="w-80 bg-white/60 border-l border-gray-100 p-5 flex flex-col gap-6 backdrop-blur-sm">
+                <div className="w-80 bg-white border-l border-sage-50 p-6 flex flex-col gap-6">
                     {/* Events List */}
-                    <div className="flex-1 overflow-y-auto">
-                        <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-                            <span className="w-1 h-4 bg-blue-500 rounded-full"></span>
-                            当日事件
+                    <div className="flex-1 overflow-y-auto pr-2">
+                        <h3 className="text-sm font-bold text-ink-400 mb-4 flex items-center gap-2 uppercase tracking-wider">
+                            <span className="w-1.5 h-1.5 bg-sage-400 rounded-full"></span>
+                            今日日程
                         </h3>
                         {selectedEvents.filter(e => e.type !== 'remark').length > 0 ? (
-                            <div className="flex flex-col gap-2">
+                            <div className="flex flex-col gap-3">
                                 {selectedEvents.filter(e => e.type !== 'remark').map(evt => (
-                                    <div key={evt.id} className="group flex items-start gap-3 p-3 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all">
-                                        <div className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${evt.type === 'holiday' ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' :
-                                                evt.type === 'exam' ? 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]' :
-                                                    'bg-amber-500'
+                                    <div key={evt.id} className="group flex items-start gap-4 p-4 bg-paper rounded-2xl border border-transparent hover:border-sage-200 transition-all">
+                                        <div className={`mt-2 w-2 h-2 rounded-full shrink-0 ${evt.type === 'holiday' ? 'bg-clay-500' :
+                                            evt.type === 'exam' ? 'bg-sage-600' :
+                                                'bg-amber-400'
                                             }`} />
                                         <div className="flex-1">
-                                            <div className="text-sm font-bold text-gray-800">{evt.title}</div>
-                                            {evt.description && <div className="text-xs text-gray-500 mt-0.5">{evt.description}</div>}
+                                            <div className="text-base font-bold text-ink-800">{evt.title}</div>
+                                            {evt.description && <div className="text-xs text-ink-400 mt-1">{evt.description}</div>}
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         ) : (
-                            <div className="py-8 text-center text-gray-400 text-xs border border-dashed border-gray-200 rounded-xl bg-gray-50/50">
-                                暂无特定日程
+                            <div className="py-12 text-center text-ink-300 text-sm border-2 border-dashed border-sage-50 rounded-2xl">
+                                今日暂无日程安排
                             </div>
                         )}
                     </div>
 
                     {/* Remarks Section */}
-                    <div className="shrink-0 h-1/2 flex flex-col">
-                        <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2 justify-between">
+                    <div className="shrink-0 h-1/2 flex flex-col pt-4 border-t border-sage-50">
+                        <h3 className="text-sm font-bold text-ink-400 mb-4 flex items-center gap-2 justify-between uppercase tracking-wider">
                             <div className="flex items-center gap-2">
-                                <span className="w-1 h-4 bg-orange-400 rounded-full"></span>
-                                备注 / 备忘
+                                <span className="w-1.5 h-1.5 bg-clay-400 rounded-full"></span>
+                                备注提醒
                             </div>
                             <button
                                 onClick={saveRemark}
-                                className="text-xs bg-gray-900 text-white px-2 py-1 rounded-md hover:bg-black transition-colors flex items-center gap-1 active:scale-95"
+                                className="text-xs bg-ink-800 text-white px-3 py-1.5 rounded-lg hover:bg-ink-600 transition-colors flex items-center gap-1.5 active:scale-95 font-bold"
                             >
-                                <Save size={12} />
+                                <Save size={14} />
                                 保存
                             </button>
                         </h3>
@@ -294,11 +294,11 @@ const SchoolCalendar = ({ onClose }: SchoolCalendarProps) => {
                             <textarea
                                 value={remarkText}
                                 onChange={handleRemarkChange}
-                                className="w-full h-full resize-none bg-white p-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all custom-scrollbar placeholder:text-gray-300"
-                                placeholder={`在此输入 ${format(date, 'MM月dd日')} 的备注信息...`}
+                                className="w-full h-full resize-none bg-paper p-4 rounded-2xl border-2 border-transparent focus:border-sage-200 text-ink-600 text-sm focus:outline-none transition-all custom-scrollbar placeholder:text-ink-300 font-medium"
+                                placeholder={`输入 ${format(date, 'MM月dd日')} 的备忘信息...`}
                             />
-                            <div className="absolute bottom-3 right-3 pointer-events-none opacity-0 group-focus-within:opacity-100 transition-opacity">
-                                <FileText size={48} className="text-gray-100" />
+                            <div className="absolute bottom-4 right-4 pointer-events-none opacity-0 group-focus-within:opacity-100 transition-opacity">
+                                <FileText size={20} className="text-sage-300" />
                             </div>
                         </div>
                     </div>

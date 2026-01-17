@@ -109,71 +109,71 @@ const PrepareClassModal = ({ isOpen, onClose, subject, time, classId, groupId }:
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-300 font-sans">
             <div
                 style={style}
-                className="bg-white rounded-2xl shadow-2xl w-[480px] overflow-hidden border border-gray-100 flex flex-col"
+                className="bg-paper/95 backdrop-blur-xl rounded-[2rem] shadow-2xl w-[480px] overflow-hidden border border-white/60 ring-1 ring-sage-100/50 flex flex-col animate-in zoom-in-95 duration-200"
             >
                 {/* Header */}
                 <div
                     onMouseDown={handleMouseDown}
-                    className="px-5 py-4 flex items-center justify-between cursor-move select-none border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white"
+                    className="p-5 flex items-center justify-between border-b border-sage-100/50 bg-white/40 backdrop-blur-md cursor-move select-none"
                 >
                     <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 bg-blue-100 rounded-xl flex items-center justify-center">
-                            <Bookmark size={18} className="text-blue-600" />
+                        <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white flex items-center justify-center shadow-lg shadow-amber-500/20">
+                            <Bookmark size={20} />
                         </div>
-                        <h3 className="font-bold text-gray-800 text-lg">课前准备</h3>
+                        <span className="font-bold text-ink-800 text-lg tracking-tight">课前准备</span>
                     </div>
                     <button
                         onClick={onClose}
-                        className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-gray-600"
+                        className="w-9 h-9 flex items-center justify-center rounded-full text-sage-400 hover:text-clay-600 hover:bg-clay-50 transition-all duration-300"
                     >
-                        <X size={18} />
+                        <X size={20} />
                     </button>
                 </div>
 
                 {/* Subject Tag */}
-                <div className="px-5 pt-4 pb-2">
+                <div className="px-6 pt-5 pb-2 bg-white/30 backdrop-blur-sm">
                     <div className="flex items-center gap-2 text-sm">
-                        <span className="px-3 py-1.5 bg-blue-500 text-white rounded-lg font-semibold text-xs">
+                        <span className="px-3 py-1 bg-amber-50 text-amber-700 rounded-lg font-bold text-xs shadow-sm border border-amber-100">
                             {subject}
                         </span>
-                        <span className="text-gray-400">|</span>
-                        <span className="text-gray-500 font-medium">{time}</span>
+                        <span className="text-sage-300">|</span>
+                        <span className="text-sage-500 font-bold">{time}</span>
                     </div>
                 </div>
 
                 {/* Content */}
-                <div className="px-5 py-3">
-                    <label className="block text-gray-600 text-sm font-medium mb-2">请输入课前准备内容</label>
+                <div className="px-6 py-3 bg-white/30 backdrop-blur-sm flex-1">
+                    <label className="block text-sage-600 text-sm font-bold mb-2 ml-1">内容</label>
                     <textarea
                         value={content}
                         onChange={e => setContent(e.target.value)}
                         placeholder="请输入课前准备内容..."
-                        className="w-full bg-gray-50 text-gray-800 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-300 transition-all outline-none resize-none h-44 placeholder:text-gray-400"
+                        className="w-full bg-white/60 text-ink-700 border border-sage-200 rounded-2xl px-5 py-4 text-sm focus:bg-white focus:ring-4 focus:ring-amber-100/50 focus:border-amber-300 transition-all outline-none resize-none h-48 placeholder:text-sage-300 shadow-inner"
                     />
                 </div>
 
                 {/* Footer */}
-                <div className="px-5 py-4 flex justify-end gap-3 bg-gray-50/50 border-t border-gray-100">
+                <div className="px-6 py-5 flex justify-end gap-3 bg-white/40 border-t border-sage-100/50 backdrop-blur-md">
                     <button
                         onClick={onClose}
-                        className="px-5 py-2.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 rounded-xl transition-all"
+                        className="px-5 py-2.5 text-sm font-bold text-sage-500 hover:bg-white hover:text-sage-700 rounded-xl border border-transparent hover:border-sage-200 transition-all"
                     >
                         取消
                     </button>
                     <button
                         onClick={handleSend}
                         disabled={!content.trim() || sending}
-                        className={`px-6 py-2.5 text-sm font-bold text-white rounded-xl flex items-center gap-2 transition-all shadow-lg ${!content.trim() || sending
-                            ? 'bg-gray-300 cursor-not-allowed shadow-none'
-                            : 'bg-blue-500 hover:bg-blue-600 shadow-blue-200'
+                        className={`px-6 py-2.5 text-sm font-bold text-white rounded-xl flex items-center gap-2 transition-all shadow-lg hover:-translate-y-0.5 ${!content.trim() || sending
+                            ? 'bg-sage-300 cursor-not-allowed shadow-none'
+                            : 'bg-amber-500 hover:bg-amber-600 shadow-amber-200'
                             }`}
                     >
                         {sending && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>}
                         <Send size={16} />
-                        确定
+                        确定发送
                     </button>
                 </div>
             </div>

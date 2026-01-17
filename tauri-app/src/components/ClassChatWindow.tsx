@@ -354,7 +354,7 @@ const ClassChatWindow = () => {
             // Handle both structure nuances if any
             const text = payload?.text || payload;
             return (
-                <div className={`p-2.5 px-4 rounded-2xl text-sm leading-relaxed shadow-sm break-words ${msg.flow === 'out' ? 'bg-blue-600 text-white rounded-tr-sm' : 'bg-white text-gray-800 rounded-tl-sm border border-gray-100'}`}>
+                <div className={`p-2.5 px-4 rounded-2xl text-sm font-bold leading-relaxed shadow-sm break-words ${msg.flow === 'out' ? 'bg-sage-500 text-white rounded-tr-sm' : 'bg-white text-ink-600 rounded-tl-sm border border-sage-100'}`}>
                     {typeof text === 'string' ? text : '[文本解析错误]'}
                 </div>
             );
@@ -362,19 +362,19 @@ const ClassChatWindow = () => {
             const imageInfoArray = payload?.imageInfoArray || payload?.imageArray; // defensive
             const imgUrl = imageInfoArray?.[0]?.url || imageInfoArray?.[1]?.url;
             return (
-                <div className="max-w-[200px] rounded-lg overflow-hidden border border-gray-200 shadow-sm cursor-pointer" onClick={() => imgUrl && window.open(imgUrl, '_blank')}>
-                    {imgUrl ? <img src={imgUrl} alt="Image" className="w-full h-auto" /> : <div className="p-4 bg-gray-100 text-xs">图片加载中...</div>}
+                <div className="max-w-[200px] rounded-2xl overflow-hidden border border-sage-200 shadow-sm cursor-pointer hover:shadow-md transition-all" onClick={() => imgUrl && window.open(imgUrl, '_blank')}>
+                    {imgUrl ? <img src={imgUrl} alt="Image" className="w-full h-auto" /> : <div className="p-4 bg-sage-50 text-xs text-sage-400">图片加载中...</div>}
                 </div>
             );
         } else if (type === 'TIMFileElem' || type === 'TIMFile') {
             return (
-                <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 shadow-sm min-w-[200px] cursor-pointer hover:bg-gray-50" onClick={() => payload?.fileUrl && window.open(payload.fileUrl, '_blank')}>
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
+                <div className="flex items-center gap-3 p-3 bg-white rounded-2xl border border-sage-200 shadow-sm min-w-[200px] cursor-pointer hover:bg-sage-50 transition-colors" onClick={() => payload?.fileUrl && window.open(payload.fileUrl, '_blank')}>
+                    <div className="w-10 h-10 bg-sage-100 rounded-xl flex items-center justify-center text-sage-600">
                         <Paperclip size={20} />
                     </div>
                     <div className="flex flex-col overflow-hidden">
-                        <span className="text-sm font-medium text-gray-800 truncate">{payload?.fileName || '未知文件'}</span>
-                        <span className="text-[10px] text-gray-500">{payload?.fileSize ? (payload.fileSize / 1024).toFixed(1) + ' KB' : ''}</span>
+                        <span className="text-sm font-bold text-ink-600 truncate">{payload?.fileName || '未知文件'}</span>
+                        <span className="text-[10px] text-ink-400">{payload?.fileSize ? (payload.fileSize / 1024).toFixed(1) + ' KB' : ''}</span>
                     </div>
                 </div>
             );
@@ -400,14 +400,14 @@ const ClassChatWindow = () => {
     const handleClose = () => getCurrentWindow().close();
 
     return (
-        <div className="h-screen w-screen bg-[#f3f9fe] flex flex-col overflow-hidden border border-gray-300 selection:bg-blue-100 selection:text-blue-900 shadow-xl">
+        <div className="h-screen w-screen bg-paper flex flex-col overflow-hidden border border-sage-200 selection:bg-sage-100 selection:text-sage-900 shadow-2xl rounded-2xl">
             {/* Title Bar - Enhanced */}
-            <div data-tauri-drag-region className="h-12 bg-gradient-to-r from-blue-50 to-white flex items-center justify-between px-4 border-b border-gray-200 select-none">
-                <div className="flex items-center gap-3">
-                    <div className="bg-blue-100 p-1.5 rounded-lg text-blue-600"><MessageCircle size={18} /></div>
+            <div data-tauri-drag-region className="h-12 bg-white/60 backdrop-blur-md flex items-center justify-between px-4 border-b border-sage-100 select-none">
+                <div className="flex items-center gap-3 pointer-events-none">
+                    <div className="bg-sage-100 p-1.5 rounded-xl text-sage-600 shadow-sm"><MessageCircle size={18} /></div>
                     <div className="flex flex-col">
-                        <span className="font-bold text-gray-800 text-sm">班级群 - {groupclassId}</span>
-                        <span className="text-[10px] text-gray-500 flex items-center gap-1">
+                        <span className="font-bold text-ink-600 text-sm">班级群 - {groupclassId}</span>
+                        <span className="text-[10px] text-ink-400 flex items-center gap-1">
                             {!isReady ? '连接中...' : `在线人数: ${members.length}`}
                         </span>
                     </div>
@@ -416,7 +416,7 @@ const ClassChatWindow = () => {
                     {/* Data Import Trigger */}
                     <button
                         onClick={() => setShowCustomList(true)}
-                        className="p-1.5 hover:bg-gray-200 rounded-md text-gray-500"
+                        className="p-1.5 hover:bg-sage-100 rounded-lg text-sage-400 hover:text-sage-600 transition-colors"
                         title="数据导入"
                     >
                         <Paperclip size={16} />
@@ -426,17 +426,17 @@ const ClassChatWindow = () => {
                     <div className="relative" ref={groupMenuRef}>
                         <button
                             onClick={() => setShowGroupMenu(!showGroupMenu)}
-                            className="p-1.5 hover:bg-gray-200 rounded-md text-gray-500"
+                            className="p-1.5 hover:bg-sage-100 rounded-lg text-sage-400 hover:text-sage-600 transition-colors"
                             title="群设置"
                         >
                             <MoreHorizontal size={16} />
                         </button>
 
                         {showGroupMenu && (
-                            <div className="absolute right-0 top-8 w-40 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                            <div className="absolute right-0 top-8 w-40 bg-white rounded-xl shadow-xl border border-sage-100 py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150 ring-1 ring-black/5">
                                 <button
                                     onClick={handleExitGroup}
-                                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                                    className="w-full px-4 py-2.5 text-left text-sm text-ink-600 hover:bg-sage-50 flex items-center gap-2 font-medium"
                                 >
                                     <LogOut size={14} />
                                     <span>退出群聊</span>
@@ -444,7 +444,7 @@ const ClassChatWindow = () => {
                                 {isOwner && (
                                     <button
                                         onClick={handleDisbandGroup}
-                                        className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                        className="w-full px-4 py-2.5 text-left text-sm text-red-500 hover:bg-red-50 flex items-center gap-2 font-medium"
                                     >
                                         <Trash2 size={14} />
                                         <span>解散群聊</span>
@@ -454,28 +454,28 @@ const ClassChatWindow = () => {
                         )}
                     </div>
 
-                    <button onClick={handleMinimize} className="p-1.5 hover:bg-gray-200 rounded-md text-gray-500"><Minus size={16} /></button>
-                    <button onClick={handleMaximize} className="p-1.5 hover:bg-gray-200 rounded-md text-gray-500">{isMaximized ? <Copy size={16} /> : <Square size={16} />}</button>
-                    <button onClick={handleClose} className="p-1.5 hover:bg-red-500 hover:text-white rounded-md text-gray-500"><X size={16} /></button>
+                    <button onClick={handleMinimize} className="p-1.5 hover:bg-sage-100 rounded-lg text-sage-400 hover:text-sage-600 transition-colors"><Minus size={16} /></button>
+                    <button onClick={handleMaximize} className="p-1.5 hover:bg-sage-100 rounded-lg text-sage-400 hover:text-sage-600 transition-colors">{isMaximized ? <Copy size={16} /> : <Square size={16} />}</button>
+                    <button onClick={handleClose} className="p-1.5 hover:bg-red-100 hover:text-red-500 rounded-lg text-sage-400 transition-colors"><X size={16} /></button>
                 </div>
             </div>
 
             <div className="flex-1 flex overflow-hidden">
                 {/* Main Chat Area */}
-                <div className="flex-1 flex flex-col min-w-0 bg-[#f5f6f7]">
+                <div className="flex-1 flex flex-col min-w-0 bg-transparent">
                     {/* Messages */}
                     <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
                         {messages.map((msg, index) => {
                             const isSelf = msg.flow === 'out';
                             return (
                                 <div key={msg.ID || index} className={`flex gap-3 ${isSelf ? 'flex-row-reverse' : ''}`}>
-                                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold border shadow-sm shrink-0 select-none ${isSelf ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 border-gray-200'}`}>
+                                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold border shadow-sm shrink-0 select-none ${isSelf ? 'bg-sage-500 text-white' : 'bg-white text-ink-500 border-sage-100'}`}>
                                         {isSelf ? '我' : (msg.nick || msg.from || '?').substring(0, 1).toUpperCase()}
                                     </div>
                                     <div className={`flex flex-col gap-1 max-w-[70%] ${isSelf ? 'items-end' : ''}`}>
                                         <div className="flex items-center gap-2">
-                                            <span className="text-xs text-gray-400">{isSelf ? '' : (msg.nick || msg.from)}</span>
-                                            <span className="text-[10px] text-gray-300">{new Date(msg.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                            <span className="text-xs text-ink-300">{isSelf ? '' : (msg.nick || msg.from)}</span>
+                                            <span className="text-[10px] text-ink-200">{new Date(msg.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                         </div>
                                         {renderMessageContent(msg)}
                                     </div>
@@ -483,35 +483,35 @@ const ClassChatWindow = () => {
                             );
                         })}
                         {messages.length === 0 && (
-                            <div className="text-center text-gray-400 mt-10 text-sm">
+                            <div className="text-center text-ink-300 mt-10 text-sm">
                                 {isReady ? '暂无消息' : '正在加载聊天...'}
                             </div>
                         )}
                     </div>
 
                     {/* Input ToolBar */}
-                    <div className="h-[160px] bg-white border-t border-gray-200 flex flex-col">
+                    <div className="h-[160px] bg-white/60 backdrop-blur border-t border-sage-100 flex flex-col">
                         <div className="flex items-center gap-2 p-2 px-4">
                             <input type="file" ref={imageInputRef} className="hidden" accept="image/*" onChange={handleImageSelect} />
                             <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect} />
 
-                            <button className="text-gray-500 hover:text-gray-700 p-1"><Smile size={20} /></button>
-                            <button className="text-gray-500 hover:text-gray-700 p-1" onClick={() => imageInputRef.current?.click()} title="发送图片"><Image size={20} /></button>
-                            <button className="text-gray-500 hover:text-gray-700 p-1" onClick={() => fileInputRef.current?.click()} title="发送文件"><Paperclip size={20} /></button>
-                            <button className="text-gray-500 hover:text-gray-700 p-1"><Clock size={20} /></button>
+                            <button className="text-sage-400 hover:text-sage-600 p-1 transition-colors"><Smile size={20} /></button>
+                            <button className="text-sage-400 hover:text-sage-600 p-1 transition-colors" onClick={() => imageInputRef.current?.click()} title="发送图片"><Image size={20} /></button>
+                            <button className="text-sage-400 hover:text-sage-600 p-1 transition-colors" onClick={() => fileInputRef.current?.click()} title="发送文件"><Paperclip size={20} /></button>
+                            <button className="text-sage-400 hover:text-sage-600 p-1 transition-colors"><Clock size={20} /></button>
                         </div>
                         <textarea
                             value={inputText}
                             onChange={(e) => setInputText(e.target.value)}
                             onKeyDown={handleKeyDown}
-                            className="flex-1 resize-none px-4 py-2 outline-none text-gray-800 text-sm leading-relaxed custom-scrollbar"
+                            className="flex-1 resize-none px-4 py-2 outline-none text-ink-600 text-sm leading-relaxed custom-scrollbar bg-transparent placeholder-ink-300"
                             placeholder=""
                         ></textarea>
                         <div className="p-2 px-4 flex justify-end">
                             <button
                                 onClick={handleSendMessage}
                                 disabled={!isReady}
-                                className={`px-6 py-1.5 rounded text-sm transition-colors border ${isReady ? 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100' : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'}`}
+                                className={`px-6 py-1.5 rounded-lg text-sm font-bold transition-all shadow-sm ${isReady ? 'bg-sage-100 text-sage-600 hover:bg-sage-200 hover:text-sage-700' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
                             >
                                 发送 (S)
                             </button>
@@ -520,22 +520,22 @@ const ClassChatWindow = () => {
                 </div>
 
                 {/* Right Sidebar - Member List */}
-                <div className="w-48 bg-white border-l border-gray-200 flex flex-col">
-                    <div className="h-10 border-b border-gray-100 flex items-center px-4 text-xs text-gray-500 font-medium">
+                <div className="w-48 bg-white/40 border-l border-sage-100 flex flex-col backdrop-blur-sm">
+                    <div className="h-10 border-b border-sage-100 flex items-center px-4 text-xs text-ink-400 font-bold uppercase tracking-wider">
                         群成员 ({members.length})
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
                         {members.map((member) => (
-                            <div key={member.userID} className="flex items-center gap-2 p-1.5 hover:bg-gray-50 rounded cursor-pointer">
-                                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-[10px] text-gray-500 border border-gray-200 overflow-hidden shrink-0">
+                            <div key={member.userID} className="flex items-center gap-2 p-2 hover:bg-sage-50 rounded-xl cursor-pointer transition-colors group">
+                                <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-[10px] text-ink-400 border border-sage-100 overflow-hidden shrink-0 group-hover:border-sage-300 transition-colors">
                                     {member.avatar ? (
                                         <img src={member.avatar} className="w-full h-full object-cover" alt="" />
                                     ) : (
                                         (member.nick || member.userID || '?').substring(0, 1).toUpperCase()
                                     )}
                                 </div>
-                                <span className="text-xs text-gray-700 truncate">{member.nick || member.userID}</span>
+                                <span className="text-xs text-ink-600 font-medium truncate">{member.nick || member.userID}</span>
                             </div>
                         ))}
                     </div>
@@ -551,31 +551,31 @@ const ClassChatWindow = () => {
 
             {/* Transfer Ownership Modal (for owner exit) */}
             {showTransferModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-xl shadow-2xl w-[400px] p-6">
-                        <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                            <UserCheck size={20} className="text-blue-500" />
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/20 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-xl w-[400px] p-6 border border-sage-100">
+                        <h2 className="text-lg font-bold text-ink-700 mb-4 flex items-center gap-2">
+                            <UserCheck size={20} className="text-sage-500" />
                             选择新群主
                         </h2>
-                        <p className="text-sm text-gray-500 mb-4">您是群主，退出前需先转让群主身份给其他成员。</p>
-                        <div className="max-h-[250px] overflow-y-auto space-y-2 mb-4">
+                        <p className="text-sm text-ink-400 mb-4">您是群主，退出前需先转让群主身份给其他成员。</p>
+                        <div className="max-h-[250px] overflow-y-auto space-y-2 mb-4 custom-scrollbar">
                             {members.filter(m => m.userID !== localStorage.getItem('teacher_unique_id')).map((member) => (
                                 <button
                                     key={member.userID}
                                     onClick={() => handleTransferAndQuit(member.userID)}
-                                    className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-blue-50 border border-gray-200 transition-colors text-left"
+                                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-sage-50 border border-transparent hover:border-sage-200 transition-all text-left group"
                                 >
                                     <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs text-gray-500 border border-gray-200">
                                         {member.avatar ? <img src={member.avatar} className="w-full h-full rounded-full" /> : (member.nick || member.userID).substring(0, 1).toUpperCase()}
                                     </div>
-                                    <span className="text-sm text-gray-700">{member.nick || member.userID}</span>
-                                    {member.role === 'Admin' && <span className="text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded">管理员</span>}
+                                    <span className="text-sm text-ink-600 font-bold group-hover:text-sage-700">{member.nick || member.userID}</span>
+                                    {member.role === 'Admin' && <span className="text-[10px] bg-sky-100 text-sky-600 px-1.5 py-0.5 rounded-full font-bold">管理员</span>}
                                 </button>
                             ))}
                         </div>
                         <button
                             onClick={() => setShowTransferModal(false)}
-                            className="w-full py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+                            className="w-full py-2.5 text-sm font-bold text-ink-500 hover:bg-gray-100 rounded-xl transition-colors"
                         >
                             取消
                         </button>

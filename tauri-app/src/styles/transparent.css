@@ -1,0 +1,10 @@
+.transparent-window,
+.transparent-window body,
+.transparent-window #root {
+    background-color: transparent !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}

@@ -38,60 +38,66 @@ const GroupScoreModal = ({ isOpen, onClose }: GroupScoreModalProps) => {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-300 font-sans">
             <div
                 style={style}
-                className="bg-white rounded-2xl shadow-2xl w-[900px] h-[600px] flex flex-col overflow-hidden border border-gray-100"
+                className="bg-paper/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl w-[900px] h-[600px] flex flex-col overflow-hidden border border-white/60 ring-1 ring-sage-100/50 animate-in zoom-in-95 duration-200"
             >
                 {/* Header */}
                 <div
                     onMouseDown={handleMouseDown}
-                    className="bg-gradient-to-r from-violet-500 to-purple-600 p-4 flex items-center justify-between text-white flex-shrink-0 cursor-move select-none"
+                    className="p-5 flex items-center justify-between border-b border-sage-100/50 bg-white/40 backdrop-blur-md cursor-move select-none"
                 >
-                    <div className="flex items-center gap-2 font-bold text-lg">
-                        <Award size={20} />
-                        <span>小组评价</span>
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-violet-400 to-violet-600 text-white flex items-center justify-center shadow-lg shadow-violet-500/20">
+                            <Award size={20} />
+                        </div>
+                        <span className="font-bold text-ink-800 text-lg tracking-tight">小组评价</span>
                     </div>
-                    <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition-colors">
+                    <button
+                        onClick={onClose}
+                        className="w-9 h-9 flex items-center justify-center rounded-full text-sage-400 hover:text-clay-600 hover:bg-clay-50 transition-all duration-300"
+                    >
                         <X size={20} />
                     </button>
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6 bg-gray-50/50">
+                <div className="flex-1 overflow-y-auto p-6 bg-white/30 custom-scrollbar">
 
                     {/* Top Stats / Controls */}
                     <div className="mb-6 flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-gray-500 text-sm">
+                        <div className="flex items-center gap-2 text-sage-500 text-sm font-bold bg-white/50 px-4 py-2 rounded-xl backdrop-blur-sm border border-white/50">
                             <Users size={16} /> 共 {groups.length} 个小组
                         </div>
-                        <button className="text-xs bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 px-3 py-1.5 rounded-lg shadow-sm font-medium transition-colors">
+                        <button className="text-xs font-bold bg-white text-ink-600 border border-sage-200 hover:border-sage-400 hover:text-sage-700 px-4 py-2 rounded-xl shadow-sm transition-all hover:shadow-md">
                             重置所有分数
                         </button>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                         {groups.map((group) => (
-                            <div key={group.id} className="bg-white rounded-xl border border-gray-100 shadow-sm flex flex-col overflow-hidden group hover:shadow-md transition-shadow">
+                            <div key={group.id} className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white shadow-sm flex flex-col overflow-hidden group hover:shadow-lg hover:scale-[1.02] transition-all duration-300 ring-1 ring-black/5 hover:ring-violet-200">
                                 {/* Group Header */}
-                                <div className="p-4 border-b border-gray-50 flex items-center justify-between bg-gradient-to-br from-gray-50 to-white">
-                                    <div className="font-bold text-gray-800 flex items-center gap-2">
-                                        <div className="w-8 h-8 rounded-lg bg-violet-100 text-violet-600 flex items-center justify-center font-bold text-sm">
+                                <div className="p-4 border-b border-sage-50 flex items-center justify-between bg-gradient-to-br from-white to-sage-50/30">
+                                    <div className="font-bold text-ink-800 flex items-center gap-3">
+                                        <div className="w-9 h-9 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center font-bold text-sm shadow-inner group-hover:bg-violet-500 group-hover:text-white transition-colors duration-300">
                                             {group.id}
                                         </div>
                                         {group.name}
                                     </div>
-                                    <div className="flex items-center gap-1 text-2xl font-bold text-violet-600">
+                                    <div className="flex items-center gap-1 text-3xl font-black text-violet-500 drop-shadow-sm">
                                         {group.score}
-                                        <span className="text-xs font-normal text-gray-400 mt-2">分</span>
+                                        <span className="text-xs font-bold text-sage-400 mt-3">分</span>
                                     </div>
                                 </div>
 
                                 {/* Members */}
-                                <div className="p-4 flex-1">
-                                    <div className="flex flex-wrap gap-1.5">
+                                <div className="p-4 flex-1 bg-white/40">
+                                    <div className="flex flex-wrap gap-2">
                                         {group.members.map((m, i) => (
-                                            <span key={i} className="text-xs bg-gray-50 text-gray-600 px-2 py-1 rounded text-center">
+                                            <span key={i} className="text-xs bg-white border border-sage-100 text-ink-600 px-2.5 py-1 rounded-lg font-medium text-center shadow-sm">
                                                 {m}
                                             </span>
                                         ))}
@@ -99,18 +105,18 @@ const GroupScoreModal = ({ isOpen, onClose }: GroupScoreModalProps) => {
                                 </div>
 
                                 {/* Actions */}
-                                <div className="p-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-3">
+                                <div className="p-3 bg-sage-50/50 border-t border-sage-100/50 flex items-center justify-between gap-3 backdrop-blur-md">
                                     <button
                                         onClick={() => handleScoreChange(group.id, -1)}
-                                        className="flex-1 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 flex items-center justify-center gap-1 transition-colors"
+                                        className="flex-1 py-2 rounded-xl border border-clay-200 text-clay-600 hover:bg-clay-50 hover:border-clay-300 flex items-center justify-center gap-1.5 transition-all font-bold text-xs bg-white hover:shadow-sm"
                                     >
-                                        <Minus size={14} /> 扣分
+                                        <Minus size={14} strokeWidth={2.5} /> 扣分
                                     </button>
                                     <button
                                         onClick={() => handleScoreChange(group.id, 1)}
-                                        className="flex-1 py-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-700 shadow-sm shadow-violet-200 flex items-center justify-center gap-1 transition-colors"
+                                        className="flex-1 py-2 rounded-xl bg-violet-600 text-white hover:bg-violet-700 shadow-lg shadow-violet-200 flex items-center justify-center gap-1.5 transition-all font-bold text-xs hover:-translate-y-0.5"
                                     >
-                                        <Plus size={14} /> 加分
+                                        <Plus size={14} strokeWidth={2.5} /> 加分
                                     </button>
                                 </div>
                             </div>

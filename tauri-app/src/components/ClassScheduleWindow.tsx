@@ -389,70 +389,84 @@ const ClassScheduleWindow = () => {
 
     return (
         <div
-            className="h-screen w-screen bg-[#f8fbff] flex flex-col overflow-hidden border border-gray-300 select-none text-gray-700 font-sans relative transition-all duration-500 bg-cover bg-center"
+            className="h-screen w-screen bg-paper flex flex-col overflow-hidden border border-sage-200 select-none text-ink-600 font-sans relative transition-all duration-500 bg-cover bg-center rounded-[2rem] shadow-2xl"
             style={backgroundImage ? { backgroundImage: `url(${backgroundImage})` } : {}}
         >
             {/* Overlay to ensure text readability if background is set */}
             {backgroundImage && (
-                <div className="absolute inset-0 bg-white/75 backdrop-blur-sm z-0 pointer-events-none"></div>
+                <div className="absolute inset-0 bg-paper/80 backdrop-blur-sm z-0 pointer-events-none"></div>
             )}
 
-            {/* Title Bar - Added z-10 for layering */}
-            <div data-tauri-drag-region className="h-10 bg-white/50 backdrop-blur-md flex items-center justify-between px-4 border-b border-gray-200/50 z-50 relative">
-                <div className="flex items-center gap-4">
-                    <div className="font-bold text-gray-700 flex items-center gap-2">
-                        <div className="bg-blue-500 text-white p-1 rounded-md shadow-sm shadow-blue-200"><Users size={12} /></div>
-                        <span className="text-sm tracking-wide">班级空间 - {className || groupclassId}</span>
+            {/* Title Bar - Floating Style */}
+            <div data-tauri-drag-region className="h-14 shrink-0 flex items-center justify-between px-6 z-50 relative mt-2 mx-2">
+                <div className="flex items-center gap-4 bg-white/60 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/50 shadow-sm">
+                    <div className="font-bold text-ink-800 flex items-center gap-2.5">
+                        <div className="bg-sage-100 text-sage-600 p-1.5 rounded-lg"><Users size={14} /></div>
+                        <span className="text-sm tracking-wide font-bold">{className || groupclassId}</span>
                     </div>
                     {/* View Switcher */}
-                    <div className="flex bg-gray-100/80 p-0.5 rounded-lg border border-gray-200/50">
+                    <div className="flex bg-sage-50/80 p-1 rounded-xl">
                         <button
                             onClick={() => setCurrentView('overview')}
-                            className={`px-2 py-0.5 text-xs rounded-md flex items-center gap-1 transition-all ${currentView === 'overview' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            className={`px-3 py-1 text-xs rounded-lg flex items-center gap-1.5 transition-all font-bold ${currentView === 'overview' ? 'bg-white text-sage-600 shadow-sm' : 'text-ink-400 hover:text-ink-600'}`}
                         >
-                            <LayoutDashboard size={12} /> 概览
+                            <LayoutDashboard size={14} /> 概览
                         </button>
                         <button
                             onClick={() => setCurrentView('seatmap')}
-                            className={`px-2 py-0.5 text-xs rounded-md flex items-center gap-1 transition-all ${currentView === 'seatmap' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            className={`px-3 py-1 text-xs rounded-lg flex items-center gap-1.5 transition-all font-bold ${currentView === 'seatmap' ? 'bg-white text-sage-600 shadow-sm' : 'text-ink-400 hover:text-ink-600'}`}
                         >
-                            <Grid size={12} /> 座位表
+                            <Grid size={14} /> 座位表
                         </button>
                     </div>
                 </div>
-                <div className="flex items-center gap-1.5 opacity-80 hover:opacity-100 transition-opacity">
+
+                <div className="flex items-center gap-3">
                     {/* Notification Bell */}
                     <button
                         onClick={() => setIsNotificationCenterOpen(true)}
-                        className="p-1 hover:bg-gray-200 rounded text-gray-500 mr-2 relative"
+                        className="w-9 h-9 flex items-center justify-center bg-white/60 hover:bg-white rounded-full text-ink-400 hover:text-sage-500 transition-all shadow-sm border border-transparent hover:border-sage-100 relative group"
                     >
-                        <Bell size={16} />
+                        <Bell size={18} />
                         {notifications.length > 0 && notifications.some(n => n.is_read === 0) && (
-                            <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+                            <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-clay-500 rounded-full border-2 border-white"></span>
                         )}
+                        <span className="absolute top-10 right-0 bg-ink-800 text-white text-[10px] px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">通知中心</span>
                     </button>
 
-                    <button onClick={() => setIsClassInfoOpen(true)} className="px-2 py-0.5 mr-2 rounded text-gray-500 hover:bg-gray-200 font-bold">...</button>
-                    <button onClick={handleMinimize} className="p-1 hover:bg-gray-200 rounded text-gray-500"><Minus size={14} /></button>
-                    <button onClick={handleMaximize} className="p-1 hover:bg-gray-200 rounded text-gray-500">{isMaximized ? <Copy size={14} /> : <Square size={14} />}</button>
-                    <button onClick={handleClose} className="p-1 hover:bg-red-500 hover:text-white rounded text-gray-500"><X size={14} /></button>
+                    <div className="h-4 w-px bg-sage-200/50 mx-1"></div>
+
+                    <div className="flex items-center gap-2 bg-white/60 backdrop-blur-md px-2 py-1.5 rounded-full border border-white/50 shadow-sm">
+                        <button onClick={() => setIsClassInfoOpen(true)} className="w-8 h-8 flex items-center justify-center rounded-full text-ink-400 hover:bg-sage-50 hover:text-sage-600 transition-colors">
+                            <Layers size={16} />
+                        </button>
+                        <button onClick={handleMinimize} className="w-8 h-8 flex items-center justify-center rounded-full text-ink-400 hover:bg-sage-50 hover:text-sage-600 transition-colors">
+                            <Minus size={18} />
+                        </button>
+                        <button onClick={handleMaximize} className="w-8 h-8 flex items-center justify-center rounded-full text-ink-400 hover:bg-sage-50 hover:text-sage-600 transition-colors">
+                            {isMaximized ? <Copy size={16} /> : <Square size={16} />}
+                        </button>
+                        <button onClick={handleClose} className="w-8 h-8 flex items-center justify-center rounded-full text-ink-400 hover:bg-clay-500 hover:text-white transition-all">
+                            <X size={18} />
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            {/* Main Content Area - Added z-10 for layering */}
-            <div className="flex-1 overflow-hidden p-4 md:p-6 relative flex flex-col gap-4 z-10">
+            {/* Main Content Area */}
+            <div className="flex-1 overflow-hidden px-6 pb-6 pt-2 relative flex flex-col gap-5 z-10">
                 {currentView === 'overview' ? (
-                    <div className="flex-1 flex flex-col gap-4 h-full">
+                    <div className="flex-1 flex flex-col gap-5 h-full">
                         {/* Top Row - Daily Schedule Timeline (Full Width) */}
-                        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex-shrink-0">
-                            <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center gap-2">
-                                    <span className="w-1 h-5 bg-blue-500 rounded-full"></span>
-                                    <h3 className="font-bold text-gray-800">今日课程</h3>
+                        <div className="bg-white/80 backdrop-blur-xl rounded-[1.5rem] p-5 border border-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex-shrink-0">
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-1.5 h-6 bg-sage-400 rounded-full"></div>
+                                    <h3 className="text-lg font-bold text-ink-800">今日课程</h3>
                                 </div>
                                 <button
                                     onClick={() => setIsCourseScheduleOpen(true)}
-                                    className="text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full font-medium transition-colors"
+                                    className="text-xs text-sage-600 bg-sage-50 hover:bg-sage-100 px-4 py-2 rounded-xl font-bold transition-colors"
                                 >
                                     查看完整课表
                                 </button>
@@ -472,19 +486,24 @@ const ClassScheduleWindow = () => {
                         </div>
 
                         {/* Bottom Row - 3 Column Grid */}
-                        <div className="flex-1 grid grid-cols-12 gap-4 min-h-0">
+                        <div className="flex-1 grid grid-cols-12 gap-5 min-h-0">
                             {/* Left Column - Class Info & Notifications */}
-                            <div className="col-span-3 flex flex-col gap-4">
+                            <div className="col-span-3 flex flex-col gap-5">
                                 {/* Hero Card */}
-                                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden">
-                                    <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-bl-full -mr-6 -mt-6 opacity-50"></div>
+                                <div className="bg-white/90 backdrop-blur rounded-[1.5rem] p-6 border border-white shadow-[0_4px_20px_rgb(0,0,0,0.02)] relative overflow-hidden group hover:shadow-lg transition-all">
+                                    <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-sage-50 to-clay-50 rounded-bl-full -mr-8 -mt-8 opacity-60 group-hover:scale-110 transition-transform duration-500"></div>
                                     <div className="relative z-10">
-                                        <h1 className="text-lg font-bold text-gray-800 mb-0.5">{className}</h1>
-                                        <p className="text-sm text-gray-500 font-medium">学科未设置</p>
-                                        <div className="mt-3 flex items-center gap-3 text-xs text-gray-400">
-                                            <span className="flex items-center gap-1"><Users size={12} /> {studentCount} 人</span>
-                                            <span className="w-px h-3 bg-gray-200"></span>
-                                            <span className="flex items-center gap-1"><Calendar size={12} /> 学年未设置</span>
+                                        <h1 className="text-xl font-bold text-ink-800 mb-1 tracking-tight">{className}</h1>
+                                        <p className="text-sm text-ink-400 font-medium">智慧课堂班级空间</p>
+                                        <div className="mt-6 flex flex-col gap-2">
+                                            <div className="flex items-center gap-2 text-xs font-bold text-ink-500 bg-paper/50 p-2 rounded-lg w-fit">
+                                                <Users size={14} className="text-sage-500" />
+                                                <span>{studentCount} 位学员</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-xs font-bold text-ink-500 bg-paper/50 p-2 rounded-lg w-fit">
+                                                <Calendar size={14} className="text-clay-500" />
+                                                <span>2025-2026学年 第一学期</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -492,217 +511,189 @@ const ClassScheduleWindow = () => {
                                 {/* Notifications Card */}
                                 <div
                                     onClick={() => setIsNotificationOpen(true)}
-                                    className="flex-1 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-4 text-white shadow-lg shadow-purple-200/50 flex flex-col cursor-pointer transition-transform hover:-translate-y-0.5"
+                                    className="flex-1 bg-gradient-to-br from-sage-500 to-sage-600 rounded-[1.5rem] p-5 text-white shadow-xl shadow-sage-200/50 flex flex-col cursor-pointer transition-all hover:-translate-y-1 hover:shadow-2xl hover:shadow-sage-300/50 group"
                                 >
-                                    <div className="flex items-center justify-between mb-2">
-                                        <h3 className="font-bold text-sm opacity-90 flex items-center gap-2">
-                                            <span className="bg-white/20 p-1 rounded"><MessageCircle size={12} /></span>
-                                            发送班级通知
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h3 className="font-bold text-base opacity-95 flex items-center gap-2">
+                                            <div className="bg-white/20 p-1.5 rounded-lg"><MessageCircle size={14} /></div>
+                                            班级通知
                                         </h3>
                                     </div>
-                                    <p className="text-xs opacity-80 leading-relaxed line-clamp-3 flex-1">
-                                        教师端发布通知，班级端接收
+                                    <p className="text-xs opacity-80 leading-relaxed line-clamp-3 flex-1 font-medium">
+                                        向班级学生和家长发送重要通知与公告。
                                     </p>
-                                    <button className="mt-2 text-xs bg-white/20 hover:bg-white/30 py-1.5 rounded-lg transition-colors font-medium">
-                                        发送通知
+                                    <button className="mt-4 text-xs bg-white/20 hover:bg-white/30 py-2.5 rounded-xl transition-colors font-bold w-full flex items-center justify-center gap-2 group-hover:bg-white/25">
+                                        立即发布 <ArrowUpDown size={12} className="rotate-90" />
                                     </button>
                                 </div>
                             </div>
 
                             {/* Middle Column - Homework & Stats */}
-                            <div className="col-span-5 flex flex-col gap-4">
+                            <div className="col-span-5 flex flex-col gap-5">
                                 {/* Homework Card */}
                                 <div
                                     onClick={openHomeworkModal}
-                                    className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm flex items-center justify-between hover:border-green-200 transition-all cursor-pointer"
+                                    className="bg-white/90 backdrop-blur rounded-[1.5rem] p-6 border border-white shadow-[0_4px_20px_rgb(0,0,0,0.02)] flex items-center justify-between hover:border-sage-200 hover:shadow-md transition-all cursor-pointer group"
                                 >
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 bg-green-50 text-green-600 rounded-xl flex items-center justify-center">
-                                            <BookOpen size={24} />
+                                    <div className="flex items-center gap-5">
+                                        <div className="w-14 h-14 bg-clay-50 text-clay-600 rounded-2xl flex items-center justify-center group-hover:scale-105 transition-transform shadow-inner">
+                                            <BookOpen size={28} />
                                         </div>
                                         <div>
-                                            <h4 className="font-bold text-gray-800">作业批改</h4>
+                                            <h4 className="font-bold text-lg text-ink-800">作业批改</h4>
                                             {latestHomework ? (
-                                                <p className="text-xs text-gray-500 mt-0.5">
-                                                    最新：{latestHomework.subject} · {latestHomework.date}
+                                                <p className="text-xs text-ink-400 mt-1 font-medium bg-paper px-2 py-1 rounded-md inline-block border border-sage-50">
+                                                    {latestHomework.subject} · {latestHomework.date}
                                                 </p>
                                             ) : (
-                                                <p className="text-xs text-gray-500 mt-0.5">暂无作业数据</p>
+                                                <p className="text-xs text-ink-400 mt-1">暂无作业数据</p>
                                             )}
                                         </div>
                                     </div>
-                                    <div className="flex items-end gap-1">
-                                        <span className="text-2xl font-bold text-gray-300">--</span>
-                                        <span className="text-xs text-gray-400 mb-1.5">/ -- 提交</span>
+                                    <div className="flex flex-col items-end gap-1">
+                                        <span className="text-3xl font-bold text-sage-200 group-hover:text-sage-400 transition-colors">--</span>
+                                        <span className="text-xs font-bold text-ink-300">提交率</span>
                                     </div>
                                 </div>
 
                                 {/* Quick Stats */}
-                                <div className="flex-1 grid grid-cols-3 gap-3">
-                                    <div className="bg-white rounded-xl p-4 border border-gray-100 flex flex-col items-center justify-center">
-                                        <span className="text-2xl font-bold text-gray-300">--</span>
-                                        <span className="text-xs text-gray-400 mt-1">出勤率</span>
+                                <div className="flex-1 grid grid-cols-3 gap-4">
+                                    <div className="bg-white/80 backdrop-blur rounded-[1.2rem] p-4 border border-white shadow-sm flex flex-col items-center justify-center gap-2">
+                                        <div className="w-8 h-8 rounded-full bg-sage-50 flex items-center justify-center text-sage-500 mb-1"><Users size={16} /></div>
+                                        <span className="text-2xl font-bold text-ink-800">--%</span>
+                                        <span className="text-xs font-bold text-ink-400">出勤率</span>
                                     </div>
-                                    <div className="bg-white rounded-xl p-4 border border-gray-100 flex flex-col items-center justify-center">
-                                        <span className="text-2xl font-bold text-gray-300">--</span>
-                                        <span className="text-xs text-gray-400 mt-1">平均分</span>
+                                    <div className="bg-white/80 backdrop-blur rounded-[1.2rem] p-4 border border-white shadow-sm flex flex-col items-center justify-center gap-2">
+                                        <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-500 mb-1"><BarChart2 size={16} /></div>
+                                        <span className="text-2xl font-bold text-ink-800">--</span>
+                                        <span className="text-xs font-bold text-ink-400">平均分</span>
                                     </div>
-                                    <div className="bg-white rounded-xl p-4 border border-gray-100 flex flex-col items-center justify-center">
-                                        <span className="text-2xl font-bold text-gray-300">--</span>
-                                        <span className="text-xs text-gray-400 mt-1">班级评级</span>
+                                    <div className="bg-white/80 backdrop-blur rounded-[1.2rem] p-4 border border-white shadow-sm flex flex-col items-center justify-center gap-2">
+                                        <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-500 mb-1"><Award size={16} /></div>
+                                        <span className="text-2xl font-bold text-ink-800">A+</span>
+                                        <span className="text-xs font-bold text-ink-400">班级评级</span>
                                     </div>
                                 </div>
                             </div>
 
                             {/* Right Column - Tools Grid */}
-                            <div className="col-span-4 bg-white/50 rounded-2xl border border-gray-100 p-4 flex flex-col">
-                                <h3 className="text-sm font-bold text-gray-600 mb-3 flex items-center gap-2">
+                            <div className="col-span-4 bg-white/60 backdrop-blur rounded-[1.5rem] border border-white/60 p-5 flex flex-col shadow-inner">
+                                <h3 className="text-sm font-bold text-ink-500 mb-4 flex items-center gap-2 px-1">
                                     <Layers size={14} /> 快捷工具
                                 </h3>
-                                <div className="grid grid-cols-2 gap-2 flex-1 content-start">
-                                    <button onClick={openHomeworkModal} className="h-16 bg-white rounded-xl border border-gray-100 hover:shadow-sm hover:border-purple-200 transition-all flex items-center gap-3 px-3 group">
-                                        <div className="p-2 rounded-lg bg-purple-50 text-purple-500 group-hover:bg-purple-100 transition-all">
-                                            <BookOpen size={16} />
-                                        </div>
-                                        <span className="text-xs font-medium text-gray-600">作业管理</span>
-                                    </button>
+                                <div className="grid grid-cols-2 gap-3 flex-1 content-start">
+                                    {[
+                                        { title: "作业管理", icon: <BookOpen size={18} />, color: "text-purple-500 bg-purple-50", onClick: openHomeworkModal },
+                                        { title: "语音对讲", icon: <Mic size={18} />, color: "text-red-500 bg-red-50", onClick: handleOpenIntercom },
+                                        { title: "更多导入", icon: <FileSpreadsheet size={18} />, color: "text-orange-500 bg-orange-50", onClick: () => setIsCustomListOpen(true) },
+                                        { title: "随机点名", icon: <Shuffle size={18} />, color: "text-cyan-500 bg-cyan-50", onClick: () => setIsRandomCallOpen(true) },
+                                        { title: "倒计时", icon: <Clock size={18} />, color: "text-rose-500 bg-rose-50", onClick: () => setIsCountdownOpen(true) },
+                                        { title: "小组评价", icon: <Award size={18} />, color: "text-violet-500 bg-violet-50", onClick: () => setIsGroupScoreOpen(true) },
+                                        { title: "座位导入", icon: <Grid size={18} />, color: "text-blue-500 bg-blue-50", onClick: () => setIsStudentImportOpen(true) },
+                                        { title: "成绩分析", icon: <BarChart2 size={18} />, color: "text-indigo-500 bg-indigo-50", onClick: () => setIsScoreAnalysisOpen(true) },
+                                        { title: "智能排座", icon: <ArrowUpDown size={18} />, color: "text-teal-500 bg-teal-50", onClick: () => setIsArrangeSeatOpen(true) },
+                                    ].map((tool, idx) => (
+                                        <button
+                                            key={idx}
+                                            onClick={tool.onClick}
+                                            className="h-16 bg-white rounded-2xl border border-transparent shadow-sm hover:border-sage-200 hover:shadow-md transition-all flex items-center gap-3 px-3.5 group"
+                                        >
+                                            <div className={`p-2.5 rounded-xl ${tool.color} group-hover:scale-110 transition-transform`}>
+                                                {tool.icon}
+                                            </div>
+                                            <span className="text-xs font-bold text-ink-600">{tool.title}</span>
+                                        </button>
+                                    ))}
 
-                                    <button onClick={handleOpenIntercom} className="h-16 bg-white rounded-xl border border-gray-100 hover:shadow-sm hover:border-red-200 transition-all flex items-center gap-3 px-3 group">
-                                        <div className="p-2 rounded-lg bg-red-50 text-red-500 group-hover:bg-red-100 transition-all">
-                                            <Mic size={16} />
+                                    <button onClick={handleRemoteShutdown} className="h-16 bg-white rounded-2xl border border-transparent shadow-sm hover:border-red-200 hover:shadow-md transition-all flex items-center gap-3 px-3.5 group relative overflow-hidden">
+                                        <div className={`absolute top-2 right-2 w-2 h-2 rounded-full ${isWSConnected ? 'bg-green-500' : 'bg-red-400'} ring-2 ring-white`}></div>
+                                        <div className="p-2.5 rounded-xl bg-red-50 text-red-500 group-hover:bg-red-500 group-hover:text-white transition-all">
+                                            <Power size={18} />
                                         </div>
-                                        <span className="text-xs font-medium text-gray-600">语音对讲</span>
-                                    </button>
-
-                                    <button onClick={() => setIsCustomListOpen(true)} className="h-16 bg-white rounded-xl border border-gray-100 hover:shadow-sm hover:border-orange-200 transition-all flex items-center gap-3 px-3 group">
-                                        <div className="p-2 rounded-lg bg-orange-50 text-orange-500 group-hover:bg-orange-100 transition-all">
-                                            <FileSpreadsheet size={16} />
-                                        </div>
-                                        <span className="text-xs font-medium text-gray-600">更多导入</span>
-                                    </button>
-
-                                    <button onClick={() => setIsRandomCallOpen(true)} className="h-16 bg-white rounded-xl border border-gray-100 hover:shadow-sm hover:border-cyan-200 transition-all flex items-center gap-3 px-3 group">
-                                        <div className="p-2 rounded-lg bg-cyan-50 text-cyan-500 group-hover:bg-cyan-100 transition-all">
-                                            <Shuffle size={16} />
-                                        </div>
-                                        <span className="text-xs font-medium text-gray-600">随机点名</span>
-                                    </button>
-
-                                    <button onClick={() => setIsCountdownOpen(true)} className="h-16 bg-white rounded-xl border border-gray-100 hover:shadow-sm hover:border-rose-200 transition-all flex items-center gap-3 px-3 group">
-                                        <div className="p-2 rounded-lg bg-rose-50 text-rose-500 group-hover:bg-rose-100 transition-all">
-                                            <Clock size={16} />
-                                        </div>
-                                        <span className="text-xs font-medium text-gray-600">倒计时</span>
-                                    </button>
-
-                                    <button onClick={() => setIsGroupScoreOpen(true)} className="h-16 bg-white rounded-xl border border-gray-100 hover:shadow-sm hover:border-violet-200 transition-all flex items-center gap-3 px-3 group">
-                                        <div className="p-2 rounded-lg bg-violet-50 text-violet-500 group-hover:bg-violet-100 transition-all">
-                                            <Award size={16} />
-                                        </div>
-                                        <span className="text-xs font-medium text-gray-600">小组评价</span>
-                                    </button>
-
-                                    <button onClick={handleRemoteShutdown} className="h-16 bg-white rounded-xl border border-gray-100 hover:shadow-sm hover:border-red-200 transition-all flex items-center gap-3 px-3 group relative">
-                                        <div className="absolute top-2 right-2">
-                                            <div className={`w-1.5 h-1.5 rounded-full ${isWSConnected ? 'bg-green-500' : 'bg-red-400'}`}></div>
-                                        </div>
-                                        <div className="p-2 rounded-lg bg-red-50 text-red-500 group-hover:bg-red-100 transition-all">
-                                            <Power size={16} />
-                                        </div>
-                                        <span className="text-xs font-medium text-gray-600">远程开机</span>
-                                    </button>
-
-                                    <button onClick={() => setIsStudentImportOpen(true)} className="h-16 bg-white rounded-xl border border-gray-100 hover:shadow-sm hover:border-blue-200 transition-all flex items-center gap-3 px-3 group">
-                                        <div className="p-2 rounded-lg bg-blue-50 text-blue-500 group-hover:bg-blue-100 transition-all">
-                                            <Grid size={16} />
-                                        </div>
-                                        <span className="text-xs font-medium text-gray-600">座位导入</span>
-                                    </button>
-
-                                    <button onClick={() => setIsScoreAnalysisOpen(true)} className="h-16 bg-white rounded-xl border border-gray-100 hover:shadow-sm hover:border-indigo-200 transition-all flex items-center gap-3 px-3 group">
-                                        <div className="p-2 rounded-lg bg-indigo-50 text-indigo-500 group-hover:bg-indigo-100 transition-all">
-                                            <BarChart2 size={16} />
-                                        </div>
-                                        <span className="text-xs font-medium text-gray-600">成绩分析</span>
-                                    </button>
-
-
-
-                                    <button onClick={() => setIsArrangeSeatOpen(true)} className="h-16 bg-white rounded-xl border border-gray-100 hover:shadow-sm hover:border-teal-200 transition-all flex items-center gap-3 px-3 group">
-                                        <div className="p-2 rounded-lg bg-teal-50 text-teal-500 group-hover:bg-teal-100 transition-all">
-                                            <ArrowUpDown size={16} />
-                                        </div>
-                                        <span className="text-xs font-medium text-gray-600">排座</span>
+                                        <span className="text-xs font-bold text-ink-600 group-hover:text-red-500 transition-colors">远程关机</span>
                                     </button>
                                 </div>
                             </div>
                         </div>
                     </div>
                 ) : (
-                    <div className="h-full flex flex-col bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                        <div className="h-12 border-b border-gray-100 flex items-center justify-between px-4 bg-gray-50/50">
-                            <h3 className="font-bold text-gray-700 flex items-center gap-2">
-                                <Grid size={16} className="text-blue-500" /> 座位表
+                    <div className="h-full flex flex-col bg-white/80 backdrop-blur rounded-[2rem] border border-white shadow-sm overflow-hidden">
+                        <div className="h-16 border-b border-sage-100 flex items-center justify-between px-6 bg-white/50">
+                            <h3 className="font-bold text-ink-700 flex items-center gap-2.5">
+                                <div className="bg-sage-100 p-1.5 rounded-lg text-sage-600"><Grid size={18} /></div>
+                                <span className="text-lg">座位表概览</span>
                             </h3>
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-500">热力图模式:</span>
-                                <select
-                                    className="bg-white border border-gray-200 text-xs rounded-md p-1 outline-none focus:border-blue-500 transition-colors"
-                                    value={heatmapMode}
-                                    onChange={(e) => setHeatmapMode(e.target.value as any)}
-                                >
-                                    <option value="none">无</option>
-                                    <option value="score">成绩</option>
-                                    <option value="attendance">考勤</option>
-                                </select>
+                            <div className="flex items-center gap-3">
+                                <span className="text-xs font-bold text-ink-400">显示模式:</span>
+                                <div className="relative">
+                                    <select
+                                        className="appearance-none bg-white border border-sage-200 text-xs font-bold text-ink-600 rounded-xl py-2 pl-3 pr-8 outline-none focus:border-sage-400 hover:bg-sage-50 transition-colors cursor-pointer"
+                                        value={heatmapMode}
+                                        onChange={(e) => setHeatmapMode(e.target.value as any)}
+                                    >
+                                        <option value="none">默认视图</option>
+                                        <option value="score">成绩热力图</option>
+                                        <option value="attendance">考勤热力图</option>
+                                    </select>
+                                    <div className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none">
+                                        <ArrowUpDown size={12} />
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div className="flex-1 overflow-hidden p-2">
+                        <div className="flex-1 overflow-hidden p-4">
                             <SeatMap classId={groupclassId} key={seatMapKey} colorMap={seatColorMap} isHeatmapMode={seatAnalysisMode === 'gradient'} />
                         </div>
                     </div>
                 )}
             </div>
 
-            {/* Bottom Dock - Glassmorphism */}
-            <div className="h-20 flex items-center justify-center px-10 relative z-10">
-                <div className="absolute inset-0 bg-white/80 backdrop-blur-lg border-t border-white/50 shadow-[0_-10px_40px_rgba(0,0,0,0.03)] z-0"></div>
-                <div className="z-10 bg-white border border-gray-100 p-1.5 px-3 rounded-2xl flex items-center gap-6 shadow-lg shadow-gray-200/50">
+            {/* Bottom Dock - Floating Organic Pill */}
+            <div className="h-24 flex items-center justify-center px-10 relative z-50 pointer-events-none">
+                <div className="bg-white/90 backdrop-blur-2xl border border-sage-100 p-2 pl-4 pr-4 rounded-full flex items-center gap-4 shadow-[0_20px_40px_-10px_rgba(0,0,0,0.1)] pointer-events-auto hover:scale-105 transition-transform duration-300">
                     <button
                         onClick={handleOpenChat}
-                        className="flex flex-col items-center gap-1 group relative px-4"
+                        className="flex flex-col items-center gap-1 group relative px-2"
                     >
                         <div className="relative">
-                            <div className="w-10 h-10 bg-gradient-to-tr from-blue-500 to-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200 group-hover:shadow-blue-300 group-hover:-translate-y-1 transition-all duration-300">
-                                <MessageCircle size={20} />
+                            <div className="w-12 h-12 bg-gradient-to-tr from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-200 group-hover:shadow-blue-300 group-hover:-translate-y-1 transition-all duration-300">
+                                <MessageCircle size={22} />
                             </div>
-                            <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 border-2 border-white rounded-full"></span>
+                            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 border-2 border-white rounded-full flex items-center justify-center">
+                                <span className="w-1 h-1 bg-white rounded-full"></span>
+                            </span>
                         </div>
-                        <span className="text-[10px] font-bold text-gray-500 group-hover:text-blue-600 transition-colors mt-0.5">进入群聊</span>
+                        {/* Tooltip */}
+                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-ink-800 text-white text-[10px] px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity">群聊</span>
                     </button>
 
-                    <div className="w-[1px] h-8 bg-gray-200"></div>
+                    <div className="w-px h-8 bg-sage-200"></div>
 
-                    {/* Notice Button */}
                     <button
                         onClick={() => setIsNotificationOpen(true)}
-                        className="flex flex-col items-center gap-1 group px-2"
+                        className="flex flex-col items-center gap-1 group px-1 relative"
                     >
-                        <div className="w-9 h-9 bg-red-50 text-red-500 rounded-lg flex items-center justify-center group-hover:bg-red-100 group-hover:-translate-y-1 transition-all">
-                            <Bell size={18} />
+                        <div className="w-10 h-10 bg-clay-50 text-clay-500 rounded-xl flex items-center justify-center group-hover:bg-clay-100 group-hover:-translate-y-1 transition-all">
+                            <Bell size={20} />
                         </div>
-                        <span className="text-[10px] font-medium text-gray-500 group-hover:text-red-600">通知</span>
                     </button>
 
-                    {/* Homework Button */}
                     <button
                         onClick={() => setIsHomeworkOpen(true)}
-                        className="flex flex-col items-center gap-1 group px-2"
+                        className="flex flex-col items-center gap-1 group px-1 relative"
                     >
-                        <div className="w-9 h-9 bg-green-50 text-green-500 rounded-lg flex items-center justify-center group-hover:bg-green-100 group-hover:-translate-y-1 transition-all">
-                            <BookOpen size={18} />
+                        <div className="w-10 h-10 bg-sage-50 text-sage-500 rounded-xl flex items-center justify-center group-hover:bg-sage-100 group-hover:-translate-y-1 transition-all">
+                            <BookOpen size={20} />
                         </div>
-                        <span className="text-[10px] font-medium text-gray-500 group-hover:text-green-600">作业</span>
+                    </button>
+
+                    <button
+                        onClick={() => setIsCourseScheduleOpen(true)}
+                        className="flex flex-col items-center gap-1 group px-1 relative"
+                    >
+                        <div className="w-10 h-10 bg-purple-50 text-purple-500 rounded-xl flex items-center justify-center group-hover:bg-purple-100 group-hover:-translate-y-1 transition-all">
+                            <Calendar size={20} />
+                        </div>
                     </button>
                 </div>
             </div>

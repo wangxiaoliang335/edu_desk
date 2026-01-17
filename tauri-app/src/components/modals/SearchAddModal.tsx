@@ -391,123 +391,121 @@ const SearchAddModal = ({ isOpen, onClose, userInfo }: SearchAddModalProps) => {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-[800px] max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-300 p-4 font-sans">
+            <div className="bg-paper/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl w-[900px] max-h-[90vh] flex flex-col overflow-hidden border border-white/50 ring-1 ring-sage-100/50">
 
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg">
-                            <Search size={20} className="text-white" />
+                <div className="flex items-center justify-between px-8 py-6 border-b border-sage-100/50 bg-white/30 backdrop-blur-md">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-sage-400 to-sage-600 flex items-center justify-center shadow-lg shadow-sage-500/20">
+                            <Search size={24} className="text-white" />
                         </div>
                         <div>
-                            <h2 className="text-xl font-bold text-gray-800">查找添加</h2>
-                            <p className="text-xs text-gray-500">搜索班级、老师或群组</p>
+                            <h2 className="text-2xl font-bold text-ink-800 tracking-tight">查找添加</h2>
+                            <p className="text-sm font-medium text-ink-400 mt-0.5">搜索班级、老师或群组</p>
                         </div>
                     </div>
                     <button
                         onClick={onClose}
-                        className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+                        className="w-10 h-10 flex items-center justify-center text-sage-400 hover:text-clay-600 hover:bg-clay-50 rounded-full transition-all duration-300"
                     >
-                        <X size={20} />
+                        <X size={24} />
                     </button>
                 </div>
 
                 {/* Tabs */}
-                <div className="flex bg-gray-50 px-6 py-3 gap-2 border-b border-gray-100">
+                <div className="flex bg-white/40 px-8 py-4 gap-3 border-b border-sage-100/30 backdrop-blur-sm">
                     {[
                         { id: 'all', label: '全部', icon: '🔍' },
                         { id: 'class', label: '找班级', icon: '🏫' },
                         { id: 'teacher', label: '找老师', icon: '👨‍🏫' },
-                        { id: 'group', label: '找群组/讨论组', icon: '👥' }
+                        { id: 'group', label: '找群组', icon: '👥' }
                     ].map(tab => (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as SearchTab)}
-                            className={`px - 4 py - 2 rounded - lg text - sm font - medium transition - all duration - 200 flex items - center gap - 2 ${activeTab === tab.id
-                                ? 'bg-blue-500 text-white shadow-md shadow-blue-200'
-                                : 'text-gray-600 hover:bg-white hover:shadow-sm'
+                            className={`px-6 py-2.5 rounded-2xl text-sm font-bold transition-all duration-300 flex items-center gap-2 border ${activeTab === tab.id
+                                ? 'bg-sage-500 text-white border-sage-500 shadow-md shadow-sage-500/20 transform scale-[1.02]'
+                                : 'bg-white/60 text-ink-500 border-white/50 hover:bg-white hover:border-sage-200 hover:text-sage-600 hover:shadow-sm'
                                 } `}
                         >
-                            <span>{tab.icon}</span>
+                            <span className="opacity-80">{tab.icon}</span>
                             {tab.label}
                         </button>
                     ))}
                 </div>
 
                 {/* Search Bar */}
-                <div className="px-6 py-4 bg-white border-b border-gray-100">
-                    <div className="flex gap-3">
-                        <div className="flex-1 relative">
+                <div className="px-8 py-6 bg-white/20">
+                    <div className="flex gap-4">
+                        <div className="flex-1 relative group">
                             <input
                                 type="text"
                                 value={keyword}
                                 onChange={(e) => setKeyword(e.target.value)}
                                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                                 placeholder={activeTab === 'teacher' ? "输入老师姓名/ID" : activeTab === 'class' ? "输入班级编号/名称" : "请输入关键字搜索"}
-                                className="w-full px-4 py-3 pl-11 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-gray-700 placeholder:text-gray-400"
+                                className="w-full px-5 py-4 pl-12 bg-white border border-sage-200 rounded-2xl outline-none focus:ring-4 focus:ring-sage-100 focus:border-sage-400 transition-all text-ink-800 placeholder:text-sage-300 shadow-sm font-medium"
                             />
-                            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-sage-300 group-focus-within:text-sage-500 transition-colors" />
                         </div>
                         <button
                             onClick={handleSearch}
                             disabled={isLoading}
-                            className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 font-medium flex items-center gap-2 shadow-lg shadow-blue-200 transition-all disabled:opacity-50"
+                            className="px-8 py-4 bg-gradient-to-r from-sage-500 to-sage-600 text-white rounded-2xl hover:from-sage-600 hover:to-sage-700 font-bold flex items-center gap-2 shadow-lg shadow-sage-500/20 transition-all disabled:opacity-50 active:scale-95"
                         >
-                            <Search size={18} />
+                            <Search size={20} />
                             查找
                         </button>
                     </div>
                 </div>
 
                 {/* Results */}
-                <div className="flex-1 overflow-y-auto p-6 bg-gray-50 min-h-[300px]">
+                <div className="flex-1 overflow-y-auto p-8 bg-white/30 min-h-[300px] custom-scrollbar">
                     {isLoading ? (
-                        <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3">
-                            <div className="w-8 h-8 border-3 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
-                            <span className="text-sm">正在搜索...</span>
+                        <div className="flex flex-col items-center justify-center h-full text-sage-400 gap-4 animate-pulse">
+                            <div className="w-10 h-10 border-4 border-sage-200 border-t-sage-500 rounded-full animate-spin" />
+                            <span className="text-sm font-bold">正在搜索...</span>
                         </div>
                     ) : searched && results.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3">
-                            <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center">
-                                <Search size={24} className="text-gray-300" />
+                        <div className="flex flex-col items-center justify-center h-full text-sage-400 gap-4">
+                            <div className="w-20 h-20 rounded-full bg-sage-50 flex items-center justify-center border border-sage-100">
+                                <Search size={32} className="text-sage-300" />
                             </div>
-                            <span className="text-sm">未找到相关结果</span>
+                            <span className="text-sm font-bold">未找到相关结果</span>
                         </div>
                     ) : !searched ? (
-                        <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3">
-                            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
-                                <Search size={32} className="text-blue-300" />
+                        <div className="flex flex-col items-center justify-center h-full text-sage-400 gap-4">
+                            <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-sage-50 to-white flex items-center justify-center border border-sage-100 shadow-sm transform -rotate-3">
+                                <Search size={40} className="text-sage-300" />
                             </div>
-                            <span className="text-sm">输入关键字开始搜索</span>
+                            <span className="text-sm font-bold">输入关键字开始搜索</span>
                         </div>
                     ) : (
-                        <div className="flex flex-col gap-3">
+                        <div className="flex flex-col gap-4">
                             {results.map((item, idx) => (
-                                <div key={idx} className="bg-white p-4 rounded-xl shadow-sm flex items-center justify-between border border-gray-100 hover:shadow-md hover:border-blue-100 transition-all">
-                                    <div className="flex items-center gap-4">
+                                <div key={idx} className="bg-white/80 backdrop-blur-md p-5 rounded-2xl shadow-sm flex items-center justify-between border border-white/50 ring-1 ring-sage-50 hover:shadow-md hover:ring-sage-200 transition-all group duration-300">
+                                    <div className="flex items-center gap-5">
                                         {/* Icon */}
-                                        <div className={`w - 12 h - 12 rounded - xl flex items - center justify - center ${item.type === 'teacher' ? 'bg-green-50 text-green-500' :
-                                            item.type === 'group' ? 'bg-purple-50 text-purple-500' :
-                                                'bg-blue-50 text-blue-500'
+                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm transition-transform group-hover:scale-105 ${item.type === 'teacher' ? 'bg-sage-50 text-sage-600' :
+                                            item.type === 'group' ? 'bg-clay-50 text-clay-600' :
+                                                'bg-indigo-50 text-indigo-600'
                                             } `}>
-                                            {item.type === 'teacher' && <UserPlus size={24} />}
-                                            {item.type === 'group' && <Users size={24} />}
-                                            {item.type === 'class' && <School size={24} />}
+                                            {item.type === 'teacher' && <UserPlus size={28} />}
+                                            {item.type === 'group' && <Users size={28} />}
+                                            {item.type === 'class' && <School size={28} />}
                                         </div>
 
                                         {/* Info */}
                                         <div>
-                                            <div className="font-bold text-lg text-gray-800">
+                                            <div className="font-bold text-lg text-ink-800 mb-1">
                                                 {item.type === 'teacher' ? item.data.name :
                                                     item.type === 'group' ? item.data.group_name :
-                                                        // For class: combine grade + class_name for full display
                                                         (item.data.grade ? item.data.grade + item.data.class_name : item.data.class_name)}
                                             </div>
-                                            <div className="text-xs text-gray-500">
+                                            <div className="text-xs font-medium text-ink-400 bg-white/50 px-2 py-1 rounded-lg inline-block border border-black/5">
                                                 {item.type === 'teacher' ? `ID: ${item.data.teacher_unique_id} | 学校: ${item.data.school_id} ` :
                                                     item.type === 'group' ? `ID: ${item.data.group_id} | 创建者: ${item.data.creator_id} ` :
-                                                        // For class: use class_code or class_id, also show school stage if available
                                                         `ID: ${item.data.class_code || item.data.class_id || ''} ${item.data.school_stage ? `| ${item.data.school_stage}` : ''} `}
                                             </div>
                                         </div>
@@ -520,20 +518,20 @@ const SearchAddModal = ({ isOpen, onClose, userInfo }: SearchAddModalProps) => {
                                                 const teacherId = String(item.data.teacher_unique_id);
                                                 if (teacherId === currentUserId) {
                                                     return (
-                                                        <span className="px-3 py-1 bg-gray-300 text-gray-500 rounded text-sm cursor-default">
+                                                        <span className="px-4 py-2 bg-sage-50 text-sage-400 rounded-xl text-sm font-bold cursor-default border border-sage-100">
                                                             你自己
                                                         </span>
                                                     );
                                                 }
                                                 const isFriend = myFriends.includes(teacherId);
                                                 return isFriend ? (
-                                                    <span className="px-4 py-2 bg-gray-100 text-gray-400 rounded-lg text-sm cursor-not-allowed">
+                                                    <span className="px-5 py-2.5 bg-gray-100 text-gray-400 rounded-xl text-sm font-bold cursor-not-allowed">
                                                         已添加
                                                     </span>
                                                 ) : (
                                                     <button
                                                         onClick={() => handleAddFriend(item.data)}
-                                                        className="px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 text-sm shadow-md shadow-green-200 transition-all"
+                                                        className="px-6 py-2.5 bg-sage-600 text-white rounded-xl hover:bg-sage-700 text-sm font-bold shadow-md shadow-sage-500/20 active:scale-95 transition-all"
                                                     >
                                                         加好友
                                                     </button>
@@ -544,13 +542,13 @@ const SearchAddModal = ({ isOpen, onClose, userInfo }: SearchAddModalProps) => {
                                             (() => {
                                                 const isJoined = myGroups.includes(String(item.data.group_id));
                                                 return isJoined ? (
-                                                    <span className="px-4 py-2 bg-gray-100 text-gray-400 rounded-lg text-sm cursor-not-allowed">
+                                                    <span className="px-5 py-2.5 bg-gray-100 text-gray-400 rounded-xl text-sm font-bold cursor-not-allowed">
                                                         已加入
                                                     </span>
                                                 ) : (
                                                     <button
                                                         onClick={() => handleJoinGroup(item.data)}
-                                                        className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 text-sm shadow-md shadow-blue-200 transition-all"
+                                                        className="px-6 py-2.5 bg-clay-600 text-white rounded-xl hover:bg-clay-700 text-sm font-bold shadow-md shadow-clay-500/20 active:scale-95 transition-all"
                                                     >
                                                         加入群
                                                     </button>
@@ -562,13 +560,13 @@ const SearchAddModal = ({ isOpen, onClose, userInfo }: SearchAddModalProps) => {
                                                 const classCode = String(item.data.class_code || item.data.class_id);
                                                 const isJoined = myClasses.includes(classCode);
                                                 return isJoined ? (
-                                                    <span className="px-4 py-2 bg-gray-100 text-gray-400 rounded-lg text-sm cursor-not-allowed">
+                                                    <span className="px-5 py-2.5 bg-gray-100 text-gray-400 rounded-xl text-sm font-bold cursor-not-allowed">
                                                         已加入
                                                     </span>
                                                 ) : (
                                                     <button
                                                         onClick={() => handleJoinClass(item.data)}
-                                                        className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 text-sm shadow-md shadow-blue-200 transition-all"
+                                                        className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-bold shadow-md shadow-indigo-500/20 active:scale-95 transition-all"
                                                     >
                                                         加入
                                                     </button>

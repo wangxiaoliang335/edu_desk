@@ -106,74 +106,78 @@ const ChangePasswordModal = ({ isOpen, onClose, defaultPhone }: ChangePasswordMo
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col p-6">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 backdrop-blur-sm p-4 animate-in fade-in duration-300">
+            <div className="bg-white/95 backdrop-blur-xl rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden flex flex-col p-8 border border-white/50 ring-1 ring-sage-100/50">
 
                 {/* Header */}
-                <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                        <Lock className="text-blue-500" size={24} />
-                        修改密码
-                    </h2>
-                    <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full text-gray-500">
+                <div className="flex items-center justify-between mb-8">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-sage-50 text-sage-500 flex items-center justify-center shadow-sm">
+                            <Lock size={20} />
+                        </div>
+                        <h2 className="text-xl font-bold text-ink-800 tracking-tight">
+                            修改密码
+                        </h2>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-clay-50 hover:text-clay-600 rounded-full text-ink-400 transition-colors">
                         <X size={20} />
                     </button>
                 </div>
 
                 {success ? (
-                    <div className="flex flex-col items-center justify-center py-8 space-y-4 animate-in zoom-in-50">
-                        <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center">
+                    <div className="flex flex-col items-center justify-center py-10 space-y-4 animate-in zoom-in-50">
+                        <div className="w-16 h-16 bg-sage-100 text-sage-600 rounded-full flex items-center justify-center border-4 border-sage-50">
                             <CheckCircle size={32} />
                         </div>
-                        <p className="text-lg font-medium text-gray-800">修改成功</p>
-                        <p className="text-sm text-gray-500">窗口即将关闭...</p>
+                        <p className="text-xl font-bold text-ink-800">修改成功</p>
+                        <p className="text-sm text-ink-400 font-medium">窗口即将关闭...</p>
                     </div>
                 ) : (
-                    <div className="space-y-4">
+                    <div className="space-y-5">
                         {/* Error Msg */}
                         {error && (
-                            <div className="p-3 bg-red-50 text-red-600 text-xs rounded-lg border border-red-100 flex items-start gap-2">
+                            <div className="p-3 bg-clay-50 text-clay-600 text-xs font-bold rounded-xl border border-clay-100 flex items-start gap-2 animate-in slide-in-from-top-2">
                                 <Shield size={14} className="mt-0.5 shrink-0" />
                                 <span>{error}</span>
                             </div>
                         )}
 
                         {/* Phone */}
-                        <div className="space-y-1">
-                            <label className="text-xs font-medium text-gray-500">手机号码</label>
+                        <div className="space-y-1.5 group">
+                            <label className="text-xs font-bold text-ink-400 ml-1 uppercase tracking-wider group-focus-within:text-sage-600 transition-colors">手机号码</label>
                             <div className="relative">
-                                <PhoneIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                                <PhoneIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-sage-300 transition-colors group-focus-within:text-sage-500" size={18} />
                                 <input
                                     type="text"
                                     value={phone}
                                     readOnly={!!defaultPhone} // Read only if phone is provided
                                     onChange={(e) => setPhone(e.target.value)}
-                                    className={`w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-blue-500 focus:bg-white transition-all ${defaultPhone ? 'text-gray-500 cursor-not-allowed' : ''}`}
+                                    className={`w-full pl-11 pr-4 py-3.5 bg-white border border-sage-200 rounded-2xl text-sm font-bold text-ink-800 outline-none focus:border-sage-400 focus:ring-4 focus:ring-sage-100 transition-all shadow-sm placeholder-sage-300 ${defaultPhone ? 'text-ink-400 cursor-not-allowed bg-sage-50/50' : ''}`}
                                     placeholder="请输入手机号"
                                 />
                             </div>
                         </div>
 
                         {/* Code */}
-                        <div className="space-y-1">
-                            <label className="text-xs font-medium text-gray-500">验证码</label>
-                            <div className="flex gap-2">
+                        <div className="space-y-1.5 group">
+                            <label className="text-xs font-bold text-ink-400 ml-1 uppercase tracking-wider group-focus-within:text-sage-600 transition-colors">验证码</label>
+                            <div className="flex gap-3">
                                 <div className="relative flex-1">
-                                    <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                                    <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-sage-300 transition-colors group-focus-within:text-sage-500" size={18} />
                                     <input
                                         type="text"
                                         value={code}
                                         onChange={(e) => setCode(e.target.value)}
-                                        className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-blue-500 focus:bg-white transition-all"
+                                        className="w-full pl-11 pr-4 py-3.5 bg-white border border-sage-200 rounded-2xl text-sm font-bold text-ink-800 outline-none focus:border-sage-400 focus:ring-4 focus:ring-sage-100 transition-all shadow-sm placeholder-sage-300"
                                         placeholder="请输入验证码"
                                     />
                                 </div>
                                 <button
                                     onClick={handleSendCode}
                                     disabled={isSending || countdown > 0 || !phone}
-                                    className={`px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${isSending || countdown > 0 || !phone
-                                        ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                                        : "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                                    className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all shadow-sm border ${isSending || countdown > 0 || !phone
+                                        ? "bg-sage-50 text-sage-300 border-sage-100 cursor-not-allowed"
+                                        : "bg-sage-500 text-white border-sage-500 hover:bg-sage-600 hover:shadow-md active:scale-95"
                                         }`}
                                 >
                                     {countdown > 0 ? `${countdown}s 后重试` : (isSending ? "发送中..." : "获取验证码")}
@@ -182,30 +186,30 @@ const ChangePasswordModal = ({ isOpen, onClose, defaultPhone }: ChangePasswordMo
                         </div>
 
                         {/* New Password */}
-                        <div className="space-y-1">
-                            <label className="text-xs font-medium text-gray-500">新密码</label>
+                        <div className="space-y-1.5 group">
+                            <label className="text-xs font-bold text-ink-400 ml-1 uppercase tracking-wider group-focus-within:text-sage-600 transition-colors">新密码</label>
                             <div className="relative">
-                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-sage-300 transition-colors group-focus-within:text-sage-500" size={18} />
                                 <input
                                     type="password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-blue-500 focus:bg-white transition-all"
+                                    className="w-full pl-11 pr-4 py-3.5 bg-white border border-sage-200 rounded-2xl text-sm font-bold text-ink-800 outline-none focus:border-sage-400 focus:ring-4 focus:ring-sage-100 transition-all shadow-sm placeholder-sage-300"
                                     placeholder="请输入新密码（至少6位）"
                                 />
                             </div>
                         </div>
 
                         {/* Confirm Password */}
-                        <div className="space-y-1">
-                            <label className="text-xs font-medium text-gray-500">确认密码</label>
+                        <div className="space-y-1.5 group">
+                            <label className="text-xs font-bold text-ink-400 ml-1 uppercase tracking-wider group-focus-within:text-sage-600 transition-colors">确认密码</label>
                             <div className="relative">
-                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-sage-300 transition-colors group-focus-within:text-sage-500" size={18} />
                                 <input
                                     type="password"
                                     value={confirmPassword}
                                     onChange={(e) => setConfirmPassword(e.target.value)}
-                                    className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-blue-500 focus:bg-white transition-all"
+                                    className="w-full pl-11 pr-4 py-3.5 bg-white border border-sage-200 rounded-2xl text-sm font-bold text-ink-800 outline-none focus:border-sage-400 focus:ring-4 focus:ring-sage-100 transition-all shadow-sm placeholder-sage-300"
                                     placeholder="请再次输入新密码"
                                 />
                             </div>
@@ -214,9 +218,9 @@ const ChangePasswordModal = ({ isOpen, onClose, defaultPhone }: ChangePasswordMo
                         <button
                             onClick={handleSubmit}
                             disabled={isLoading}
-                            className={`w-full py-2.5 mt-4 rounded-xl text-white font-bold text-sm shadow-md transition-all active:scale-95 ${isLoading
-                                ? "bg-gray-400 cursor-not-allowed"
-                                : "bg-blue-600 hover:bg-blue-500 hover:shadow-lg"
+                            className={`w-full py-4 mt-6 rounded-2xl text-white font-bold text-sm shadow-md transition-all active:scale-[0.98] ${isLoading
+                                ? "bg-sage-300 cursor-not-allowed shadow-none"
+                                : "bg-sage-600 hover:bg-sage-700 hover:shadow-lg shadow-sage-500/20"
                                 }`}
                         >
                             {isLoading ? "提交中..." : "确认修改"}
