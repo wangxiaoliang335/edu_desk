@@ -8,6 +8,7 @@ import IntercomWindow from "./components/IntercomWindow";
 import NormalGroupChatWindow from "./components/NormalGroupChatWindow";
 import DesktopFileBox from "./components/DesktopFileBox";
 import TeacherSchedule from "./components/TeacherSchedule";
+import SchoolCalendar from "./components/SchoolCalendar";
 
 import { invoke } from "@tauri-apps/api/core";
 import { loginTIM, getTIMGroups, setCachedTIMGroups } from "./utils/tim";
@@ -119,6 +120,7 @@ function App() {
         <Route path="/chat/normal/:groupId" element={<NormalGroupChatWindow />} />
         <Route path="/file-box/:boxId" element={<DesktopFileBox />} />
         <Route path="/teacher-schedule" element={<TeacherSchedule />} />
+        <Route path="/school-calendar" element={<SchoolCalendar />} />
       </Routes>
     </BrowserRouter>
   );

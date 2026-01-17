@@ -11,6 +11,7 @@ import UserInfoModal from './modals/UserInfoModal';
 import ChangePasswordModal from './modals/ChangePasswordModal';
 import SchoolInfoModal from './modals/SchoolInfoModal';
 import SchoolCourseScheduleModal from './modals/SchoolCourseScheduleModal';
+import SchoolCalendar from './SchoolCalendar';
 
 
 import { invoke } from '@tauri-apps/api/core';
@@ -31,6 +32,7 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
     const [showChangePassword, setShowChangePassword] = useState(false);
     const [showSchoolInfo, setShowSchoolInfo] = useState(false);
     const [showSchoolSchedule, setShowSchoolSchedule] = useState(false);
+    const [showSchoolCalendar, setShowSchoolCalendar] = useState(false);
 
     const handleMinimize = () => getCurrentWindow().minimize();
     const handleClose = () => invoke('exit_app');
@@ -66,6 +68,8 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
             setShowSchoolInfo(true);
         } else if (toolId === 'school_course_schedule') {
             setShowSchoolSchedule(true);
+        } else if (toolId === 'calendar') {
+            setShowSchoolCalendar(true);
         } else if (toolId === 'file_manager') {
             try {
                 const { createNewBox } = await import('../utils/DesktopManager');
@@ -324,6 +328,13 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
                 onClose={() => setShowSchoolSchedule(false)}
                 userInfo={userInfo}
             />
+            {showSchoolCalendar && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[2px]">
+                    <div className="pointer-events-auto">
+                        <SchoolCalendar onClose={() => setShowSchoolCalendar(false)} />
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
