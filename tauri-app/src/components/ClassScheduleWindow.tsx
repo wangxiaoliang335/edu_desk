@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
-import { Minus, X, Square, Copy, MessageCircle, Calendar, Users, BookOpen, Shuffle, Clock, Grid, LayoutDashboard, Layers, Award, Power, Mic, FileSpreadsheet, BarChart2, ArrowUpDown, Bell } from 'lucide-react';
+import { Minus, X, Square, Copy, MessageCircle, Calendar, Users, BookOpen, Shuffle, Clock, Grid, LayoutDashboard, Layers, Award, Power, Mic, FileSpreadsheet, BarChart2, ArrowUpDown, Bell, Camera, Video } from 'lucide-react';
 import { useWebSocket } from '../context/WebSocketContext';
 import { getTIMGroups, isSDKReady, loginTIM } from '../utils/tim';
 import RandomCallModal from './modals/RandomCallModal';
@@ -12,6 +12,7 @@ import CourseScheduleModal from './modals/CourseScheduleModal';
 import DutyRosterModal from './modals/DutyRosterModal';
 import GroupScoreModal from './modals/GroupScoreModal';
 import ClassInfoModal from './modals/ClassInfoModal';
+import mpegts from 'mpegts.js';
 import CustomListModal from './modals/CustomListModal';
 import NotificationModal from './modals/NotificationModal';
 import StudentImportModal from './modals/StudentImportModal';
@@ -39,6 +40,10 @@ const ClassScheduleWindow = () => {
     // Data State
     const [className, setClassName] = useState("");
     const [studentCount, setStudentCount] = useState(0);
+
+    // Monitor State
+    const [monitorStatus, setMonitorStatus] = useState<'idle' | 'requesting' | 'monitoring'>('idle');
+    const [pullUrl, setPullUrl] = useState("");
 
     // Modal State
     const [isRandomCallOpen, setIsRandomCallOpen] = useState(false);
@@ -167,31 +172,77 @@ const ClassScheduleWindow = () => {
         }
     }, [groupclassId]);
 
-    // Listen for WebSocket Messages (Notification Center)
+    // Listen for WebSocket Messages (Notification Center & Monitor)
     useEffect(() => {
         const handleWSMessage = (event: CustomEvent) => {
             try {
                 const msg = JSON.parse(event.detail);
+                // console.log("[ClassSchedule] WS Message Received:", msg);
+
+                // Monitor Protocol
+                if (msg.type === 'monitor') {
+                    console.log("[MonitorFlow] Received monitor signal:", msg.action, msg);
+                    if (groupclassId && msg.group_id && String(msg.group_id) !== String(groupclassId)) {
+                        console.warn("[MonitorFlow] Signal ignored: Group ID mismatch. This window:", groupclassId, "Message group:", msg.group_id);
+                        return;
+                    }
+
+                    if (msg.action === 'ready') {
+                        console.log("[MonitorFlow] Signal READY. Pull URL:", msg.pull_url);
+                        setMonitorStatus('monitoring');
+
+                        // Parse SRT to HTTP-FLV
+                        // Input: srt://47.100.126.194:10080?streamid=#!::r=live/class_123,m=publish
+                        // Output: http://47.100.126.194:8080/live/class_123.flv
+                        let finalUrl = msg.pull_url;
+                        if (msg.pull_url && msg.pull_url.startsWith('srt://')) {
+                            console.log("[MonitorFlow] Converting SRT to HTTP-FLV...");
+                            try {
+                                // Robust parsing using regex to avoid '#' truncation by URL constructor
+                                // srt://47.100.126.194:10080?streamid=#!::r=live/00001101601_1768980448,m=request
+                                const hostMatch = msg.pull_url.match(/srt:\/\/([^:?\/]+)/);
+                                const streamIdMatch = msg.pull_url.match(/streamid=([^&]+)/);
+
+                                if (hostMatch && hostMatch[1] && streamIdMatch && streamIdMatch[1]) {
+                                    const ip = hostMatch[1];
+                                    const streamid = decodeURIComponent(streamIdMatch[1]);
+                                    const rMatch = streamid.match(/r=([^,]+)/);
+
+                                    if (rMatch && rMatch[1]) {
+                                        const streamKey = rMatch[1]; // e.g. "live/00001101601_1768980448"
+                                        // Assuming standard SRS HTTP port 8080
+                                        finalUrl = `http://${ip}:8080/${streamKey}.flv`;
+                                        console.log(`[MonitorFlow] Converted to: ${finalUrl}`);
+                                    }
+                                }
+                            } catch (e) {
+                                console.error('[MonitorFlow] URL Conversion Failed', e);
+                            }
+                        }
+
+                        setPullUrl(finalUrl);
+                        // Switch to monitor view (seatmap area)
+                        console.log("[MonitorFlow] Switching to monitor view.");
+                        setCurrentView('seatmap');
+                    } else if (msg.action === 'stopped') {
+                        console.log("[MonitorFlow] Signal STOPPED.");
+                        setMonitorStatus('idle');
+                        setPullUrl("");
+                    } else if (msg.action === 'pending') {
+                        console.log("[MonitorFlow] Signal PENDING.");
+                        setMonitorStatus('requesting');
+                    }
+                }
+
                 if (msg.type === "unread_notifications") {
                     console.log("[ClassSchedule] Received Notifications Payload:", msg.data);
-
-                    // msg.data is an array of objects. We need to cast them to NotificationItem
+                    // ... (existing notification logic) ...
                     const newItems = (msg.data || []) as NotificationItem[];
-
                     setNotifications(prev => {
-                        // Create a map of existing items by ID for easy lookup
                         const existingMap = new Map(prev.map(item => [item.id, item]));
-
-                        // Merge/Overwrite with new items
-                        newItems.forEach(item => {
-                            existingMap.set(item.id, item);
-                        });
-
-                        // Convert back to array
+                        newItems.forEach(item => { existingMap.set(item.id, item); });
                         return Array.from(existingMap.values());
                     });
-
-                    // Auto-open if important? Maybe just show badge.
                 }
             } catch (e) {
                 console.error("[ClassSchedule] Error parsing WS message:", e);
@@ -202,7 +253,67 @@ const ClassScheduleWindow = () => {
         return () => {
             window.removeEventListener('ws-message', handleWSMessage as EventListener);
         };
-    }, []);
+    }, [groupclassId]);
+
+    const handleToggleMonitor = useCallback(() => {
+        console.log("[MonitorFlow] handleToggleMonitor clicked. Status:", monitorStatus);
+        if (!groupclassId) {
+            console.error("[MonitorFlow] Missing groupclassId");
+            return;
+        }
+
+        // Get user ID
+        let currentUserId = localStorage.getItem('teacher_unique_id') || "0";
+        const userInfoStr = localStorage.getItem('user_info');
+
+        if (currentUserId === "0" && userInfoStr) {
+            try {
+                const u = JSON.parse(userInfoStr);
+                // Fallback logic
+                currentUserId = u.teacher_unique_id || u.unique_id || u.id || u.user_id || "0";
+            } catch (e) { }
+        }
+        console.log("[MonitorFlow] Current User ID:", currentUserId);
+
+        if (monitorStatus === 'idle') {
+            console.log("[MonitorFlow] Mode: IDLE -> Sending REQUEST to group:", groupclassId);
+            // Request
+            const msg = {
+                type: "monitor",
+                action: "request",
+                group_id: groupclassId,
+                class_id: groupclassId,
+                ts: Date.now() / 1000,
+                sender_id: currentUserId,
+            };
+            const payload = `to:${groupclassId}:${JSON.stringify(msg)}`;
+            console.log("[MonitorFlow] WebSocket Payload:", payload);
+            sendSignal(payload);
+            setMonitorStatus('requesting');
+
+            // Timeout reset (Extended to 15s for hardware response)
+            setTimeout(() => {
+                setMonitorStatus(prev => {
+                    if (prev === 'requesting') {
+                        console.warn("[MonitorFlow] Request timed out after 15s. Resetting to IDLE.");
+                        return 'idle';
+                    }
+                    return prev;
+                });
+            }, 15000);
+        } else {
+            console.log("[MonitorFlow] Mode:", monitorStatus, "-> Sending STOP to group:", groupclassId);
+            // Stop
+            const msg = {
+                type: "monitor",
+                action: "stop_watch",
+                group_id: groupclassId,
+                sender_id: currentUserId,
+            };
+            sendSignal(`to:${groupclassId}:${JSON.stringify(msg)}`);
+            setMonitorStatus('idle');
+        }
+    }, [groupclassId, monitorStatus, sendSignal]);
 
     const fetchClassInfo = async () => {
         if (!groupclassId) return;
@@ -583,6 +694,7 @@ const ClassScheduleWindow = () => {
                                 </h3>
                                 <div className="grid grid-cols-2 gap-3 flex-1 content-start">
                                     {[
+                                        { title: "摄像头", icon: <Camera size={18} />, color: monitorStatus === 'monitoring' ? "text-red-500 bg-red-50" : (monitorStatus === 'requesting' ? "text-gray-500 bg-gray-50" : "text-emerald-500 bg-emerald-50"), onClick: handleToggleMonitor },
                                         { title: "作业管理", icon: <BookOpen size={18} />, color: "text-purple-500 bg-purple-50", onClick: openHomeworkModal },
                                         { title: "语音对讲", icon: <Mic size={18} />, color: "text-red-500 bg-red-50", onClick: handleOpenIntercom },
                                         { title: "更多导入", icon: <FileSpreadsheet size={18} />, color: "text-orange-500 bg-orange-50", onClick: () => setIsCustomListOpen(true) },
@@ -641,8 +753,12 @@ const ClassScheduleWindow = () => {
                                 </div>
                             </div>
                         </div>
-                        <div className="flex-1 overflow-hidden p-4">
-                            <SeatMap classId={groupclassId} key={seatMapKey} colorMap={seatColorMap} isHeatmapMode={seatAnalysisMode === 'gradient'} />
+                        <div className="flex-1 overflow-hidden p-4 relative bg-black rounded-xl">
+                            {monitorStatus === 'monitoring' ? (
+                                <FlvPlayer url={pullUrl} className={className} onClose={handleToggleMonitor} />
+                            ) : (
+                                <SeatMap classId={groupclassId} key={seatMapKey} colorMap={seatColorMap} isHeatmapMode={seatAnalysisMode === 'gradient'} />
+                            )}
                         </div>
                     </div>
                 )}
@@ -825,6 +941,142 @@ const ClassScheduleWindow = () => {
                 classId={groupclassId}
                 groupId={groupclassId}
             />
+        </div>
+    );
+};
+
+const FlvPlayer = ({ url, className, onClose }: { url: string, className: string, onClose: () => void }) => {
+    const videoRef = React.useRef<HTMLVideoElement>(null);
+    const playerRef = React.useRef<mpegts.Player | null>(null);
+    const [error, setError] = useState("");
+    const [retryCount, setRetryCount] = useState(0);
+    const maxRetries = 3;
+
+    useEffect(() => {
+        if (!url || !videoRef.current) return;
+        console.log("[MonitorFlow] FlvPlayer mounted. URL:", url, "Retry:", retryCount);
+
+        if (!mpegts.getFeatureList().mseLivePlayback) {
+            console.error("[MonitorFlow] Browser does not support MSE Live Playback.");
+            setError("当前浏览器不支持 FLV 直播播放 (MSE Not Supported)");
+            return;
+        }
+
+        const videoElement = videoRef.current;
+        // Clear error when video actually starts playing
+        const handlePlaying = () => {
+            setError("");
+            setRetryCount(0);
+            console.log("[MonitorFlow] Video playing - cleared error/retries");
+        };
+        videoElement.addEventListener('playing', handlePlaying);
+
+        const buildPlayer = () => {
+            try {
+                console.log("[MonitorFlow] Creating mpegts player... (Low Latency Mode)");
+                const player = mpegts.createPlayer({
+                    type: 'flv',
+                    url: url,
+                    isLive: true,
+                    cors: true,
+                    hasAudio: false, // Monitor usually has no audio, setting to false for faster loading
+                }, {
+                    enableWorker: true,
+                    enableStashBuffer: false, // Crucial for low latency
+                    stashInitialSize: 128,    // 128KB initial buffer
+                    liveBufferLatencyChasing: true, // Auto-catch up to live edge
+                    lazyLoadMaxDuration: 3 * 60,
+                    seekType: 'range',
+                });
+
+                player.attachMediaElement(videoElement);
+                player.load();
+
+                const playPromise = player.play();
+                if (playPromise instanceof Promise) {
+                    playPromise.catch(e => {
+                        if (e.name !== 'AbortError') {
+                            console.error("[MonitorFlow] Play failed:", e);
+                        }
+                    });
+                }
+
+                player.on(mpegts.Events.ERROR, (type, detail) => {
+                    console.error("[MonitorFlow] Mpegts Player Error:", type, detail);
+
+                    if (retryCount < maxRetries) {
+                        setError(`播放出错了，正在尝试重连 (${retryCount + 1}/${maxRetries})...`);
+                        setTimeout(() => {
+                            setRetryCount(prev => prev + 1);
+                        }, 2000);
+                    } else {
+                        setError(`播放错误: ${type} ${detail}`);
+                    }
+                });
+
+                playerRef.current = player;
+            } catch (e: any) {
+                console.error("[MonitorFlow] Failed to create player:", e);
+                setError("播放器创建失败: " + e.message);
+            }
+        };
+
+        buildPlayer();
+
+        return () => {
+            if (videoElement) {
+                videoElement.removeEventListener('playing', handlePlaying);
+            }
+            if (playerRef.current) {
+                console.log("[MonitorFlow] Destroying player.");
+                playerRef.current.destroy();
+                playerRef.current = null;
+            }
+        };
+    }, [url, retryCount]); // Re-run effect on URL or retryCount change
+
+    return (
+        <div className="absolute inset-0 bg-black flex flex-col items-center justify-center text-white z-50 overflow-hidden rounded-xl">
+            <div className="absolute top-4 left-4 z-20 flex items-center gap-2 bg-black/40 backdrop-blur px-3 py-1.5 rounded-lg text-xs font-bold font-mono">
+                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
+                LIVE: {className}
+                {retryCount > 0 && <span className="text-amber-400 ml-2">正在重连...</span>}
+            </div>
+
+            {error && !error.includes("重连") ? (
+                <div className="text-center p-8 bg-zinc-900 rounded-2xl border border-zinc-800">
+                    <Video size={48} className="text-zinc-600 mb-4 mx-auto" />
+                    <p className="text-red-400 font-bold mb-2">无法播放视频</p>
+                    <p className="text-zinc-500 text-xs font-mono max-w-md break-all">{error}</p>
+                    <p className="text-zinc-600 text-xs mt-2">{url}</p>
+                </div>
+            ) : (
+                <>
+                    {error.includes("重连") && (
+                        <div className="absolute inset-0 z-10 bg-black/60 backdrop-blur-sm flex items-center justify-center">
+                            <div className="text-center">
+                                <div className="w-12 h-12 border-4 border-sage-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                                <p className="text-sm font-bold text-sage-200">{error}</p>
+                            </div>
+                        </div>
+                    )}
+                    <video
+                        ref={videoRef}
+                        className="w-full h-full object-contain bg-black"
+                        controls
+                        autoPlay
+                        muted={false}
+                    />
+                </>
+            )}
+
+            <button
+                onClick={onClose}
+                className="absolute bottom-8 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white px-6 py-2.5 rounded-xl font-bold transition-all border border-white/10 hover:border-white/30 flex items-center gap-2 shadow-xl group"
+            >
+                <Power size={16} className="text-red-400 group-hover:text-red-300 transition-colors" />
+                停止监控
+            </button>
         </div>
     );
 };

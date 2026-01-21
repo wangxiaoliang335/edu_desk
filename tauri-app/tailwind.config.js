@@ -39,11 +39,29 @@ export default {
         'xl': '1rem',
         '2xl': '1.5rem',
         '3xl': '2rem',
+      },
+      keyframes: {
+        'holiday-glow': {
+          '0%, 100%': {
+            transform: 'scale(1)',
+            boxShadow: '0 0 0 0 rgba(220, 38, 38, 0.4)'
+          },
+          '50%': {
+            transform: 'scale(1.02)',
+            boxShadow: '0 0 0 3px rgba(220, 38, 38, 0)'
+          },
+        },
+        'fade-in-up': {
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        }
+      },
+      animation: {
+        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'holiday-glow': 'holiday-glow 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'fade-in-up': 'fade-in-up 0.5s ease-out forwards',
       }
     },
-    animation: {
-      'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-    }
   },
   plugins: [],
 }

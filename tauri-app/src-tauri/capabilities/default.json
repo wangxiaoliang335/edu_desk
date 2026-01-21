@@ -11,7 +11,10 @@
     "teacher_schedule",
     "countdown_minimal",
     "countdown_full",
-    "countdown_edit"
+    "countdown_edit",
+    "desktop_ball",
+    "tool_panel",
+    "school_calendar"
   ],
   "permissions": [
     "core:default",

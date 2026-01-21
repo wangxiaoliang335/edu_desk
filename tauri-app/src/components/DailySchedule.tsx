@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentTerm } from '../utils/term';
 import { Clock, Bookmark, ClipboardCheck } from 'lucide-react';
@@ -52,7 +53,7 @@ const isSpecialSubject = (subject: string): boolean => {
 // Get subject background color
 const getSubjectStyle = (subject: string, isCurrent: boolean, isHighlight: boolean) => {
     if (isCurrent) return 'bg-gradient-to-br from-sage-500 to-sage-600 text-white shadow-lg shadow-sage-200/50 border-transparent';
-    if (isHighlight) return 'bg-gradient-to-br from-clay-400 to-clay-500 text-white border-transparent';
+    if (isHighlight) return 'bg-gradient-to-br from-clay-500 to-clay-600 text-white border-transparent';
 
     if (subject.includes('语文')) return 'bg-red-50 text-red-600 border-red-100';
     if (subject.includes('数学')) return 'bg-blue-50 text-blue-600 border-blue-100';
@@ -118,7 +119,7 @@ const DailySchedule = ({ classId, onPrepareClass, onPostEvaluation }: Props) => 
                             let subject = cell ? (cell.course_name || cell.subject || "") : "";
 
                             // Extract special subject names from time field (e.g. "早读\n7:00-7:40" -> subject="早读")
-                            const specialMatch = time.match(/^(早读|午休|眼保健操|课间操|班会|大课间|课服\d*|晚自习\d*)/);
+                            const specialMatch = time.match(/(早读|午休|眼保健操|课间操|班会|大课间|课服\d*|晚自习\d*)/);
                             if (!subject && specialMatch) {
                                 subject = specialMatch[1];
                             }
@@ -141,7 +142,7 @@ const DailySchedule = ({ classId, onPrepareClass, onPostEvaluation }: Props) => 
                             });
                         });
 
-                        const filtered = items.filter(i => i.rawTime && !i.rawTime.toLowerCase().includes('lunch'));
+                        const filtered = items.filter(i => i.rawTime);
                         setScheduleItems(filtered);
                         localStorage.setItem(getStorageKey(classId), JSON.stringify(filtered));
 
@@ -203,7 +204,7 @@ const DailySchedule = ({ classId, onPrepareClass, onPostEvaluation }: Props) => 
                                     const cell = cells.find((c: any) => c.row_index === rowIndex && c.col_index === todayColIndex);
                                     let subject = cell ? (cell.course_name || cell.subject || "") : "";
 
-                                    const specialMatch = time.match(/^(早读|午休|眼保健操|课间操|班会|大课间|课服\d*|晚自习\d*)/);
+                                    const specialMatch = time.match(/(早读|午休|眼保健操|课间操|班会|大课间|课服\d*|晚自习\d*)/);
                                     if (!subject && specialMatch) {
                                         subject = specialMatch[1];
                                     }
@@ -225,7 +226,7 @@ const DailySchedule = ({ classId, onPrepareClass, onPostEvaluation }: Props) => 
                                     });
                                 });
 
-                                const filtered = items.filter(i => i.rawTime && !i.rawTime.toLowerCase().includes('lunch'));
+                                const filtered = items.filter(i => i.rawTime);
                                 setScheduleItems(filtered);
                                 localStorage.setItem(getStorageKey(classId), JSON.stringify(filtered));
                             }
@@ -315,7 +316,7 @@ const DailySchedule = ({ classId, onPrepareClass, onPostEvaluation }: Props) => 
                     .timeline-scroll::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 4px; }
                     .timeline-scroll::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
                 `}</style>
-// ... (rest is unchanged except class styles which use getSubjectStyle)
+
 
                 {scheduleItems.map((item, index) => {
                     const isSpecial = item.isHighlight;
@@ -357,34 +358,6 @@ const DailySchedule = ({ classId, onPrepareClass, onPostEvaluation }: Props) => 
                                 )}
                             </div>
 
-                            {/* Dropdown Menu - Fixed Position */}
-                            {activeMenuIndex === index && hasSubject && menuPosition && (
-                                <div
-                                    ref={menuRef}
-                                    className="fixed bg-white rounded-xl shadow-2xl border border-gray-100 py-1.5 z-[9999] min-w-[120px] animate-in fade-in zoom-in-95 duration-100"
-                                    style={{
-                                        top: menuPosition.top,
-                                        left: menuPosition.left,
-                                        transform: 'translateX(-50%)'
-                                    }}
-                                >
-                                    <button
-                                        onClick={() => handleMenuAction('prepare', item)}
-                                        className="w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 transition-colors"
-                                    >
-                                        <Bookmark size={14} />
-                                        课前准备
-                                    </button>
-                                    <button
-                                        onClick={() => handleMenuAction('evaluate', item)}
-                                        className="w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-green-50 hover:text-green-600 flex items-center gap-2 transition-colors"
-                                    >
-                                        <ClipboardCheck size={14} />
-                                        课后评价
-                                    </button>
-                                </div>
-                            )}
-
                             {/* Connection Line (except last) */}
                             {index < scheduleItems.length - 1 && (
                                 <div className="absolute top-1/2 -right-1 w-2 h-0.5 bg-gray-200 -translate-y-1/2"></div>
@@ -392,6 +365,39 @@ const DailySchedule = ({ classId, onPrepareClass, onPostEvaluation }: Props) => 
                         </div>
                     );
                 })}
+
+                {/* Dropdown Menu - Rendered in Portal to avoid clipping */}
+                {activeMenuIndex !== null && menuPosition && createPortal(
+                    <div
+                        ref={menuRef}
+                        className="fixed bg-white rounded-xl shadow-2xl border border-gray-100 py-1.5 z-[9999] min-w-[120px] animate-in fade-in zoom-in-95 duration-100"
+                        style={{
+                            top: menuPosition.top,
+                            left: menuPosition.left,
+                            transform: 'translateX(-50%)'
+                        }}
+                    >
+                        {scheduleItems[activeMenuIndex] && (
+                            <>
+                                <button
+                                    onClick={() => handleMenuAction('prepare', scheduleItems[activeMenuIndex])}
+                                    className="w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 transition-colors"
+                                >
+                                    <Bookmark size={14} />
+                                    课前准备
+                                </button>
+                                <button
+                                    onClick={() => handleMenuAction('evaluate', scheduleItems[activeMenuIndex])}
+                                    className="w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-green-50 hover:text-green-600 flex items-center gap-2 transition-colors"
+                                >
+                                    <ClipboardCheck size={14} />
+                                    课后评价
+                                </button>
+                            </>
+                        )}
+                    </div>,
+                    document.body
+                )}
             </div>
         </div>
     );

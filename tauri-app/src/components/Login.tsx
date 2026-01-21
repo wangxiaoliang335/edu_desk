@@ -59,19 +59,32 @@ const Login = ({ onLoginSuccess }: { onLoginSuccess: (data: any) => void }) => {
         getCurrentWindow().close();
     };
 
-    const handleGetCode = () => {
+    const handleGetCode = async () => {
+        console.log("Login Component: Requesting verification code for", phone);
         if (!/^1[3-9]\d{9}$/.test(phone)) {
             setStatus('请输入有效的11位手机号码');
             return;
         }
-        setCountdown(60);
-        setStatus('验证码已发送');
+
+        try {
+            await invoke('send_verification_code', { phone });
+            setCountdown(60);
+            setStatus('验证码已发送');
+        } catch (e) {
+            console.error("Failed to send code:", e);
+            setStatus('发送失败: ' + String(e));
+        }
     };
 
     const performLogin = async (currentPhone: string, currentPassword: string) => {
         try {
             setStatus('正在登录...');
-            const response = await invoke('login', { phone: currentPhone, password: currentPassword }) as string;
+            let response;
+            if (loginMode === 'code') {
+                response = await invoke('login_with_code', { phone: currentPhone, verificationCode: currentPassword }) as string;
+            } else {
+                response = await invoke('login', { phone: currentPhone, password: currentPassword }) as string;
+            }
 
             let json;
             try {
@@ -105,9 +118,26 @@ const Login = ({ onLoginSuccess }: { onLoginSuccess: (data: any) => void }) => {
         }
 
         if (rememberPwd) {
+            let passwordToSave = password;
+            // If logging in with code, try to preserve the existing password
+            if (loginMode === 'code') {
+                passwordToSave = ''; // Default to empty to avoid saving code as password
+                try {
+                    const storedPrefs = localStorage.getItem('login_prefs');
+                    if (storedPrefs) {
+                        const prefs = JSON.parse(storedPrefs);
+                        if (prefs.phone === phone && prefs.password) {
+                            passwordToSave = prefs.password;
+                        }
+                    }
+                } catch (e) {
+                    console.error("Error reading existing prefs:", e);
+                }
+            }
+
             localStorage.setItem('login_prefs', JSON.stringify({
                 phone,
-                password,
+                password: passwordToSave,
                 rememberPwd,
                 autoLogin
             }));
@@ -120,6 +150,11 @@ const Login = ({ onLoginSuccess }: { onLoginSuccess: (data: any) => void }) => {
             }));
         }
 
+        if (loginMode === 'code') {
+            console.log("Login Component: Attempting login with verification code");
+        } else {
+            console.log("Login Component: Attempting login with password");
+        }
         await performLogin(phone, password);
     };
 
@@ -138,10 +173,10 @@ const Login = ({ onLoginSuccess }: { onLoginSuccess: (data: any) => void }) => {
             <div
                 data-tauri-drag-region
                 onMouseDown={() => getCurrentWindow().startDragging()}
-                className="h-24 bg-white/50 relative shrink-0 cursor-move border-b border-sage-50"
+                className="h-14 bg-white/50 relative shrink-0 cursor-move border-b border-sage-50"
             >
                 {/* Logo & Text */}
-                <div className="absolute top-6 left-6 flex items-center gap-3 z-20">
+                <div className="absolute top-3 left-6 flex items-center gap-3 z-20">
                     {view !== 'login' ? (
                         <button
                             onClick={() => setView('login')}
@@ -165,10 +200,13 @@ const Login = ({ onLoginSuccess }: { onLoginSuccess: (data: any) => void }) => {
                 </div>
 
                 {/* Window Controls - Organic Pills */}
-                <div className="absolute top-4 right-4 flex items-center gap-2 z-20" onMouseDown={(e) => e.stopPropagation()}>
+                <div className="absolute top-3 right-4 flex items-center gap-2 z-20" onMouseDown={(e) => e.stopPropagation()}>
                     {view === 'login' && (
                         <button
-                            onClick={() => setLoginMode(loginMode === 'password' ? 'code' : 'password')}
+                            onClick={() => {
+                                setLoginMode(loginMode === 'password' ? 'code' : 'password');
+                                setPassword('');
+                            }}
                             className="text-sage-600 text-xs px-4 py-1.5 rounded-full bg-white border border-sage-200 hover:border-sage-300 hover:bg-sage-50 transition-all active:scale-95 mr-2 font-bold shadow-sm"
                         >
                             {loginMode === 'password' ? "切换验证码登录" : "切换密码登录"}
@@ -194,7 +232,7 @@ const Login = ({ onLoginSuccess }: { onLoginSuccess: (data: any) => void }) => {
                 {view === 'login' && (
                     <div className="w-80 flex flex-col relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
-                        <div className="text-center mb-8">
+                        <div className="text-center mb-4">
                             <h1 className="text-2xl font-bold text-ink-800 tracking-tight">欢迎回来</h1>
                             <p className="text-ink-400 text-sm mt-2">请登录您的教师账号</p>
                         </div>
@@ -205,7 +243,7 @@ const Login = ({ onLoginSuccess }: { onLoginSuccess: (data: any) => void }) => {
                                 <input
                                     type="text"
                                     placeholder="手机号 / 账号"
-                                    className="peer w-full py-3.5 px-5 bg-white border-2 border-transparent focus:border-sage-200 rounded-2xl outline-none text-ink-600 text-sm placeholder:text-ink-300 transition-all shadow-[0_2px_10px_rgba(0,0,0,0.02)] focus:shadow-[0_4px_20px_rgba(0,0,0,0.05)] hover:bg-white/80"
+                                    className="peer w-full py-2.5 px-5 bg-white border-2 border-transparent focus:border-sage-200 rounded-2xl outline-none text-ink-600 text-sm placeholder:text-ink-300 transition-all shadow-[0_2px_10px_rgba(0,0,0,0.02)] focus:shadow-[0_4px_20px_rgba(0,0,0,0.05)] hover:bg-white/80"
                                     value={phone}
                                     onChange={(e) => setPhone(e.target.value)}
                                 />
@@ -215,7 +253,7 @@ const Login = ({ onLoginSuccess }: { onLoginSuccess: (data: any) => void }) => {
                                 <input
                                     type={loginMode === 'password' ? "password" : "text"}
                                     placeholder={loginMode === 'password' ? "密码" : "验证码"}
-                                    className="peer w-full py-3.5 px-5 bg-white border-2 border-transparent focus:border-sage-200 rounded-2xl outline-none text-ink-600 text-sm placeholder:text-ink-300 transition-all shadow-[0_2px_10px_rgba(0,0,0,0.02)] focus:shadow-[0_4px_20px_rgba(0,0,0,0.05)] hover:bg-white/80"
+                                    className="peer w-full py-2.5 px-5 bg-white border-2 border-transparent focus:border-sage-200 rounded-2xl outline-none text-ink-600 text-sm placeholder:text-ink-300 transition-all shadow-[0_2px_10px_rgba(0,0,0,0.02)] focus:shadow-[0_4px_20px_rgba(0,0,0,0.05)] hover:bg-white/80"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                 />
@@ -235,7 +273,7 @@ const Login = ({ onLoginSuccess }: { onLoginSuccess: (data: any) => void }) => {
                         </div>
 
                         {/* Options Row */}
-                        <div className="flex justify-between items-center px-2 mt-5">
+                        <div className="flex justify-between items-center px-2 mt-2">
                             <label className="flex items-center gap-2.5 cursor-pointer group select-none">
                                 <div className="relative flex items-center">
                                     <input
@@ -264,7 +302,7 @@ const Login = ({ onLoginSuccess }: { onLoginSuccess: (data: any) => void }) => {
                         {/* Action Button */}
                         <button
                             onClick={handleLogin}
-                            className="w-full mt-8 bg-ink-800 hover:bg-ink-900 text-white py-3.5 rounded-2xl shadow-xl shadow-ink-200/50 text-sm font-bold tracking-wide transition-all active:scale-[0.98] hover:shadow-2xl hover:shadow-ink-300/50 flex items-center justify-center gap-2 group"
+                            className="w-full mt-4 bg-ink-800 hover:bg-ink-900 text-white py-2.5 rounded-2xl shadow-xl shadow-ink-200/50 text-sm font-bold tracking-wide transition-all active:scale-[0.98] hover:shadow-2xl hover:shadow-ink-300/50 flex items-center justify-center gap-2 group"
                         >
                             <span>进入课堂</span>
                             <ArrowRight size={16} className="text-sage-400 group-hover:translate-x-1 transition-transform" />
@@ -281,7 +319,7 @@ const Login = ({ onLoginSuccess }: { onLoginSuccess: (data: any) => void }) => {
                         </div>
 
                         {/* Footer Links */}
-                        <div className="absolute -bottom-16 left-0 right-0 flex justify-center pb-4">
+                        <div className="mt-2 flex justify-center pb-2">
                             <div className="flex justify-center items-center gap-6 text-xs font-bold text-ink-300">
                                 <button onClick={() => setView('reset')} className="hover:text-sage-600 hover:underline transition-all">找回密码</button>
                                 <div className="w-1 h-1 bg-sage-200 rounded-full"></div>

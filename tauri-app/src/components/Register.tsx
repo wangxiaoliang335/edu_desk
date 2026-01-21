@@ -29,6 +29,7 @@ const Register = ({ onBack, onSuccess }: RegisterProps) => {
     }, [countdown]);
 
     const handleGetCode = async () => {
+        console.log("Register Component: Requesting verification code for", phone);
         if (!/^1[3-9]\d{9}$/.test(phone)) {
             setStatus('请输入有效的11位手机号码');
             return;

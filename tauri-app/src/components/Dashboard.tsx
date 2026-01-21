@@ -47,6 +47,8 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
         if (shouldShow) {
             invoke('open_countdown_minimal_window');
         }
+        // Always show the desktop assistant ball if logged in
+        invoke('open_desktop_ball').catch(console.error);
     }, []);
 
     const handleMinimize = () => getCurrentWindow().minimize();
@@ -84,16 +86,19 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
         } else if (toolId === 'school_course_schedule') {
             setShowSchoolSchedule(true);
         } else if (toolId === 'calendar') {
-            setShowSchoolCalendar(true);
-        } else if (toolId === 'file_manager') {
             try {
-                const { createNewBox } = await import('../utils/DesktopManager');
-                const box = await createNewBox();
-                await invoke('open_file_box_window', { boxId: box.id });
-                // Optional: Minimize main window if desired, or keep as is
+                await invoke('open_school_calendar_window');
             } catch (e) {
                 console.error(e);
-                alert('创建文件盒子失败');
+                alert('打开校历失败');
+            }
+        } else if (toolId === 'file_manager') {
+            try {
+                // Fixed ID for persistence
+                await invoke('open_file_box_window', { boxId: 'main' });
+            } catch (e) {
+                console.error(e);
+                alert('打开文件盒子失败');
             }
         } else if (toolId === 'countdown') {
             console.log('Invoking open_countdown_edit_window...');
@@ -121,8 +126,13 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
             // Clear credentials
             localStorage.removeItem('token');
 
-            // Reload to reset app state and trigger Login view
-            window.location.reload();
+            // Reset backend window state and then reload
+            invoke('logout_reset').then(() => {
+                window.location.reload();
+            }).catch(e => {
+                console.error("Failed to reset window on logout:", e);
+                window.location.reload();
+            });
         }
     };
 
@@ -166,11 +176,10 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
                             <div className="grid grid-cols-4 gap-6">
                                 {[
                                     { id: 'file_manager', name: '文件管理', icon: '📂', color: 'bg-orange-100 text-orange-600' },
-                                    { id: 'new_folder', name: '新建文件夹', icon: '➕', color: 'bg-sage-100 text-sage-600' },
+
                                     { id: 'countdown', name: '倒计时', icon: '⏳', color: 'bg-clay-500/10 text-clay-600' },
                                     { id: 'time', name: '时钟', icon: '🕒', color: 'bg-blue-100 text-blue-600' },
-                                    { id: 'school_info', name: '学校配置', icon: '🏫', color: 'bg-emerald-100 text-emerald-600' },
-                                    { id: 'wallpaper', name: '壁纸设置', icon: '🖼️', color: 'bg-pink-100 text-pink-600' },
+
                                     { id: 'schedule', name: '我的课表', icon: '📅', color: 'bg-amber-100 text-amber-600' },
                                     { id: 'school_course_schedule', name: '班级课表', icon: '📅', color: 'bg-amber-200 text-amber-700' },
                                     { id: 'calendar', name: '校历日程', icon: '🗓️', color: 'bg-cyan-100 text-cyan-600' },
@@ -358,13 +367,6 @@ const Dashboard = ({ userInfo }: DashboardProps) => {
                 onClose={() => setShowSchoolSchedule(false)}
                 userInfo={userInfo}
             />
-            {showSchoolCalendar && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[2px]">
-                    <div className="pointer-events-auto">
-                        <SchoolCalendar onClose={() => setShowSchoolCalendar(false)} />
-                    </div>
-                </div>
-            )}
         </div>
     );
 };

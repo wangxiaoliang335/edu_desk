@@ -1,196 +1,133 @@
-/* Custom styles for react-calendar to match Warm Education aesthetic */
-.react-calendar {
-  width: 100%;
-  max-width: 100%;
-  background: transparent;
-  border: none;
-  font-family: inherit;
-  line-height: 1.125em;
-}
-
-.react-calendar--doubleView {
-  width: 700px;
-}
-
-.react-calendar--doubleView .react-calendar__viewContainer {
-  display: flex;
-  margin: -0.5em;
-}
-
-.react-calendar--doubleView .react-calendar__viewContainer>* {
-  width: 500%;
-  margin: 0.5em;
-}
-
-.react-calendar,
-.react-calendar *,
-.react-calendar *:before,
-.react-calendar *:after {
-  -moz-box-sizing: border-box;
-  -webkit-box-sizing: border-box;
-  box-sizing: border-box;
-}
-
-/* Navigation (Month/Year selector) */
-.react-calendar__navigation {
-  display: flex;
-  height: 44px;
-  margin-bottom: 1em;
-}
-
-.react-calendar__navigation button {
-  min-width: 44px;
-  background: none;
-  font-size: 16px;
-  margin-top: 8px;
-  color: #4b5563;
-  /* ink-600 */
-  font-weight: 700;
-  font-family: 'Nunito', sans-serif;
-}
-
-.react-calendar__navigation button:enabled:hover,
-.react-calendar__navigation button:enabled:focus {
-  background-color: #f4f7f4;
-  /* sage-50 */
-  border-radius: 12px;
-  color: #415a47;
-  /* sage-700 */
-}
-
-.react-calendar__navigation button[disabled] {
-  background-color: #fcfbf9;
-  color: #d1d5db;
-}
-
-/* Month View Header (Weekdays) */
-.react-calendar__month-view__weekdays {
-  text-align: center;
-  text-transform: uppercase;
-  font-weight: bold;
-  font-size: 0.75em;
-  color: #84a98c;
-  /* sage-400 */
-  padding-bottom: 8px;
-}
-
-.react-calendar__month-view__weekdays__weekday {
-  padding: 0.5em;
-}
-
-/* Days/Tiles */
-.react-calendar__month-view__days__day {
-  position: relative;
-  padding: 8px;
-  height: 80px;
-  /* Fixed height for tiles to allow content */
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: flex-start;
-  border: 1px solid transparent;
-  border-top: 1px solid #f4f7f4;
-  /* sage-50 */
-  border-left: 1px solid #f4f7f4;
-}
-
-.react-calendar__tile {
-  max-width: 100%;
-  background: none;
-  text-align: left;
-  line-height: 16px;
-  font-size: 14px;
-  transition: all 0.2s;
-  border-radius: 8px;
-}
-
-.react-calendar__tile:enabled:hover,
-.react-calendar__tile:enabled:focus {
-  background-color: #f4f7f4;
-  /* sage-50 */
-}
-
-/* Current Day */
-.react-calendar__tile--now {
-  background: #e3ebe3;
-  /* sage-100 */
-  color: #415a47;
-  /* sage-700 */
-  font-weight: bold;
-}
-
-.react-calendar__tile--now:enabled:hover,
-.react-calendar__tile--now:enabled:focus {
-  background: #c5d8c5;
-  /* sage-200 */
-}
-
-/* Active (Selected) Day */
-.react-calendar__tile--active {
-  background: #6b9074 !important;
-  /* sage-500 */
-  color: white !important;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(107, 144, 116, 0.3);
-}
-
-.react-calendar__tile--active:enabled:hover,
-.react-calendar__tile--active:enabled:focus {
-  background: #55765d !important;
-  /* sage-600 */
-}
-
-/* Weekend styling (optional) */
-.react-calendar__month-view__days__day--weekend {
-  color: #e07a5f;
-  /* clay-500 */
-}
-
-/* Neighboring month dates */
-.react-calendar__month-view__days__day--neighboringMonth {
-  color: #d1d5db !important;
-  /* ink-200/gray-300 */
-}
-
-/* Custom Event Markers */
-.calendar-event-dot {
-  height: 6px;
-  width: 6px;
-  background-color: #e07a5f;
-  /* clay-500 */
-  border-radius: 50%;
-  margin-top: 4px;
-}
-
+/* Base Calendar Styles */
 .calendar-event-text {
   font-size: 10px;
-  margin-top: 2px;
+  line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  width: 100%;
-  padding: 2px 6px;
-  border-radius: 6px;
-  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 4px;
 }
 
+/* Event Types */
 .event-holiday {
-  background-color: #ffe4e6;
-  /* soft red */
-  color: #c46248;
-  /* clay-600 */
+  background-color: #fee2e2;
+  color: #991b1b;
 }
 
 .event-exam {
   background-color: #e3ebe3;
-  /* sage-100 */
   color: #415a47;
-  /* sage-700 */
 }
 
 .event-activity {
   background-color: #fef3c7;
-  /* amber-100 */
-  color: #b45309;
-  /* amber-700 */
+  color: #92400e;
+}
+
+.event-meeting {
+  background-color: #e0f2fe;
+  color: #075985;
+}
+
+.event-remark {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+/* Utilities */
+.writing-vertical {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  letter-spacing: 0.1em;
+}
+
+/* Custom Scrollbar for the table container */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #e5e7eb;
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #d1d5db;
+}
+
+/* New Premium Styles */
+@keyframes holiday-glow {
+
+  0%,
+  100% {
+    box-shadow: 0 0 5px rgba(239, 68, 68, 0.2);
+  }
+
+  50% {
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+  }
+}
+
+.animate-holiday-glow {
+  animation: holiday-glow 3s ease-in-out infinite;
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.4s ease-out forwards;
+}
+
+/* Event Dialog Overlay */
+.dialog-overlay {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+}
+
+.dialog-box {
+  box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.1),
+    0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+/* Ruled paper refinement */
+.ruled-paper {
+  background-image: linear-gradient(transparent 95%, rgba(148, 163, 184, 0.15) 95%);
+  background-size: 100% 1.5rem;
+}
+
+/* Today Pulse */
+@keyframes today-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+  }
+
+  70% {
+    box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+.animate-today-pulse {
+  animation: today-pulse 2s infinite;
 }

@@ -31,20 +31,27 @@ export const WebSocketProvider = ({ children }: { children: React.ReactNode }) =
         let reconnectTimer: any = null;
 
         const connect = () => {
-            // Retrieve ID from storage (stored as JSON string usually, or raw)
-            // We'll rely on Login.tsx saving it.
+            // Retrieve ID from storage
+            // 1. Try explicit 'teacher_unique_id' first (most reliable)
+            let teacherId = localStorage.getItem('teacher_unique_id');
             const storedUser = localStorage.getItem('user_info');
-            let teacherId = null;
-            if (storedUser) {
+
+            // 2. Fallback to parsing user_info if needed
+            if (!teacherId && storedUser) {
                 try {
                     const u = JSON.parse(storedUser);
-                    // console.log("WS: User Info from Storage:", u);
-                    teacherId = u.teacher_unique_id || u.unique_id || u.id; // Try multiple fields
-                } catch (e) { }
+                    console.log("[WebSocketContext] User Info parsed:", u);
+                    // Try to find ANY valid ID
+                    teacherId = u.teacher_unique_id || u.unique_id || u.id || u.user_id || (u.data && u.data.teacher_unique_id) || (u.data && u.data.id);
+                    console.log("[WebSocketContext] Got Teacher ID from JSON:", teacherId);
+                } catch (e) {
+                    console.error("[WebSocketContext] JSON Parse Error:", e);
+                }
             }
 
             if (!teacherId) {
                 // Not logged in or no ID, retry later
+                console.log("[WebSocketContext] No Teacher ID, retrying in 2s...");
                 reconnectTimer = setTimeout(connect, 2000);
                 return;
             }
@@ -82,7 +89,9 @@ export const WebSocketProvider = ({ children }: { children: React.ReactNode }) =
 
             ws.onmessage = (event) => {
                 if (event.data !== 'pong') {
+                    console.log("[MonitorFlow] Raw WS Message Received:", event.data);
                     setLastMessage(String(event.data));
+                    window.dispatchEvent(new CustomEvent('ws-message', { detail: event.data }));
                 }
             };
         };
@@ -98,9 +107,10 @@ export const WebSocketProvider = ({ children }: { children: React.ReactNode }) =
 
     const sendMessage = (msg: string) => {
         if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+            console.log("[MonitorFlow] Raw WS Message Sending:", msg);
             socketRef.current.send(msg);
         } else {
-            console.warn("WS: Cannot send, socket not open");
+            console.warn("[MonitorFlow] WS: Cannot send, socket not open or current is null. ReadyState:", socketRef.current?.readyState);
         }
     };
 

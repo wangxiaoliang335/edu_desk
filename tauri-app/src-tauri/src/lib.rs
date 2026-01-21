@@ -238,6 +238,7 @@ fn start_file_drag(paths: Vec<String>) -> Result<(), String> {
 
 #[tauri::command]
 async fn login(phone: &str, password: &str) -> Result<String, String> {
+    println!("Backend: login called for phone: {}", phone);
     let client = reqwest::Client::new();
     let res = client
         .post("http://47.100.126.194:5000/login")
@@ -254,12 +255,31 @@ async fn login(phone: &str, password: &str) -> Result<String, String> {
 }
 
 #[tauri::command]
+async fn login_with_code(phone: &str, verification_code: &str) -> Result<String, String> {
+    println!("Backend: login_with_code called for phone: {}", phone);
+    let client = reqwest::Client::new();
+    let res = client
+        .post("http://47.100.126.194:5000/login_by_code")
+        .json(&serde_json::json!({
+            "phone": phone,
+            "verification_code": verification_code
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = res.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
+#[tauri::command]
 async fn send_verification_code(phone: &str) -> Result<String, String> {
+    println!("Backend: send_verification_code called for phone: {}", phone);
     let client = reqwest::Client::new();
     // Logic from RegisterDialog.cpp/ResetPwdDialog.cpp
     let res = client
         .post("http://47.100.126.194:5000/send_verification_code")
-        .form(&serde_json::json!({
+        .json(&serde_json::json!({
             "phone": phone
         }))
         .send()
@@ -280,7 +300,7 @@ async fn register_account(
     // Logic from RegisterDialog.cpp
     let res = client
         .post("http://47.100.126.194:5000/register")
-        .form(&serde_json::json!({
+        .json(&serde_json::json!({
             "phone": phone,
             "password": password,
             "verification_code": verification_code
@@ -303,7 +323,7 @@ async fn reset_password(
     // Logic from ResetPwdDialog.cpp
     let res = client
         .post("http://47.100.126.194:5000/verify_and_set_password")
-        .form(&serde_json::json!({
+        .json(&serde_json::json!({
             "phone": phone,
             "new_password": new_password,
             "verification_code": verification_code
@@ -572,7 +592,7 @@ async fn open_class_window(app: tauri::AppHandle, groupclass_id: String) -> Resu
 
     let window_label = format!("class_schedule_{}", groupclass_id);
     // Route to the new Schedule Window
-    let url = format!("/class/schedule/{}", groupclass_id);
+    let url = format!("index.html#/class/schedule/{}", groupclass_id);
 
     if let Some(window) = app.get_webview_window(&window_label) {
         let _ = window.set_focus();
@@ -601,7 +621,7 @@ async fn open_chat_window(app: tauri::AppHandle, groupclass_id: String) -> Resul
 
     let window_label = format!("class_chat_{}", groupclass_id);
     // Route to the Chat Window
-    let url = format!("/class/chat/{}", groupclass_id);
+    let url = format!("index.html#/class/chat/{}", groupclass_id);
 
     if let Some(window) = app.get_webview_window(&window_label) {
         let _ = window.set_focus();
@@ -760,7 +780,7 @@ async fn open_intercom_window(app: tauri::AppHandle, group_id: String) -> Result
     println!("Backend: Opening intercom window for ID: {}", group_id);
 
     let window_label = format!("intercom_{}", group_id);
-    let url = format!("/intercom/{}", group_id);
+    let url = format!("index.html#/intercom/{}", group_id);
 
     if let Some(window) = app.get_webview_window(&window_label) {
         let _ = window.set_focus();
@@ -1761,7 +1781,7 @@ async fn open_file_box_window(app: tauri::AppHandle, box_id: String) -> Result<(
     println!("Backend: Opening file box window for ID: {}", box_id);
 
     let window_label = format!("file_box_{}", box_id);
-    let url = format!("/file-box/{}", box_id);
+    let url = format!("index.html#/file-box/{}", box_id);
 
     if let Some(window) = app.get_webview_window(&window_label) {
         let _ = window.set_focus();
@@ -1821,7 +1841,7 @@ async fn open_file_box_window(app: tauri::AppHandle, box_id: String) -> Result<(
 #[tauri::command]
 async fn open_teacher_schedule_window(app: tauri::AppHandle) -> Result<(), String> {
     let window_label = "teacher_schedule".to_string();
-    let url = "/teacher-schedule".to_string();
+    let url = "index.html#/teacher-schedule".to_string();
 
     if let Some(window) = app.get_webview_window(&window_label) {
         let _ = window.set_focus();
@@ -1858,7 +1878,7 @@ fn position_countdown_minimal_window(window: &tauri::WebviewWindow) {
 async fn open_countdown_minimal_window(app: tauri::AppHandle) -> Result<(), String> {
     println!("Backend: open_countdown_minimal_window called");
     let window_label = "countdown_minimal";
-    let url = "/countdown?mode=minimal";
+    let url = "index.html#/countdown?mode=minimal";
     if let Some(other) = app.get_webview_window("countdown_full") {
         let _ = other.hide();
     }
@@ -1893,7 +1913,7 @@ async fn open_countdown_minimal_window(app: tauri::AppHandle) -> Result<(), Stri
 async fn open_countdown_full_window(app: tauri::AppHandle) -> Result<(), String> {
     println!("Backend: open_countdown_full_window called");
     let window_label = "countdown_full";
-    let url = "/countdown?mode=full";
+    let url = "index.html#/countdown?mode=full";
     if let Some(other) = app.get_webview_window("countdown_minimal") {
         let _ = other.hide();
     }
@@ -1924,7 +1944,7 @@ async fn open_countdown_full_window(app: tauri::AppHandle) -> Result<(), String>
 async fn open_countdown_edit_window(app: tauri::AppHandle) -> Result<(), String> {
     println!("Backend: open_countdown_edit_window called");
     let window_label = "countdown_edit";
-    let url = "/countdown-edit";
+    let url = "index.html#/countdown-edit";
 
     if let Some(other) = app.get_webview_window("countdown_full") {
         let _ = other.hide();
@@ -1956,13 +1976,168 @@ async fn open_countdown_edit_window(app: tauri::AppHandle) -> Result<(), String>
 }
 
 #[tauri::command]
+async fn open_desktop_ball(app: tauri::AppHandle) -> Result<(), String> {
+    println!("Backend: open_desktop_ball called");
+    let window_label = "desktop_ball";
+    let url = "index.html#/desktop-ball";
+
+    if let Some(window) = app.get_webview_window(window_label) {
+        let _ = window.show();
+        let _ = window.set_focus();
+        return Ok(());
+    }
+
+    let builder = tauri::WebviewWindowBuilder::new(&app, window_label, tauri::WebviewUrl::App(url.into()))
+        .title("智慧助手")
+        .inner_size(80.0, 80.0)
+        .resizable(false)  // Strictly disable resize to prevent maximization oval
+        .maximizable(false)
+        .minimizable(false)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .shadow(false);
+
+    match builder.build() {
+        Ok(window) => {
+            // Position at top-right corner
+            if let Ok(Some(monitor)) = window.current_monitor() {
+                let size = monitor.size();
+                let scale = monitor.scale_factor();
+                let logical_width = size.width as f64 / scale;
+                // Place it at (Right - 100px, Top + 100px)
+                let x = logical_width - 100.0;
+                let y = 100.0;
+                let _ = window.set_position(tauri::LogicalPosition::new(x, y));
+            }
+            Ok(())
+        }
+        Err(e) => Err(format!("Failed to create window: {}", e)),
+    }
+}
+
+#[tauri::command]
+async fn open_tool_panel(app: tauri::AppHandle) -> Result<(), String> {
+    println!("Backend: open_tool_panel requested");
+    let window_label = "tool_panel";
+    let url = "index.html#/tool-panel";
+
+    // Panel size (Square)
+    let size = 300.0;
+    let ball_size = 80.0;
+    
+    // Default fallback position
+    let mut px = 1000.0;
+    let mut py = 100.0;
+
+    // Try to get the ball's position from the actual window in Rust
+    if let Some(ball_win) = app.get_webview_window("desktop_ball") {
+        if let Ok(pos) = ball_win.outer_position() {
+            if let Ok(scale) = ball_win.scale_factor() {
+                // Ball's logical position
+                let bx = pos.x as f64 / scale;
+                let by = pos.y as f64 / scale;
+                
+                // Position it so the panel's center matches the ball's center
+                px = bx + (ball_size / 2.0) - (size / 2.0);
+                py = by + (ball_size / 2.0) - (size / 2.0);
+                println!("Backend Position Fix: bx={}, by={}, scale={}, px={}, py={}", bx, by, scale, px, py);
+            }
+        }
+    }
+
+    if let Some(window) = app.get_webview_window(window_label) {
+        let _ = window.set_size(tauri::LogicalSize::new(size, size));
+        let _ = window.set_position(tauri::LogicalPosition::new(px, py));
+        let _ = window.show();
+        let _ = window.set_focus();
+        return Ok(());
+    }
+
+    let builder = tauri::WebviewWindowBuilder::new(&app, window_label, tauri::WebviewUrl::App(url.into()))
+        .title("快捷工具")
+        .inner_size(size, size)
+        .position(px, py)
+        .resizable(false)  // Strictly disable resize to prevent maximization oval
+        .maximizable(false)
+        .minimizable(false)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(true);
+
+    match builder.build() {
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("Failed to create window: {}", e)),
+    }
+}
+
+#[tauri::command]
 async fn open_countdown_window(app: tauri::AppHandle) -> Result<(), String> {
     open_countdown_minimal_window(app).await
+}
+
+#[tauri::command]
+async fn open_school_calendar_window(app: tauri::AppHandle) -> Result<(), String> {
+    let window_label = "school_calendar".to_string();
+    let url = "index.html#/school-calendar".to_string();
+
+    if let Some(window) = app.get_webview_window(&window_label) {
+        let _ = window.set_focus();
+        return Ok(());
+    }
+
+    let builder =
+        tauri::WebviewWindowBuilder::new(&app, window_label, tauri::WebviewUrl::App(url.into()))
+            .title("校历日程")
+            .inner_size(1200.0, 850.0)
+            .resizable(true)
+            .decorations(false)
+            .transparent(true)
+            .shadow(true);
+
+    match builder.build() {
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("Failed to create window: {}", e)),
+    }
+}
+
+#[tauri::command]
+async fn logout_reset(app: tauri::AppHandle, window: tauri::Window) -> Result<(), String> {
+    println!("Backend: logout_reset called");
+
+    // 1. Close auxiliary windows
+    let aux_windows = vec!["countdown_minimal", "countdown_full", "desktop_ball", "tool_panel", "teacher_schedule"];
+    for label in aux_windows {
+        if let Some(win) = app.get_webview_window(label) {
+            let _ = win.close();
+        }
+    }
+
+    // 2. Resize and reset main window
+    // Login size: 430x450 (as per recent tauri.conf.json change)
+    let _ = window.set_resizable(false);
+    let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
+        width: 430,
+        height: 450,
+    }));
+    let _ = window.center();
+
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                if window.label() == "main" {
+                    std::process::exit(0);
+                }
+            }
+        })
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
@@ -1971,6 +2146,7 @@ pub fn run() {
             get_system_icon,
             start_file_drag,
             login,
+            login_with_code,
             send_verification_code,
             register_account,
             reset_password,
@@ -2035,6 +2211,10 @@ pub fn run() {
             open_countdown_full_window,
             open_countdown_edit_window,
             open_countdown_window,
+            open_desktop_ball,
+            open_tool_panel,
+            open_school_calendar_window,
+            logout_reset,
             exit_app
         ])
         .run(tauri::generate_context!())

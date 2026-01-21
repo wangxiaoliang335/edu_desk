@@ -48,6 +48,7 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
     const [showTransferModal, setShowTransferModal] = useState(false);
 
     // Owner state for Exit/Disband logic
+    // Owner state for Exit/Disband logic
     const [isOwner, setIsOwner] = useState(false);
     const [currentUserId, setCurrentUserId] = useState("");
 
@@ -393,7 +394,6 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
         setShowTransferModal(false);
     };
 
-    // Handler: Disband Group (Owner only)
     const handleDisbandGroup = async () => {
         if (!groupId) return;
         if (!confirm('确定要解散群聊吗？此操作不可恢复！')) return;
@@ -429,6 +429,8 @@ const ClassInfoModal = ({ isOpen, onClose, groupId, groupName, isClassGroup = tr
             alert('解散群聊失败: ' + (e.message || e));
         }
     };
+
+    // Monitor Protocol Handler (Removed)
 
     if (!isOpen) return null;
 

@@ -490,10 +490,13 @@ const CustomListModal = ({ isOpen, onClose, classId }: CustomListModalProps) => 
 
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-300 font-sans">
-            <div className="bg-paper/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl w-[700px] max-h-[600px] flex flex-col overflow-hidden border border-white/50 ring-1 ring-sage-100/50">
+            <div className="bg-paper/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl w-[1000px] max-w-[92vw] max-h-[80vh] flex flex-col overflow-hidden border border-white/50 ring-1 ring-sage-100/50">
 
                 {/* Header */}
-                <div className="flex items-center justify-between px-8 py-6 border-b border-sage-100/50 bg-white/30 backdrop-blur-md">
+                <div
+                    className="flex items-center justify-between px-8 py-6 border-b border-sage-100/50 bg-white/30 backdrop-blur-md"
+                    data-tauri-drag-region
+                >
                     <div className="flex items-center gap-4">
                         <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-sage-400 to-sage-600 flex items-center justify-center shadow-lg shadow-sage-500/20">
                             <FileSpreadsheet className="text-white" size={24} />
@@ -506,6 +509,7 @@ const CustomListModal = ({ isOpen, onClose, classId }: CustomListModalProps) => 
                     <button
                         onClick={onClose}
                         className="w-10 h-10 flex items-center justify-center text-sage-400 hover:text-clay-600 hover:bg-clay-50 rounded-full transition-all duration-300"
+                        data-tauri-drag-region="false"
                     >
                         <X size={24} />
                     </button>
@@ -520,7 +524,7 @@ const CustomListModal = ({ isOpen, onClose, classId }: CustomListModalProps) => 
                                 onClick={() => handleFileClick(file)}
                                 className="relative group bg-white/80 backdrop-blur-sm rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border border-white/60 hover:border-sage-300 ring-1 ring-sage-50 hover:ring-sage-200"
                             >
-                                /* Decorative shine */
+                                {/* Decorative shine */}
                                 <div className="absolute inset-0 rounded-2xl bg-gradient-to-tr from-white/0 to-white/40 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
 
                                 {/* Icon */}
@@ -593,34 +597,34 @@ const CustomListModal = ({ isOpen, onClose, classId }: CustomListModalProps) => 
                     onChange={handleFileSelect}
                 />
 
-                {/* Sub Modals */}
-                {currentData && (
-                    <>
-                        <MidtermGradeModal
-                            isOpen={showMidtermModal}
-                            onClose={() => setShowMidtermModal(false)}
-                            fileName={currentData.name}
-                            data={currentData.data}
-                            classId={classId}
-                            file={currentData.file}
-                            autoPrompt={currentData.id === autoPromptFileId}
-                            onAutoPromptComplete={() => setAutoPromptFileId(null)}
-                            onDataChange={(newData) => handleFileUpdate(currentData.id, newData)}
-                        />
-                        <StudentPhysiqueModal
-                            isOpen={showPhysiqueModal}
-                            onClose={() => setShowPhysiqueModal(false)}
-                            fileName={currentData.name}
-                            data={currentData.data}
-                            classId={classId}
-                            file={currentData.file}
-                            autoPrompt={currentData.id === autoPromptFileId}
-                            onAutoPromptComplete={() => setAutoPromptFileId(null)}
-                            onDataChange={(newData) => handleFileUpdate(currentData.id, newData)}
-                        />
-                    </>
-                )}
             </div>
+            {/* Sub Modals */}
+            {currentData && (
+                <>
+                    <MidtermGradeModal
+                        isOpen={showMidtermModal}
+                        onClose={() => setShowMidtermModal(false)}
+                        fileName={currentData.name}
+                        data={currentData.data}
+                        classId={classId}
+                        file={currentData.file}
+                        autoPrompt={currentData.id === autoPromptFileId}
+                        onAutoPromptComplete={() => setAutoPromptFileId(null)}
+                        onDataChange={(newData) => handleFileUpdate(currentData.id, newData)}
+                    />
+                    <StudentPhysiqueModal
+                        isOpen={showPhysiqueModal}
+                        onClose={() => setShowPhysiqueModal(false)}
+                        fileName={currentData.name}
+                        data={currentData.data}
+                        classId={classId}
+                        file={currentData.file}
+                        autoPrompt={currentData.id === autoPromptFileId}
+                        onAutoPromptComplete={() => setAutoPromptFileId(null)}
+                        onDataChange={(newData) => handleFileUpdate(currentData.id, newData)}
+                    />
+                </>
+            )}
         </div>
     );
 };

@@ -517,18 +517,24 @@ const MidtermGradeModal = ({ isOpen, onClose, fileName, data, classId, file, aut
                 </div>
             )}
 
-            <div className="bg-paper/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl w-[1200px] h-[800px] flex flex-col overflow-hidden text-sm select-none relative border border-white/50 ring-1 ring-sage-100/50">
+            <div
+                className="w-[92vw] h-[86vh] max-w-[1400px] max-h-[900px] bg-paper/95 backdrop-blur-xl rounded-[2rem] shadow-2xl flex flex-col overflow-hidden text-sm select-none border border-white/50 ring-1 ring-sage-100/50"
+            >
 
                 {/* Close Button */}
                 <button
                     onClick={onClose}
                     className="absolute top-6 right-6 w-10 h-10 flex items-center justify-center text-sage-400 hover:text-clay-600 hover:bg-clay-50 rounded-full transition-all duration-300 z-50"
+                    data-tauri-drag-region="false"
                 >
                     <span className="text-xl font-bold">×</span>
                 </button>
 
                 {/* Header */}
-                <div className="px-8 py-6 flex flex-col items-start justify-center gap-1 border-b border-sage-100/50 bg-white/30 backdrop-blur-md relative z-10">
+                <div
+                    className="px-8 py-6 flex flex-col items-start justify-center gap-1 border-b border-sage-100/50 bg-white/30 backdrop-blur-md relative z-10 flex-shrink-0 min-h-[90px]"
+                    data-tauri-drag-region
+                >
                     <div className="flex items-center gap-4">
                         <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
                             <span className="text-white text-2xl font-bold">📊</span>
@@ -543,7 +549,7 @@ const MidtermGradeModal = ({ isOpen, onClose, fileName, data, classId, file, aut
                 </div>
 
                 {/* Toolbar */}
-                <div className="px-8 py-4 flex gap-3 overflow-x-auto bg-white/40 border-b border-white/50 custom-scrollbar backdrop-blur-sm">
+                <div className="px-8 py-4 flex gap-3 overflow-x-auto bg-white/40 border-b border-white/50 custom-scrollbar backdrop-blur-sm flex-shrink-0 min-h-[72px]">
                     <button onClick={handleAddRow} className="px-5 py-2.5 rounded-xl text-ink-700 text-xs font-bold whitespace-nowrap bg-white border border-sage-200 hover:border-sage-400 hover:text-sage-700 hover:shadow-md hover:-translate-y-0.5 transition-all shadow-sm">
                         + 添加行
                     </button>
@@ -567,7 +573,7 @@ const MidtermGradeModal = ({ isOpen, onClose, fileName, data, classId, file, aut
                 </div>
 
                 {/* Table Area */}
-                <div className="flex-1 overflow-auto mx-8 my-6 rounded-[1.5rem] border border-white/60 bg-white/50 shadow-sm ring-1 ring-sage-50 backdrop-blur-xl custom-scrollbar">
+                <div className="flex-1 overflow-auto bg-white/50 backdrop-blur-xl custom-scrollbar">
                     <table className="w-full border-collapse">
                         <thead className="bg-sage-50/80 sticky top-0 z-10 backdrop-blur-md">
                             <tr>

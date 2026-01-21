@@ -14,11 +14,14 @@ const loadCountdownConfig = () => {
     };
 };
 
+import { useSearchParams } from 'react-router-dom';
+
 export default function CountdownWindow() {
     useEffect(() => console.log('CountdownWindow Mounted'), []); // Debug log
     const [config, setConfig] = useState(loadCountdownConfig);
     const widgetWrapRef = useRef<HTMLDivElement | null>(null);
-    const modeParam = useMemo(() => new URLSearchParams(window.location.search).get('mode'), []);
+    const [searchParams] = useSearchParams();
+    const modeParam = searchParams.get('mode');
     const windowMode = modeParam === 'full' ? 'full' : 'minimal';
 
     // Window background handling (minimal uses solid bg, full uses transparent)

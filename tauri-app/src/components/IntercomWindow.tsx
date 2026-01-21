@@ -265,6 +265,7 @@ const IntercomWindow = () => {
             if (ws !== wsRef.current) return;
             try {
                 if (event.data === 'pong') return;
+                console.log('[Intercom] WS Message received:', event.data); // Debug RAW message
                 const msg = JSON.parse(event.data);
                 handleWsMessage(msg);
             } catch (e) {
@@ -302,6 +303,7 @@ const IntercomWindow = () => {
                 }
                 break;
             case 'srs_answer':
+                console.log('[Intercom] srs_answer received:', msg);
                 handleSrsAnswer(msg);
                 break;
             case 'voice_speaking':
@@ -375,7 +377,12 @@ const IntercomWindow = () => {
 
     // ================== Push Stream (Talk) ==================
     const startPublishing = async () => {
+        console.log('[Intercom] startPublishing triggered');
+        console.log('[Intercom] RoomInfo:', roomInfo);
+        console.log('[Intercom] WS State:', wsRef.current?.readyState);
+
         if (!roomInfo || !wsRef.current) {
+            console.error('[Intercom] Start failed: Room not ready or WS disconnected');
             log('无法推流: 房间未就绪或WS未连接', 'error');
             return;
         }
@@ -433,9 +440,11 @@ const IntercomWindow = () => {
                 room_id: roomInfo.room_id,
                 group_id: roomInfo.group_id
             };
+            console.log('[Intercom] Sending srs_publish_offer:', msg);
             wsRef.current.send(JSON.stringify(msg));
 
         } catch (e: any) {
+            console.error('[Intercom] Push Stream Error:', e);
             log(`推流失败: ${e.message}`, 'error');
             setIsPublishing(false);
             isTalkingRef.current = false;
@@ -443,6 +452,7 @@ const IntercomWindow = () => {
     };
 
     const stopPublishing = () => {
+        console.log('[Intercom] stopPublishing triggered. isTalking:', isTalkingRef.current);
         if (!isTalkingRef.current) return; // Ignore redundant stops
 
         log('停止推流', 'info');

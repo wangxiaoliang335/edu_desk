@@ -21,6 +21,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "lucide-react": "^0.562.0",
+    "mpegts.js": "^1.8.0",
     "postcss": "^8.4.35",
     "react": "^19.1.0",
     "react-calendar": "^6.0.0",

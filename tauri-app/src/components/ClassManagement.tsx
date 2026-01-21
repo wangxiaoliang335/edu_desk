@@ -507,8 +507,8 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
                         </TreeNode>
                         <TreeNode label="教师" count={friends.length} icon={<User size={18} />} defaultOpen={true}>
                             {friends.slice(0, 100).map((friend, idx) => {
-                                const tInfo = friend?.teacher_info || {};
-                                const uDetail = friend?.user_details || {};
+                                const tInfo = friend?.teacher_info;
+                                const uDetail = friend?.user_details;
                                 return (
                                     <LeafNode
                                         key={idx}

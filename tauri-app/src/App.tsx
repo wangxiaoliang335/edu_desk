@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { HashRouter, Routes, Route } from "react-router-dom";
 import Login from "./components/Login";
 import Dashboard from "./components/Dashboard";
 import ClassChatWindow from "./components/ClassChatWindow";
@@ -11,6 +11,8 @@ import TeacherSchedule from "./components/TeacherSchedule";
 import SchoolCalendar from "./components/SchoolCalendar";
 import CountdownWindow from "./components/CountdownWindow";
 import CountdownEditWindow from "./components/CountdownEditWindow";
+import DesktopBall from "./components/DesktopBall";
+import ToolPanel from "./components/ToolPanel";
 
 import { invoke } from "@tauri-apps/api/core";
 import { loginTIM, getTIMGroups, setCachedTIMGroups } from "./utils/tim";
@@ -113,7 +115,7 @@ function MainApp() {
 // Root App Component dealing with Routing
 function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
         <Route path="/" element={<MainApp />} />
         <Route path="/class/schedule/:groupclassId" element={<ClassScheduleWindow />} />
@@ -125,8 +127,10 @@ function App() {
         <Route path="/school-calendar" element={<SchoolCalendar />} />
         <Route path="/countdown" element={<CountdownWindow />} />
         <Route path="/countdown-edit" element={<CountdownEditWindow />} />
+        <Route path="/desktop-ball" element={<DesktopBall />} />
+        <Route path="/tool-panel" element={<ToolPanel />} />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
 

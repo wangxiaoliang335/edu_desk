@@ -313,6 +313,9 @@ const DesktopFileBox = () => {
                 if (paths && paths.length > 0) {
                     try {
                         const boxPath = await getBoxPath(boxId);
+                        if (!(await exists(boxPath))) {
+                            await mkdir(boxPath, { recursive: true });
+                        }
                         console.log('[FileBox] Target box path:', boxPath);
 
                         for (const srcPath of paths) {
@@ -552,8 +555,8 @@ const DesktopFileBox = () => {
                     <div
                         key={file.name}
                         className={`flex flex-col items-center gap-2 group cursor-pointer p-3 rounded-2xl transition-all duration-200 active:scale-95 ring-1 ${selectedPaths.includes(file.path)
-                                ? 'bg-sage-50 ring-sage-300 shadow-lg shadow-sage-100/40'
-                                : 'hover:bg-white hover:shadow-lg hover:shadow-sage-200/50 ring-transparent hover:ring-sage-100'
+                            ? 'bg-sage-50 ring-sage-300 shadow-lg shadow-sage-100/40'
+                            : 'hover:bg-white hover:shadow-lg hover:shadow-sage-200/50 ring-transparent hover:ring-sage-100'
                             }`}
                         onDoubleClick={() => handleOpenFile(file)}
                         onContextMenu={(e) => {
@@ -613,6 +616,7 @@ const DesktopFileBox = () => {
                     </div>
                 ))}
             </div>
+
 
             {/* Custom Context Menu */}
             {contextMenu && (
