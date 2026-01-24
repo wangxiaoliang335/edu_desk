@@ -198,8 +198,6 @@ const ClassScheduleWindow = () => {
                         if (msg.pull_url && msg.pull_url.startsWith('srt://')) {
                             console.log("[MonitorFlow] Converting SRT to HTTP-FLV...");
                             try {
-                                // Robust parsing using regex to avoid '#' truncation by URL constructor
-                                // srt://47.100.126.194:10080?streamid=#!::r=live/00001101601_1768980448,m=request
                                 const hostMatch = msg.pull_url.match(/srt:\/\/([^:?\/]+)/);
                                 const streamIdMatch = msg.pull_url.match(/streamid=([^&]+)/);
 
@@ -209,8 +207,7 @@ const ClassScheduleWindow = () => {
                                     const rMatch = streamid.match(/r=([^,]+)/);
 
                                     if (rMatch && rMatch[1]) {
-                                        const streamKey = rMatch[1]; // e.g. "live/00001101601_1768980448"
-                                        // Assuming standard SRS HTTP port 8080
+                                        const streamKey = rMatch[1];
                                         finalUrl = `http://${ip}:8080/${streamKey}.flv`;
                                         console.log(`[MonitorFlow] Converted to: ${finalUrl}`);
                                     }
@@ -218,6 +215,9 @@ const ClassScheduleWindow = () => {
                             } catch (e) {
                                 console.error('[MonitorFlow] URL Conversion Failed', e);
                             }
+                        } else if (msg.pull_url && msg.pull_url.startsWith('webrtc://')) {
+                            console.log("[MonitorFlow] Using direct WebRTC URL:", msg.pull_url);
+                            finalUrl = msg.pull_url;
                         }
 
                         setPullUrl(finalUrl);
@@ -338,6 +338,19 @@ const ClassScheduleWindow = () => {
 
             console.log(`[ClassSchedule] Fetching Info for ID: ${groupclassId}, Teacher: ${teacherId}`);
 
+            // Helper to normalize subjects (same as in ClassInfoModal)
+            const normalizeSubjects = (value: any): string[] => {
+                if (Array.isArray(value)) return value.filter((v) => typeof v === 'string' && v.trim());
+                if (typeof value === 'string') {
+                    try {
+                        const parsed = JSON.parse(value);
+                        if (Array.isArray(parsed)) return parsed.filter((v) => typeof v === 'string' && v.trim());
+                    } catch { }
+                    return value.split(',').map((v) => v.trim()).filter(Boolean);
+                }
+                return [];
+            };
+
             // Parallel requests to try to find the name
             const p1 = invoke<string>('get_group_members', { groupId: groupclassId, token })
                 .then(resStr => {
@@ -346,6 +359,20 @@ const ClassScheduleWindow = () => {
                         const data = res.data || {};
                         const list = data.members || [];
                         setStudentCount(list.length || data.group_info?.MemberNum || 0);
+
+                        // Sync teach subjects for current teacher
+                        if (teacherId && list.length > 0) {
+                            const self = list.find((m: any) => String(m.user_id || m.id || m.teacher_unique_id) === String(teacherId));
+                            if (self && self.teach_subjects) {
+                                const normalized = normalizeSubjects(self.teach_subjects);
+                                if (normalized.length > 0) {
+                                    console.log("[ClassSchedule] Synced teach subjects from server:", normalized);
+                                    setTeachSubjects(normalized);
+                                    localStorage.setItem(`teach_subjects_${groupclassId}`, JSON.stringify(normalized));
+                                }
+                            }
+                        }
+
                         const name = data.group_info?.Name || data.group_info?.GroupName;
                         console.log("[ClassSchedule] p1 (Members) found:", name);
                         return name;
@@ -461,26 +488,30 @@ const ClassScheduleWindow = () => {
             try {
                 // Construct logic from ScheduleDialog.h:2658
                 const userInfoStr = localStorage.getItem('user_info');
-                let userInfo = {} as any;
+                let teacherId = localStorage.getItem('teacher_unique_id') || "";
+                let senderName = "Teacher";
+
                 if (userInfoStr) {
-                    try { userInfo = JSON.parse(userInfoStr); } catch (e) { }
+                    try {
+                        const u = JSON.parse(userInfoStr);
+                        teacherId = u.teacher_unique_id || u.data?.teacher_unique_id || teacherId || "";
+                        senderName = u.name || u.data?.name || u.strName || "Teacher";
+                    } catch (e) { }
                 }
 
-                if (!groupclassId || !userInfo.teacher_unique_id) {
+                if (!groupclassId || !teacherId) {
                     alert("信息不完整，无法发送关机指令");
+                    console.error("[Shutdown] Missing info:", { groupclassId, teacherId });
                     return;
                 }
 
                 const payload = {
                     type: "remote_shutdown",
                     action: "shutdown",
-                    class_id: "", // TODO: Need class_id, but current param is groupclassId (which is group_id). 
-                    // Qt checks m_classid. In frontend we only have groupclassId from URL (which is groupId).
-                    // We might need to fetch class info to get class_id, or maybe groupclassId IS adequate or mapped.
-                    // For now use groupclassId as group_id.
+                    class_id: groupclassId ? (groupclassId.endsWith('01') ? groupclassId.slice(0, -2) : groupclassId) : "",
                     group_id: groupclassId,
-                    sender_id: userInfo.teacher_unique_id,
-                    sender_name: userInfo.strName || userInfo.name || "Teacher",
+                    sender_id: teacherId,
+                    sender_name: senderName,
                     timestamp: Math.floor(Date.now() / 1000)
                 };
 
@@ -688,42 +719,44 @@ const ClassScheduleWindow = () => {
                             </div>
 
                             {/* Right Column - Tools Grid */}
-                            <div className="col-span-4 bg-white/60 backdrop-blur rounded-[1.5rem] border border-white/60 p-5 flex flex-col shadow-inner">
+                            <div className="col-span-4 bg-white/60 backdrop-blur rounded-[1.5rem] border border-white/60 p-5 flex flex-col shadow-inner overflow-hidden">
                                 <h3 className="text-sm font-bold text-ink-500 mb-4 flex items-center gap-2 px-1">
                                     <Layers size={14} /> 快捷工具
                                 </h3>
-                                <div className="grid grid-cols-2 gap-3 flex-1 content-start">
-                                    {[
-                                        { title: "摄像头", icon: <Camera size={18} />, color: monitorStatus === 'monitoring' ? "text-red-500 bg-red-50" : (monitorStatus === 'requesting' ? "text-gray-500 bg-gray-50" : "text-emerald-500 bg-emerald-50"), onClick: handleToggleMonitor },
-                                        { title: "作业管理", icon: <BookOpen size={18} />, color: "text-purple-500 bg-purple-50", onClick: openHomeworkModal },
-                                        { title: "语音对讲", icon: <Mic size={18} />, color: "text-red-500 bg-red-50", onClick: handleOpenIntercom },
-                                        { title: "更多导入", icon: <FileSpreadsheet size={18} />, color: "text-orange-500 bg-orange-50", onClick: () => setIsCustomListOpen(true) },
-                                        { title: "随机点名", icon: <Shuffle size={18} />, color: "text-cyan-500 bg-cyan-50", onClick: () => setIsRandomCallOpen(true) },
-                                        { title: "倒计时", icon: <Clock size={18} />, color: "text-rose-500 bg-rose-50", onClick: () => setIsCountdownOpen(true) },
-                                        { title: "小组评价", icon: <Award size={18} />, color: "text-violet-500 bg-violet-50", onClick: () => setIsGroupScoreOpen(true) },
-                                        { title: "座位导入", icon: <Grid size={18} />, color: "text-blue-500 bg-blue-50", onClick: () => setIsStudentImportOpen(true) },
-                                        { title: "成绩分析", icon: <BarChart2 size={18} />, color: "text-indigo-500 bg-indigo-50", onClick: () => setIsScoreAnalysisOpen(true) },
-                                        { title: "智能排座", icon: <ArrowUpDown size={18} />, color: "text-teal-500 bg-teal-50", onClick: () => setIsArrangeSeatOpen(true) },
-                                    ].map((tool, idx) => (
-                                        <button
-                                            key={idx}
-                                            onClick={tool.onClick}
-                                            className="h-16 bg-white rounded-2xl border border-transparent shadow-sm hover:border-sage-200 hover:shadow-md transition-all flex items-center gap-3 px-3.5 group"
-                                        >
-                                            <div className={`p-2.5 rounded-xl ${tool.color} group-hover:scale-110 transition-transform`}>
-                                                {tool.icon}
+                                <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
+                                    <div className="grid grid-cols-2 gap-3 content-start">
+                                        <button onClick={handleRemoteShutdown} className="h-16 bg-red-50 rounded-2xl border border-red-100 shadow-sm hover:bg-red-500 hover:text-white transition-all flex items-center gap-3 px-3.5 group relative overflow-hidden">
+                                            <div className={`absolute top-2 right-2 w-2 h-2 rounded-full ${isWSConnected ? 'bg-green-500' : 'bg-red-400'} ring-2 ring-white`}></div>
+                                            <div className="p-2.5 rounded-xl bg-white text-red-500 group-hover:bg-white/20 group-hover:text-white transition-all">
+                                                <Power size={18} />
                                             </div>
-                                            <span className="text-xs font-bold text-ink-600">{tool.title}</span>
+                                            <span className="text-xs font-bold text-red-600 group-hover:text-white transition-colors">远程关机</span>
                                         </button>
-                                    ))}
 
-                                    <button onClick={handleRemoteShutdown} className="h-16 bg-white rounded-2xl border border-transparent shadow-sm hover:border-red-200 hover:shadow-md transition-all flex items-center gap-3 px-3.5 group relative overflow-hidden">
-                                        <div className={`absolute top-2 right-2 w-2 h-2 rounded-full ${isWSConnected ? 'bg-green-500' : 'bg-red-400'} ring-2 ring-white`}></div>
-                                        <div className="p-2.5 rounded-xl bg-red-50 text-red-500 group-hover:bg-red-500 group-hover:text-white transition-all">
-                                            <Power size={18} />
-                                        </div>
-                                        <span className="text-xs font-bold text-ink-600 group-hover:text-red-500 transition-colors">远程关机</span>
-                                    </button>
+                                        {[
+                                            { title: "摄像头", icon: <Camera size={18} />, color: monitorStatus === 'monitoring' ? "text-red-500 bg-red-50" : (monitorStatus === 'requesting' ? "text-gray-500 bg-gray-50" : "text-emerald-500 bg-emerald-50"), onClick: handleToggleMonitor },
+                                            { title: "作业管理", icon: <BookOpen size={18} />, color: "text-purple-500 bg-purple-50", onClick: openHomeworkModal },
+                                            { title: "语音对讲", icon: <Mic size={18} />, color: "text-red-500 bg-red-50", onClick: handleOpenIntercom },
+                                            { title: "更多导入", icon: <FileSpreadsheet size={18} />, color: "text-orange-500 bg-orange-50", onClick: () => setIsCustomListOpen(true) },
+                                            { title: "随机点名", icon: <Shuffle size={18} />, color: "text-cyan-500 bg-cyan-50", onClick: () => setIsRandomCallOpen(true) },
+                                            { title: "倒计时", icon: <Clock size={18} />, color: "text-rose-500 bg-rose-50", onClick: () => setIsCountdownOpen(true) },
+                                            { title: "小组评价", icon: <Award size={18} />, color: "text-violet-500 bg-violet-50", onClick: () => setIsGroupScoreOpen(true) },
+                                            { title: "座位导入", icon: <Grid size={18} />, color: "text-blue-500 bg-blue-50", onClick: () => setIsStudentImportOpen(true) },
+                                            { title: "成绩分析", icon: <BarChart2 size={18} />, color: "text-indigo-500 bg-indigo-50", onClick: () => setIsScoreAnalysisOpen(true) },
+                                            { title: "智能排座", icon: <ArrowUpDown size={18} />, color: "text-teal-500 bg-teal-50", onClick: () => setIsArrangeSeatOpen(true) },
+                                        ].map((tool, idx) => (
+                                            <button
+                                                key={idx}
+                                                onClick={tool.onClick}
+                                                className="h-16 bg-white rounded-2xl border border-transparent shadow-sm hover:border-sage-200 hover:shadow-md transition-all flex items-center gap-3 px-3.5 group"
+                                            >
+                                                <div className={`p-2.5 rounded-xl ${tool.color} group-hover:scale-110 transition-transform`}>
+                                                    {tool.icon}
+                                                </div>
+                                                <span className="text-xs font-bold text-ink-600">{tool.title}</span>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -755,7 +788,11 @@ const ClassScheduleWindow = () => {
                         </div>
                         <div className="flex-1 overflow-hidden p-4 relative bg-black rounded-xl">
                             {monitorStatus === 'monitoring' ? (
-                                <FlvPlayer url={pullUrl} className={className} onClose={handleToggleMonitor} />
+                                pullUrl.startsWith('webrtc://') ? (
+                                    <WebRtcPlayer url={pullUrl} className={className} onClose={handleToggleMonitor} />
+                                ) : (
+                                    <FlvPlayer url={pullUrl} className={className} onClose={handleToggleMonitor} />
+                                )
                             ) : (
                                 <SeatMap classId={groupclassId} key={seatMapKey} colorMap={seatColorMap} isHeatmapMode={seatAnalysisMode === 'gradient'} />
                             )}
@@ -941,6 +978,156 @@ const ClassScheduleWindow = () => {
                 classId={groupclassId}
                 groupId={groupclassId}
             />
+        </div>
+    );
+};
+
+const WebRtcPlayer = ({ url, className, onClose }: { url: string, className: string, onClose: () => void }) => {
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const pcRef = useRef<RTCPeerConnection | null>(null);
+    const [error, setError] = useState("");
+    const [retryCount, setRetryCount] = useState(0);
+    const maxRetries = 10; // Increased for hardware/push delay
+
+    useEffect(() => {
+        if (!url || !videoRef.current) return;
+        const videoElement = videoRef.current;
+        console.log("[MonitorFlow] WebRtcPlayer mounted. URL:", url, "Retry:", retryCount);
+
+        const stop = () => {
+            if (pcRef.current) {
+                console.log("[MonitorFlow] Closing WebRTC connection.");
+                pcRef.current.close();
+                pcRef.current = null;
+            }
+        };
+
+        const startPlaying = async () => {
+            try {
+                // 1. Parse IP from webrtc://HOST/app/stream
+                const match = url.match(/webrtc:\/\/([^/]+)/);
+                if (!match) throw new Error("无效的 WebRTC 地址目标 (Invalid URL)");
+                const host = match[1];
+                // Standard SRS API port is 1985
+                const api = `http://${host}:1985/rtc/v1/play/`;
+
+                console.log("[MonitorFlow] WebRTC SDP Offer Exchange ->", api);
+
+                // 2. Create PC
+                const pc = new RTCPeerConnection();
+                pcRef.current = pc;
+
+                pc.ontrack = (event) => {
+                    console.log("[MonitorFlow] Received WebRTC Track:", event.track.kind);
+                    if (videoElement && event.streams[0]) {
+                        videoElement.srcObject = event.streams[0];
+                    }
+                };
+
+                // Add transceivers for both video and audio for better compatibility
+                pc.addTransceiver("video", { direction: "recvonly" });
+                pc.addTransceiver("audio", { direction: "recvonly" });
+
+                // 4. Create local offer
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                // 5. Exchange SDP via SRS Signal API
+                const response = await fetch(api, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        api: api,
+                        streamurl: url,
+                        sdp: offer.sdp
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`网络请求失败: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                if (data.code !== 0) {
+                    // SRS Code 400 usually means 'Stream Not Found', common during startup
+                    const errMsg = data.message || data.desc || data.server || "未知错误";
+                    throw new Error(`SRS Error ${data.code}: ${errMsg}`);
+                }
+
+                // 6. Set Remote Answer
+                console.log("[MonitorFlow] WebRTC Answer Accepted.");
+                await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: data.sdp }));
+
+            } catch (e: any) {
+                console.error("[MonitorFlow] WebRTC Play Failed:", e);
+                if (retryCount < maxRetries) {
+                    setError(`监控流加载中，正在重试 (${retryCount + 1}/${maxRetries})...`);
+                    setTimeout(() => {
+                        setRetryCount(prev => prev + 1);
+                    }, 2500); // 2.5s interval
+                } else {
+                    setError("播放失败: " + (e.message || "请求超时"));
+                }
+            }
+        };
+
+        const handlePlaying = () => {
+            console.log("[MonitorFlow] WebRTC Video is PLAYING - clearing overlays.");
+            setError("");
+            setRetryCount(0);
+        };
+        videoElement.addEventListener('playing', handlePlaying);
+
+        startPlaying();
+
+        return () => {
+            videoElement.removeEventListener('playing', handlePlaying);
+            stop();
+        };
+    }, [url, retryCount]);
+
+    return (
+        <div className="absolute inset-0 bg-black flex flex-col items-center justify-center text-white z-50 overflow-hidden rounded-xl">
+            <div className="absolute top-4 left-4 z-20 flex items-center gap-2 bg-black/40 backdrop-blur px-3 py-1.5 rounded-lg text-xs font-bold font-mono">
+                <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+                RTC: {className}
+                {retryCount > 0 && <span className="text-amber-400 ml-2">正在重连...</span>}
+            </div>
+
+            {error && !error.includes("重连") ? (
+                <div className="text-center p-8 bg-zinc-900 rounded-2xl border border-zinc-800">
+                    <Video size={48} className="text-zinc-600 mb-4 mx-auto" />
+                    <p className="text-red-400 font-bold mb-2">WebRTC 播放失败</p>
+                    <p className="text-zinc-500 text-xs font-mono max-w-md break-all">{error}</p>
+                    <p className="text-zinc-600 text-xs mt-2">{url}</p>
+                </div>
+            ) : (
+                <>
+                    {error.includes("重连") && (
+                        <div className="absolute inset-0 z-10 bg-black/60 backdrop-blur-sm flex items-center justify-center">
+                            <div className="text-center">
+                                <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                                <p className="text-sm font-bold text-blue-200">{error}</p>
+                            </div>
+                        </div>
+                    )}
+                    <video
+                        ref={videoRef}
+                        className="w-full h-full object-contain bg-black"
+                        controls
+                        autoPlay
+                        muted={false}
+                    />
+                </>
+            )}
+
+            <button
+                onClick={onClose}
+                className="absolute bottom-8 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white px-6 py-2.5 rounded-xl font-bold transition-all border border-white/10 hover:border-white/30 flex items-center gap-2 shadow-xl group"
+            >
+                <Power size={16} className="text-red-400 group-hover:text-red-300 transition-colors" />
+                停止监控
+            </button>
         </div>
     );
 };

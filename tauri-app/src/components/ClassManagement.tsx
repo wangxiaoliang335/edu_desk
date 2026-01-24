@@ -5,7 +5,7 @@ import { listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { ChevronRight, ChevronDown, User, Users, School, MessageCircle, LogOut, UserMinus, Bell } from 'lucide-react';
 import { loginTIM, getTIMGroups, setCachedTIMGroups } from '../utils/tim';
-import { getLatestNotifications } from '../utils/websocket';
+import { useWebSocket } from '../context/WebSocketContext';
 import NotificationCenterModal, { NotificationItem } from './modals/NotificationCenterModal';
 
 interface ClassInfo {
@@ -101,6 +101,7 @@ const LeafNode = ({ label, subLabel, icon, onClick, onDoubleClick, onContextMenu
 };
 
 const ClassManagement = ({ userInfo }: { userInfo: any }) => {
+    const { latestNotifications } = useWebSocket();
     // console.log('ClassManagement Rendered. userInfo:', JSON.stringify(userInfo));
     const [activeTab, setActiveTab] = useState<'contacts' | 'groups'>('contacts');
     const [classes, setClasses] = useState<ClassInfo[]>([]);
@@ -129,7 +130,7 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
             }
 
             const webview = new WebviewWindow(label, {
-                url: `/chat/normal/${encodeURIComponent(groupId)}`,
+                url: `index.html#/chat/normal/${encodeURIComponent(groupId)}`,
                 title: groupName || "群聊",
                 width: 800,
                 height: 600,
@@ -154,10 +155,9 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
     // Websocket Listener for Notifications
     useEffect(() => {
         // Load initial cached notifications
-        const cached = getLatestNotifications();
-        if (cached && cached.length > 0) {
-            console.log("[Dashboard] Loaded cached notifications:", cached.length);
-            setNotifications(cached as NotificationItem[]);
+        if (latestNotifications && latestNotifications.length > 0) {
+            console.log("[Dashboard] Loaded cached notifications:", latestNotifications.length);
+            setNotifications(latestNotifications as NotificationItem[]);
         }
 
         const handleWSMessage = (event: CustomEvent) => {
@@ -369,6 +369,7 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
                     const loginSuccess = await loginTIM(timUserId, userSig);
                     if (loginSuccess) {
                         const timGroups = await getTIMGroups();
+                        console.log('[ClassManagement] TIM Raw Groups:', timGroups);
                         // Cache the groups for CreateClassGroupModal to use
                         setCachedTIMGroups(timGroups);
 
@@ -389,13 +390,11 @@ const ClassManagement = ({ userInfo }: { userInfo: any }) => {
                                 group_id: groupId,
                                 group_name: timGroup.name || '未命名群聊',
                                 face_url: timGroup.avatar || '',
-                                // Classification Logic:
-                                // 1. "ChatRoom" or "Meeting" -> Class Group (based on C++ Meeting type mapping to ChatRoom in SDK)
-                                // 2. "Public" -> Normal Group
-                                // 3. Fallback: ID check
                                 is_class_group: groupType === 'Meeting' || groupType === 'ChatRoom' || groupId.endsWith('01'),
                                 classid: undefined
                             };
+
+                            console.log(`[ClassManagement] Group Detail: ID=${groupId}, Name=${groupInfo.group_name}, Type=${groupType}, isClass=${groupInfo.is_class_group}`);
 
                             // Check ownership
                             // Priority: Server Data > TIM Data

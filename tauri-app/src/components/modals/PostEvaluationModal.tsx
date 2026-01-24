@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { X, ClipboardCheck, Send } from 'lucide-react';
 import { useDraggable } from '../../hooks/useDraggable';
-import { sendMessageWS } from '../../utils/websocket';
+import { useWebSocket } from '../../context/WebSocketContext';
 
 interface Props {
     isOpen: boolean;
@@ -12,6 +12,7 @@ interface Props {
 }
 
 const PostEvaluationModal = ({ isOpen, onClose, subject, classId, groupId }: Props) => {
+    const { sendMessage } = useWebSocket();
     const { style, handleMouseDown } = useDraggable();
     const [content, setContent] = useState("");
     const [sending, setSending] = useState(false);
@@ -47,8 +48,8 @@ const PostEvaluationModal = ({ isOpen, onClose, subject, classId, groupId }: Pro
 
             const messageObj: Record<string, string> = {
                 type: "post_class_evaluation",
-                class_id: classId,
-                subject: subject,
+                class_id: classId ? (classId.endsWith('01') ? classId.slice(0, -2) : classId) : "",
+                subject: subject.trim(),
                 content: content.trim(),
                 date: new Date().toISOString().split('T')[0],
                 sender_name: senderName,
@@ -59,7 +60,7 @@ const PostEvaluationModal = ({ isOpen, onClose, subject, classId, groupId }: Pro
             const wsMessage = `to:${groupId}:${JSON.stringify(messageObj)}`;
 
             console.log('[PostEvaluationModal] Sending:', wsMessage);
-            sendMessageWS(wsMessage);
+            sendMessage(wsMessage);
 
             setContent("");
             onClose();

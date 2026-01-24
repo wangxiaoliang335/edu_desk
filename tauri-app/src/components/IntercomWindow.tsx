@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Mic, MicOff, Volume2, X, Activity, Terminal } from 'lucide-react';
+import { useWebSocket } from '../context/WebSocketContext';
 
 // Types
 interface Member {
@@ -21,7 +22,12 @@ interface RoomInfo {
 
 const IntercomWindow = () => {
     const { groupId } = useParams<{ groupId: string }>();
+    const { sendMessage, isConnected } = useWebSocket();
     const [statusLogs, setStatusLogs] = useState<{ msg: string; type: 'info' | 'success' | 'date' | 'error' | 'warn' }[]>([]);
+
+    useEffect(() => {
+        log(`WebSocket 状态: ${isConnected ? '已连接' : '未连接'}`, isConnected ? 'success' : 'warn');
+    }, [isConnected]);
     const [members, setMembers] = useState<Member[]>([]);
     const [isPublishing, setIsPublishing] = useState(false);
     const [intercomEnabled, setIntercomEnabled] = useState(false); // Can talk?
@@ -29,8 +35,7 @@ const IntercomWindow = () => {
     const [roomInfo, setRoomInfo] = useState<RoomInfo | null>(null);
     const [speakingUser, setSpeakingUser] = useState<string | null>(null);
 
-    // Refs for WebRTC and WS
-    const wsRef = useRef<WebSocket | null>(null);
+    // Refs for WebRTC
     const publishPcRef = useRef<RTCPeerConnection | null>(null);
     const subscribePcRef = useRef<RTCPeerConnection | null>(null);
     const publishStreamRef = useRef<MediaStream | null>(null);
@@ -46,7 +51,7 @@ const IntercomWindow = () => {
         }
     };
 
-    // Initialize: Fetch Data -> Connect WS -> (Wait for room) -> Pull Stream
+    // Initialize: Fetch Data -> (Wait for room) -> Pull Stream
     useEffect(() => {
         const init = async () => {
             if (!groupId) return;
@@ -164,8 +169,8 @@ const IntercomWindow = () => {
                                             log(`房间创建成功 ID: ${r.room_id}`, 'success');
                                             setRoomInfo({
                                                 room_id: r.room_id,
-                                                whip_url: r.whip_url,
-                                                whep_url: r.whep_url,
+                                                whip_url: r.whip_url || r.publish_url,
+                                                whep_url: r.whep_url || r.play_url,
                                                 stream_name: r.stream_name || r.room_id,
                                                 group_id: groupId
                                             });
@@ -185,20 +190,26 @@ const IntercomWindow = () => {
                 log(`初始化数据失败: ${e}`, 'error');
             }
 
-            // 3. Connect WebSocket
-            connectWebSocket();
+            // Request Mic Permission preemptively
+            requestMicPermission();
         };
 
         init();
 
+        const handleWSMessage = (event: any) => {
+            try {
+                const msg = JSON.parse(event.detail);
+                handleWsMessage(msg);
+            } catch (e) {
+                console.error("WS Parse error", e);
+            }
+        };
 
+        window.addEventListener('ws-message', handleWSMessage as EventListener);
 
         return () => {
-            // Cleanup
-            if (wsRef.current) {
-                wsRef.current.close();
-                wsRef.current = null;
-            }
+            window.removeEventListener('ws-message', handleWSMessage as EventListener);
+            // Cleanup WebRTC
             if (publishPcRef.current) {
                 publishPcRef.current.close();
                 publishPcRef.current = null;
@@ -211,115 +222,70 @@ const IntercomWindow = () => {
                 publishStreamRef.current.getTracks().forEach(t => t.stop());
                 publishStreamRef.current = null;
             }
-            // subscribeStreamRef tracks are remote, handled by PC close usually
         };
     }, [groupId]);
 
-    // 4. Auto-pull stream when ready (Top Level)
+    // Pull stream when ready or speaking
     useEffect(() => {
-        if (roomInfo?.whep_url && wsRef.current && wsRef.current.readyState === WebSocket.OPEN && !subscribePcRef.current) {
-            log('检测到房间信息且WS已连接，自动拉流...', 'info');
-            startPullStream(roomInfo.whep_url, roomInfo);
+        if (roomInfo?.whep_url && isConnected && !subscribePcRef.current) {
+            log('检测到房间信息且WS已连接，尝试预加载拉流...', 'info');
+            // We can pre-pull or wait for voice_speaking. 
+            // The protocol says pull when voice_speaking. Let's do both or follow protocol strictly.
+            // Following protocol strictly might be safer to save server bandwidth.
         }
-    }, [roomInfo]); // Depends on roomInfo change (which happens after fetch)
-
-    const connectWebSocket = () => {
-        if (wsRef.current) {
-            console.log('WS: Already connected or connecting');
-            return;
-        }
-
-        let userId = localStorage.getItem('teacher_unique_id');
-
-        if (!userId) {
-            const uStr = localStorage.getItem('user_info');
-            if (uStr) {
-                try {
-                    const u = JSON.parse(uStr);
-                    userId = u.teacher_unique_id;
-                } catch (e) {
-                    console.error("Parse user_info failed", e);
-                }
-            }
-        }
-
-        if (!userId) {
-            log('无法连接WS: 未获取到用户ID', 'error');
-            return;
-        }
-
-        const url = `ws://47.100.126.194:5000/ws/${userId}`;
-        log(`连接WebSocket: ${url}`, 'info');
-
-        const ws = new WebSocket(url);
-        wsRef.current = ws;
-
-        ws.onopen = () => {
-            if (ws !== wsRef.current) return;
-            log('WebSocket 已连接', 'success');
-            // Request Mic Permission preemptively
-            requestMicPermission();
-        };
-
-        ws.onmessage = (event) => {
-            if (ws !== wsRef.current) return;
-            try {
-                if (event.data === 'pong') return;
-                console.log('[Intercom] WS Message received:', event.data); // Debug RAW message
-                const msg = JSON.parse(event.data);
-                handleWsMessage(msg);
-            } catch (e) {
-                console.error("WS Parse error", e);
-            }
-        };
-
-        ws.onclose = () => {
-            if (ws !== wsRef.current) return;
-            log('WebSocket 已断开', 'error');
-        };
-
-        ws.onerror = (e) => {
-            if (ws !== wsRef.current) return;
-            // Only log genuine errors from the active socket
-            log('WebSocket 错误', 'error');
-        };
-    };
+    }, [roomInfo, isConnected]);
 
     const handleWsMessage = (msg: any) => {
+        console.log('[Intercom] Processing WS Message:', msg);
         switch (msg.type) {
             case 'room_created':
             case '6':
-                log(`房间创建成功 ID: ${msg.room_id}`, 'success');
+                log(`收到房间信息 ID: ${msg.room_id}`, 'success');
                 const newInfo = {
                     room_id: msg.room_id,
-                    whip_url: msg.whip_url,
-                    whep_url: msg.whep_url,
+                    whip_url: msg.whip_url || msg.publish_url,
+                    whep_url: msg.whep_url || msg.play_url,
                     stream_name: msg.stream_name || msg.room_id,
                     group_id: msg.group_id || groupId || ""
                 };
+                console.log('[Intercom] Room Info Updated:', newInfo);
                 setRoomInfo(newInfo);
-                if (msg.whep_url) {
-                    startPullStream(msg.whep_url, newInfo);
-                }
                 break;
             case 'srs_answer':
                 console.log('[Intercom] srs_answer received:', msg);
                 handleSrsAnswer(msg);
                 break;
             case 'voice_speaking':
+                console.log('[Intercom] voice_speaking received:', msg);
                 if (msg.is_speaking) {
                     setSpeakingUser(msg.user_id);
-                } else if (speakingUser === msg.user_id) {
-                    setSpeakingUser(null);
+                    // Automatic pull stream if someone starts talking and we have room info
+                    if (roomInfo && roomInfo.whep_url && !subscribePcRef.current) {
+                        log(`${msg.user_name || msg.user_id} 正在说话，准备拉流...`, 'info');
+                        startPullStream(roomInfo.whep_url, roomInfo);
+                    }
+                } else {
+                    if (speakingUser === msg.user_id || !msg.user_id) {
+                        setSpeakingUser(null);
+                        // If no one is speaking, we might want to close the pull connection to save server resources
+                        if (subscribePcRef.current) {
+                            log('停止拉流 (无人说话)', 'info');
+                            subscribePcRef.current.close();
+                            subscribePcRef.current = null;
+                        }
+                    }
                 }
                 break;
             case 'temp_room_closed':
                 log('房间已解散', 'warn');
                 setRoomInfo(null);
                 stopPublishing(); // Stop if speaking
+                if (subscribePcRef.current) {
+                    subscribePcRef.current.close();
+                    subscribePcRef.current = null;
+                }
                 break;
             default:
-                // console.log("Unhandled Msg", msg);
                 break;
         }
     };
@@ -337,7 +303,7 @@ const IntercomWindow = () => {
 
     // ================== Pull Stream (Listen) ==================
     const startPullStream = async (url: string, rInfo: RoomInfo) => {
-        if (!wsRef.current) return;
+        if (!isConnected) return;
 
         try {
             if (subscribePcRef.current) subscribePcRef.current.close();
@@ -346,7 +312,7 @@ const IntercomWindow = () => {
             subscribePcRef.current = pc;
 
             pc.ontrack = (ev) => {
-                log('收到音频流', 'success');
+                log('收到音频流，开始播放', 'success');
                 const audio = document.createElement('audio');
                 audio.srcObject = ev.streams[0];
                 audio.autoplay = true;
@@ -361,29 +327,26 @@ const IntercomWindow = () => {
 
             const streamName = rInfo.stream_name || rInfo.room_id;
             const msg = {
-                type: "srs_play_offer",
+                type: "srs_play",
                 sdp: pc.localDescription?.sdp,
                 stream_name: streamName,
                 room_id: rInfo.room_id,
                 group_id: rInfo.group_id
             };
-            wsRef.current.send(JSON.stringify(msg));
-            log('发送拉流请求...', 'info');
+            sendMessage(JSON.stringify(msg));
+            log('发送拉流请求 (Type: srs_play)...', 'info');
 
         } catch (e: any) {
             log(`拉流失败: ${e.message}`, 'error');
+            subscribePcRef.current = null;
         }
     };
 
     // ================== Push Stream (Talk) ==================
     const startPublishing = async () => {
-        console.log('[Intercom] startPublishing triggered');
-        console.log('[Intercom] RoomInfo:', roomInfo);
-        console.log('[Intercom] WS State:', wsRef.current?.readyState);
-
-        if (!roomInfo || !wsRef.current) {
-            console.error('[Intercom] Start failed: Room not ready or WS disconnected');
-            log('无法推流: 房间未就绪或WS未连接', 'error');
+        console.log('[Intercom] startPublishing called. roomInfo:', roomInfo, 'isConnected:', isConnected);
+        if (!roomInfo || !isConnected) {
+            log(`无法推流: ${!roomInfo ? '房间未就绪' : ''} ${!isConnected ? 'WS未连接' : ''}`, 'error');
             return;
         }
 
@@ -423,9 +386,6 @@ const IntercomWindow = () => {
             // Check again
             if (!isTalkingRef.current) {
                 log('推流已取消', 'warn');
-                // Send nothing? or cleanup?
-                // If we don't send offer, server state is fine.
-                // Just cleanup PC
                 pc.close();
                 publishPcRef.current = null;
                 setIsPublishing(false);
@@ -434,14 +394,25 @@ const IntercomWindow = () => {
 
             const streamName = roomInfo.stream_name || roomInfo.room_id;
             const msg = {
-                type: "srs_publish_offer",
+                type: "srs_publish",
                 sdp: pc.localDescription?.sdp,
                 stream_name: streamName,
                 room_id: roomInfo.room_id,
                 group_id: roomInfo.group_id
             };
-            console.log('[Intercom] Sending srs_publish_offer:', msg);
-            wsRef.current.send(JSON.stringify(msg));
+            console.log('[Intercom] Sending srs_publish:', msg);
+            sendMessage(JSON.stringify(msg));
+            
+            // 主动告知服务器开始说话状态
+            const startSpeakingMsg = {
+                type: "voice_speaking",
+                group_id: roomInfo.group_id,
+                is_speaking: true
+            };
+            console.log('[Intercom] Sending voice_speaking: true');
+            sendMessage(JSON.stringify(startSpeakingMsg));
+            
+            log('发送推流请求并更新说话状态...', 'info');
 
         } catch (e: any) {
             console.error('[Intercom] Push Stream Error:', e);
@@ -452,8 +423,7 @@ const IntercomWindow = () => {
     };
 
     const stopPublishing = () => {
-        console.log('[Intercom] stopPublishing triggered. isTalking:', isTalkingRef.current);
-        if (!isTalkingRef.current) return; // Ignore redundant stops
+        if (!isTalkingRef.current) return;
 
         log('停止推流', 'info');
         setIsPublishing(false);
@@ -463,8 +433,17 @@ const IntercomWindow = () => {
             publishPcRef.current.close();
             publishPcRef.current = null;
         }
-        // Keep stream for reuse? Or stop? 
-        // Logic in HTML says keep it.
+
+        // Send voice_speaking: false to notify others we stopped
+        if (roomInfo) {
+            const stopMsg = {
+                type: "voice_speaking",
+                group_id: roomInfo.group_id,
+                is_speaking: false
+            };
+            console.log('[Intercom] Sending voice_speaking: false');
+            sendMessage(JSON.stringify(stopMsg));
+        }
     };
 
     const handleSrsAnswer = async (msg: any) => {

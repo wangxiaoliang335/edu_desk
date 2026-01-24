@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import { X, Image as ImageIcon, Upload, Check, Download, RefreshCw, Loader2, Calendar } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useDraggable } from '../../hooks/useDraggable';
-import { sendMessageWS } from '../../utils/websocket';
+import { useWebSocket } from '../../context/WebSocketContext';
 
 interface WallpaperModalProps {
     isOpen: boolean;
@@ -39,6 +39,7 @@ const DAYS: { key: DayOfWeek; label: string }[] = [
 ];
 
 const WallpaperModal = ({ isOpen, onClose, groupId }: WallpaperModalProps) => {
+    const { sendMessage } = useWebSocket();
     const [activeTab, setActiveTab] = useState<'class' | 'library'>('class');
     const [wallpapers, setWallpapers] = useState<Wallpaper[]>([]);
     const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -281,7 +282,7 @@ const WallpaperModal = ({ isOpen, onClose, groupId }: WallpaperModalProps) => {
                 };
                 const wsMessage = `to:${groupId}:${JSON.stringify(message)}`;
                 console.log('[WallpaperModal] Sending via WebSocket:', wsMessage);
-                sendMessageWS(wsMessage);
+                sendMessage(wsMessage);
 
                 await invoke('set_class_wallpaper', { groupId, wallpaperId: selectedId });
                 alert("已设置壁纸成功，已通知班级端");

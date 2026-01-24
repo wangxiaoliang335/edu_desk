@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Search, UserPlus, Users, School } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
-import { sendMessageWS } from '../../utils/websocket';
+import { useWebSocket } from '../../context/WebSocketContext';
 import { getTIMGroups, addMessageListener } from '../../utils/tim';
 
 interface SearchAddModalProps {
@@ -18,6 +18,7 @@ interface SearchResult {
 }
 
 const SearchAddModal = ({ isOpen, onClose, userInfo }: SearchAddModalProps) => {
+    const { sendMessage } = useWebSocket();
     const [activeTab, setActiveTab] = useState<SearchTab>('all');
     const [keyword, setKeyword] = useState('');
     const [results, setResults] = useState<SearchResult[]>([]);
@@ -301,13 +302,7 @@ const SearchAddModal = ({ isOpen, onClose, userInfo }: SearchAddModalProps) => {
         const wsMsg = `to:${teacher.teacher_unique_id}:${JSON.stringify(msgObj)} `;
 
         try {
-            // Using existing WS
-            // We need to import `sendWSMessage` from `websocket.ts`? 
-            // Or use Tauri event?
-            // The plan said "Reuse src/utils/websocket.ts".
-            // I'll import it.
-            sendMessageWS(wsMsg);
-            // alert("好友请求已发送"); // User requested to remove this "sent" confirmation
+            sendMessage(wsMsg);
         } catch (e) {
             console.error("Failed to send friend request", e);
             alert("发送失败");

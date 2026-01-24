@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Clock, Trash2, History, ChevronLeft, Bell, Check } from 'lucide-react';
 import { useDraggable } from '../../hooks/useDraggable';
-import { sendMessageWS } from '../../utils/websocket';
+import { useWebSocket } from '../../context/WebSocketContext';
 
 interface Props {
     isOpen: boolean;
@@ -38,6 +38,7 @@ const saveNotices = (classId: string, notices: Notice[]) => {
 };
 
 const NotificationModal = ({ isOpen, onClose, classId, groupId, groupName, className }: Props) => {
+    const { sendMessage } = useWebSocket();
     const { style, handleMouseDown } = useDraggable();
     const [showHistory, setShowHistory] = useState(false);
     const [notices, setNotices] = useState<Notice[]>([]);
@@ -76,7 +77,7 @@ const NotificationModal = ({ isOpen, onClose, classId, groupId, groupName, class
 
             const notificationObj: Record<string, string> = {
                 type: "notification",
-                class_id: classId,
+                class_id: classId ? (classId.endsWith('01') ? classId.slice(0, -2) : classId) : "",
                 content: newNotice.trim(),
                 content_text: "notification",
                 sender_name: senderName,
@@ -94,7 +95,7 @@ const NotificationModal = ({ isOpen, onClose, classId, groupId, groupName, class
                 : JSON.stringify(notificationObj);
 
             console.log('[NotificationModal] Sending:', wsMessage);
-            sendMessageWS(wsMessage);
+            sendMessage(wsMessage);
 
             // Save to history
             const newNoticeObj: Notice = {

@@ -2089,17 +2089,41 @@ async fn open_school_calendar_window(app: tauri::AppHandle) -> Result<(), String
         return Ok(());
     }
 
+    // Default position
+    let default_x = 100.0;
+    let default_y = 100.0;
+
     let builder =
         tauri::WebviewWindowBuilder::new(&app, window_label, tauri::WebviewUrl::App(url.into()))
-            .title("校历日程")
-            .inner_size(1200.0, 850.0)
+            .title("")
+            .inner_size(1000.0, 750.0) // 显著加宽，高度适当减小
+            .position(default_x, default_y)
             .resizable(true)
             .decorations(false)
             .transparent(true)
-            .shadow(true);
+            .shadow(false)
+            .skip_taskbar(true);
 
     match builder.build() {
-        Ok(_) => Ok(()),
+        Ok(window) => {
+            #[cfg(target_os = "windows")]
+            {
+                use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+                use windows::Win32::UI::WindowsAndMessaging::{SetWindowPos, HWND_BOTTOM, SWP_NOMOVE, SWP_NOSIZE, SWP_NOACTIVATE};
+                use windows::Win32::Foundation::HWND;
+
+                if let Ok(handle) = window.window_handle() {
+                    if let RawWindowHandle::Win32(handle) = handle.as_raw() {
+                        let hwnd = HWND(handle.hwnd.get());
+                        unsafe {
+                            // 初始设置为底层，且不夺取焦点
+                            let _ = SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                        }
+                    }
+                }
+            }
+            Ok(())
+        },
         Err(e) => Err(format!("Failed to create window: {}", e)),
     }
 }

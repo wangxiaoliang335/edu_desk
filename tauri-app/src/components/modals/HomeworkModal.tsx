@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, BookOpen, Send, Clock, Trash2 } from 'lucide-react';
 import { useDraggable } from '../../hooks/useDraggable';
-import { sendMessageWS } from '../../utils/websocket';
+import { useWebSocket } from '../../context/WebSocketContext';
 
 interface HomeworkModalProps {
     isOpen: boolean;
@@ -39,6 +39,7 @@ const savePublishedHomework = (classId: string, homework: PublishedHomework[]) =
 };
 
 const HomeworkModal = ({ isOpen, onClose, classId, groupId, groupName, teachSubjects, onPublished }: HomeworkModalProps) => {
+    const { sendMessage } = useWebSocket();
     const [subject, setSubject] = useState("");
     const [content, setContent] = useState("");
     const [sending, setSending] = useState(false);
@@ -128,7 +129,7 @@ const HomeworkModal = ({ isOpen, onClose, classId, groupId, groupName, teachSubj
             // Build homework message
             const homeworkObj: Record<string, string> = {
                 type: "homework",
-                class_id: classId,
+                class_id: classId ? (classId.endsWith('01') ? classId.slice(0, -2) : classId) : "",
                 subject: subject,
                 content: content.trim(),
                 date: date,
@@ -152,7 +153,7 @@ const HomeworkModal = ({ isOpen, onClose, classId, groupId, groupName, teachSubj
             const wsMessage = `to:${groupId}:${JSON.stringify(homeworkObj)}`;
 
             console.log('[HomeworkModal] Sending:', wsMessage);
-            sendMessageWS(wsMessage);
+            sendMessage(wsMessage);
 
             // Save to published list
             const newHomework: PublishedHomework = {

@@ -117,6 +117,7 @@ const DailySchedule = ({ classId, onPrepareClass, onPostEvaluation }: Props) => 
                         times.forEach((time: string, rowIndex: number) => {
                             const cell = cells.find((c: any) => c.row_index === rowIndex && c.col_index === todayColIndex);
                             let subject = cell ? (cell.course_name || cell.subject || "") : "";
+                            subject = subject.trim();
 
                             // Extract special subject names from time field (e.g. "早读\n7:00-7:40" -> subject="早读")
                             const specialMatch = time.match(/(早读|午休|眼保健操|课间操|班会|大课间|课服\d*|晚自习\d*)/);
@@ -203,6 +204,7 @@ const DailySchedule = ({ classId, onPrepareClass, onPostEvaluation }: Props) => 
                                 times.forEach((time: string, rowIndex: number) => {
                                     const cell = cells.find((c: any) => c.row_index === rowIndex && c.col_index === todayColIndex);
                                     let subject = cell ? (cell.course_name || cell.subject || "") : "";
+                                    subject = subject.trim();
 
                                     const specialMatch = time.match(/(早读|午休|眼保健操|课间操|班会|大课间|课服\d*|晚自习\d*)/);
                                     if (!subject && specialMatch) {

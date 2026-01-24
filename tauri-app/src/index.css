@@ -14,8 +14,11 @@
 }
 
 html,
-body {
-  @apply bg-paper text-ink-600 w-full h-full overflow-hidden m-0 p-0;
+body,
+#root {
+  background: transparent !important;
+  background-color: transparent !important;
+  @apply text-ink-600 w-full h-full overflow-hidden m-0 p-0;
 }
 
 #root {

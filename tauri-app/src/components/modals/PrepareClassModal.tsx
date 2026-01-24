@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Bookmark, Send } from 'lucide-react';
 import { useDraggable } from '../../hooks/useDraggable';
-import { sendMessageWS } from '../../utils/websocket';
+import { useWebSocket } from '../../context/WebSocketContext';
 
 interface Props {
     isOpen: boolean;
@@ -16,6 +16,7 @@ const getCacheKey = (classId: string, subject: string, time: string) =>
     `prepare_class_${classId}_${subject}_${time}`;
 
 const PrepareClassModal = ({ isOpen, onClose, subject, time, classId, groupId }: Props) => {
+    const { sendMessage } = useWebSocket();
     const { style, handleMouseDown } = useDraggable();
     const [content, setContent] = useState("");
     const [sending, setSending] = useState(false);
@@ -78,8 +79,8 @@ const PrepareClassModal = ({ isOpen, onClose, subject, time, classId, groupId }:
             // Build message object according to server protocol
             const messageObj: Record<string, string> = {
                 type: "prepare_class",
-                class_id: classId,
-                subject: subject,
+                class_id: classId ? (classId.endsWith('01') ? classId.slice(0, -2) : classId) : "",
+                subject: subject.trim(),
                 content: content.trim(),
                 date: dateStr,
                 time: timeStr,
@@ -94,7 +95,7 @@ const PrepareClassModal = ({ isOpen, onClose, subject, time, classId, groupId }:
             const wsMessage = `to:${groupId}:${JSON.stringify(messageObj)}`;
 
             console.log('[PrepareClassModal] Sending:', wsMessage);
-            sendMessageWS(wsMessage);
+            sendMessage(wsMessage);
 
             localStorage.setItem(getCacheKey(classId, subject, time), content.trim());
             onClose();

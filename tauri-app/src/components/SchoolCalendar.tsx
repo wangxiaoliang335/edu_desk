@@ -1,6 +1,6 @@
 
 import { useRef, useState, useEffect, useMemo } from 'react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getCurrentWindow, LogicalPosition, LogicalSize } from '@tauri-apps/api/window';
 import { format, addDays, getMonth, isSameDay, addWeeks, startOfWeek } from 'date-fns';
 import {
     SchoolEvent,
@@ -9,7 +9,7 @@ import {
     formatDateKey
 } from '../utils/schoolEvents';
 import * as XLSX from 'xlsx';
-import { Upload, X, Trash2, Plus, FileText, Check, AlertCircle, Info, Calendar as CalendarIcon, Tag } from 'lucide-react';
+import { Upload, X, Trash2, Plus, FileText, Check, AlertCircle, Info, Calendar as CalendarIcon, Tag, ZoomIn, ZoomOut, Minimize2, Star, Gift, GraduationCap, Heart } from 'lucide-react';
 import '../styles/calendar.css';
 
 interface SchoolCalendarProps {
@@ -23,32 +23,215 @@ const SchoolCalendar = ({ onClose }: SchoolCalendarProps) => {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [eventInput, setEventInput] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [scale, setScale] = useState<number>(() => {
+        const saved = localStorage.getItem('school_calendar_scale');
+        return saved ? parseFloat(saved) : 1.4; // 默认缩放进一步加大
+    });
+    const [specialIcons, setSpecialIcons] = useState<Record<string, string>>(() => {
+        const saved = localStorage.getItem('school_calendar_special_icons');
+        return saved ? JSON.parse(saved) : {};
+    });
 
-    // Default semester logic
     const [semesterStartDate] = useState<Date>(() => {
         const now = new Date();
-        const month = now.getMonth();
         const year = now.getFullYear();
-        if (month >= 1 && month < 7) {
-            return startOfWeek(new Date(year, 1, 15), { weekStartsOn: 1 });
+        const month = now.getMonth() + 1;
+        
+        if (month >= 9 || month === 1) {
+            // 第一学期（秋季）：9月1日左右开学
+            const startYear = month === 1 ? year - 1 : year;
+            return startOfWeek(new Date(startYear, 8, 1), { weekStartsOn: 1 });
         } else {
-            if (month === 0) return startOfWeek(new Date(year - 1, 8, 1), { weekStartsOn: 1 });
-            return startOfWeek(new Date(year, 8, 1), { weekStartsOn: 1 });
+            // 第二学期（春季）：2月16日左右开学
+            return startOfWeek(new Date(year, 1, 16), { weekStartsOn: 1 });
         }
     });
 
-    const [semesterWeeks] = useState(22);
+    const [semesterWeeks] = useState(24); // 增加到24周，确保覆盖寒暑假开始
+
+    const monthColors: Record<number, string> = {
+        2: 'bg-[#fce7f3]', // Feb - Light Pink
+        3: 'bg-[#fef9c3]', // Mar - Light Yellow
+        4: 'bg-[#ffedd5]', // Apr - Light Orange
+        5: 'bg-[#f0fdf4]', // May - Light Green
+        6: 'bg-[#f0f9ff]', // Jun - Light Blue
+        7: 'bg-[#fef9c3]', // Jul - Light Yellow
+    };
+
+    const getMonthColor = (month: number) => {
+        return monthColors[month] || 'bg-white';
+    };
+
+    const monthBgColors: Record<number, string> = {
+        1: '#dbeafe', // Jan - Light Blue
+        2: '#fce7f3', // Feb - Light Pink
+        3: '#fef9c3', // Mar - Light Yellow
+        4: '#e9d5ff', // Apr - Light Purple
+        5: '#dcfce7', // May - Light Green
+        6: '#ffe4e6', // Jun - Light Rose
+        7: '#dbeafe', // Jul - Light Blue
+        8: '#fef3c7', // Aug - Light Amber
+        9: '#e0f2fe', // Sep - Light Sky
+        10: '#fde68a', // Oct - Light Gold
+        11: '#e5e7eb', // Nov - Light Gray
+        12: '#f1f5f9', // Dec - Light Slate
+    };
+
+    const getMonthBg = (month: number) => {
+        return monthBgColors[month] || '#ffffff';
+    };
+
+    // 中文数字转换
+    const toChineseNum = (n: number) => {
+        const chars = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十'];
+        return chars[n] || n;
+    };
+
+    const getAcademicYearLabel = (date: Date) => {
+        const year = date.getFullYear();
+        const month = date.getMonth() + 1;
+        // Typically Sep–Jan belongs to the "first semester" of the academic year
+        if (month >= 9 || month === 1) {
+            const startYear = month === 1 ? year - 1 : year;
+            return `${startYear}-${startYear + 1}学年度第一学期`;
+        }
+        // Feb–Jul belongs to the "second semester"
+        return `${year - 1}-${year}学年度第二学期`;
+    };
+
+    const getSemesterSeason = (date: Date) => {
+        const month = date.getMonth() + 1;
+        if (month >= 2 && month <= 7) return '春季';
+        return '秋季';
+    };
+
+    // 保存缩放比例
+    useEffect(() => {
+        localStorage.setItem('school_calendar_scale', scale.toString());
+    }, [scale]);
+
+    // 保存特殊图标
+    useEffect(() => {
+        localStorage.setItem('school_calendar_special_icons', JSON.stringify(specialIcons));
+    }, [specialIcons]);
+
+    // 恢复窗口位置和大小
+    useEffect(() => {
+        const restoreWindowState = async () => {
+            try {
+                const window = getCurrentWindow();
+                const saved = localStorage.getItem('school_calendar_window_state');
+                if (saved) {
+                    const state = JSON.parse(saved);
+                    if (state.x !== undefined && state.y !== undefined) {
+                        await window.setPosition(new LogicalPosition(state.x, state.y));
+                    }
+                    if (state.width !== undefined && state.height !== undefined) {
+                        await window.setSize(new LogicalSize(state.width, state.height));
+                    }
+                }
+
+                // 监听窗口位置和大小变化，自动保存
+                const unlistenPosition = await window.listen('tauri://move', async (event: any) => {
+                    const pos = event.payload;
+                    const size = await window.innerSize();
+                    localStorage.setItem('school_calendar_window_state', JSON.stringify({
+                        x: pos.x,
+                        y: pos.y,
+                        width: size.width,
+                        height: size.height
+                    }));
+                });
+
+                const unlistenSize = await window.listen('tauri://resize', async (event: any) => {
+                    const size = event.payload;
+                    const pos = await window.outerPosition();
+                    localStorage.setItem('school_calendar_window_state', JSON.stringify({
+                        x: pos.x,
+                        y: pos.y,
+                        width: size.width,
+                        height: size.height
+                    }));
+                });
+
+                return () => {
+                    unlistenPosition();
+                    unlistenSize();
+                };
+            } catch (err) {
+                console.error('Failed to restore window state:', err);
+            }
+        };
+
+        restoreWindowState();
+    }, []);
+
+    // 鼠标滚轮缩放
+    useEffect(() => {
+        const handleWheel = (e: WheelEvent) => {
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                const delta = e.deltaY > 0 ? -0.1 : 0.1;
+                setScale(prev => Math.max(0.5, Math.min(2.0, prev + delta)));
+            }
+        };
+
+        window.addEventListener('wheel', handleWheel, { passive: false });
+        return () => window.removeEventListener('wheel', handleWheel);
+    }, []);
 
     useEffect(() => {
         const loaded = loadEvents();
-        // Simple deduplication by date + title
-        const uniqueEvents = loaded.filter((event, index, self) =>
-            index === self.findIndex((t) => (
-                t.date === event.date && t.title === event.title
-            ))
-        );
-        setEvents(uniqueEvents);
-    }, []);
+        if (loaded.length === 0) {
+            // Add default remarks from the image
+            const defaultRemarks = [
+                "开学资料准备，学生报到",
+                "开学啦！拒绝焦虑",
+                "假期两天续命ing",
+                "三月，请对我好一点！",
+                "埋头苦干！",
+                "渐入佳境~",
+                "喝杯奶茶舒缓情绪！",
+                "再坚持一下",
+                "连休三天！",
+                "漫漫长路，调整心态！",
+                "期中复习~",
+                "记得调休！",
+                "欧耶！连休五天！",
+                "埋头苦干！",
+                "继续保持好心情！",
+                "坚持就是胜利！",
+                "期待端午！",
+                "你好，6月！",
+                "收拾收拾，准备复习！",
+                "放弃助人情结",
+                "尊重他人命运",
+                "熬过周末~加油！",
+                "快乐暑假来啦！！"
+            ];
+            
+            const initialEvents: SchoolEvent[] = defaultRemarks.map((remark, index) => {
+                const weekStartDate = addWeeks(semesterStartDate, index);
+                const key = formatDateKey(weekStartDate);
+                return {
+                    id: `wr-default-${index}`,
+                    date: key,
+                    title: `WEEKLY_REMARK:${remark}`,
+                    type: 'remark'
+                };
+            });
+            setEvents(initialEvents);
+            saveEvents(initialEvents);
+        } else {
+            // Simple deduplication by date + title
+            const uniqueEvents = loaded.filter((event, index, self) =>
+                index === self.findIndex((t) => (
+                    t.date === event.date && t.title === event.title
+                ))
+            );
+            setEvents(uniqueEvents);
+        }
+    }, [semesterStartDate]);
 
     useEffect(() => {
         const fetchHolidays = async () => {
@@ -272,182 +455,154 @@ const SchoolCalendar = ({ onClose }: SchoolCalendarProps) => {
         saveEvents(updated);
     };
 
+    const [isPinned, setIsPinned] = useState(() => {
+        return localStorage.getItem('school_calendar_pinned') === 'true';
+    });
+
+    // Handle Pinning
+    useEffect(() => {
+        const win = getCurrentWindow();
+        win.setAlwaysOnTop(isPinned);
+        localStorage.setItem('school_calendar_pinned', isPinned.toString());
+    }, [isPinned]);
+
     return (
         <div
-            className="flex flex-col bg-paper h-screen w-screen overflow-hidden text-zinc-700 font-sans select-none relative"
+            className="flex flex-col bg-transparent h-full w-full overflow-hidden text-zinc-800 font-sans select-none relative p-0 rounded-none border-none shadow-none"
             onContextMenu={(e) => e.preventDefault()}
         >
-            {/* Background Texture Overlay */}
-            <div className="absolute inset-0 pointer-events-none opacity-20 z-0 bg-[url('https://www.transparenttextures.com/patterns/silk.png')]"></div>
+            {/* Background Image / Pattern - 模拟图二效果 */}
+            <div className="absolute inset-0 z-0 opacity-20 pointer-events-none bg-[#7eb0d5]" style={{ 
+                backgroundImage: `radial-gradient(#1e3a8a 1px, transparent 1px)`,
+                backgroundSize: '30px 30px'
+            }}></div>
 
-            {/* Header */}
-            <div
+            {/* 整个顶部作为拖拽区域 */}
+            <div 
                 data-tauri-drag-region
-                className="h-20 px-8 flex items-center justify-between shrink-0 bg-white/70 backdrop-blur-xl z-50 cursor-move border-b border-stone-200/50 shadow-sm"
+                className="pt-6 pb-4 flex flex-col items-center justify-center shrink-0 cursor-move relative z-10"
             >
-                <div className="flex items-center gap-5 pointer-events-none">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-400 to-red-500 text-white flex items-center justify-center shadow-lg shadow-orange-200 animate-pulse-subtle">
-                        <CalendarIcon size={28} />
-                    </div>
-                    <div className="flex flex-col">
-                        <span className="text-2xl font-black text-stone-800 tracking-tight leading-none">校历日程</span>
-                        <span className="text-[10px] font-bold text-stone-400 mt-1.5 uppercase tracking-[0.2em]">教师个人教学规划</span>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-4 relative z-50 bg-stone-100/50 p-1.5 rounded-2xl border border-stone-200/50" onMouseDown={(e) => e.stopPropagation()}>
-                    <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".xlsx, .xls" className="hidden" />
-                    <button
-                        onClick={handleImportClick}
-                        className="flex items-center gap-2 bg-white hover:bg-orange-50 px-5 py-2 rounded-xl transition-all border border-stone-200 shadow-sm hover:shadow-md text-stone-600 font-bold text-sm group"
-                    >
-                        <Upload size={16} className="text-orange-500 group-hover:scale-110 transition-transform" /> 导入
-                    </button>
-                    <button
-                        onClick={handleClose}
-                        className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-red-50 text-stone-400 hover:text-red-500 transition-all cursor-pointer group"
-                    >
-                        <X size={20} className="group-hover:rotate-90 transition-transform duration-300" />
-                    </button>
+                <h1 data-tauri-drag-region className="text-6xl font-black text-[#1e3a8a] mb-2 tracking-[0.5em] ml-[0.5em] drop-shadow-sm">校历</h1>
+                <div className="text-[14px] font-black text-[#1e3a8a]/90 tracking-widest bg-white/30 px-4 py-1 rounded-full backdrop-blur-sm">
+                    {getAcademicYearLabel(semesterStartDate)}（{getSemesterSeason(semesterStartDate)}）教师工作日历
                 </div>
             </div>
 
-            {/* Table Content */}
-            <div className="flex-1 overflow-auto custom-scrollbar bg-stone-50/20 z-10">
-                <div className="min-w-full inline-block align-middle pb-12">
-                    <table className="min-w-full bg-transparent table-fixed border-separate border-spacing-0">
-                        <thead className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl shadow-sm">
-                            <tr className="text-stone-400 text-[10px] font-black uppercase tracking-[0.15em]">
-                                <th className="py-5 w-20 text-center border-b border-stone-100 bg-stone-50/30">月份</th>
-                                <th className="py-5 w-16 text-center border-b border-stone-100 bg-stone-50/30">周次</th>
-                                {['周一', '周二', '周三', '周四', '周五', '周六', '周日'].map((d, i) => (
-                                    <th key={d} className={`py-5 w-[11%] text-left pl-5 border-b border-stone-100 bg-white/50 ${i >= 5 ? 'text-red-400' : ''}`}>{d}</th>
+            {/* 内容容器 - 移除边距和圆角以消除白色角 */}
+            <div className="flex-1 overflow-hidden flex flex-col relative z-10">
+                <div className="flex-1 overflow-auto custom-scrollbar p-4" style={{ transform: `scale(${scale})`, transformOrigin: 'top center' }}>
+                    <table className="w-full border-collapse border-2 border-[#1e3a8a]/30 text-base bg-white/90 shadow-2xl">
+                        <thead>
+                            <tr className="bg-zinc-100">
+                                <th className="border border-zinc-400 w-14 text-center py-3 leading-tight bg-zinc-200">
+                                    <div className="text-[11px]">星 期</div>
+                                    <div className="text-[11px]">周 月</div>
+                                    <div className="text-[11px]">次 日</div>
+                                </th>
+                                {['一', '二', '三', '四', '五', '六', '日'].map(d => (
+                                    <th key={d} className="border border-zinc-400 py-3 text-center font-bold text-base">{d}</th>
                                 ))}
-                                <th className="py-5 px-6 text-left border-b border-stone-100 w-auto bg-amber-50/20">周备注</th>
+                                <th className="border border-zinc-400 py-4 text-center font-bold w-64 bg-zinc-200 text-[14px]">备 注</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-stone-100/50">
-                            {calendarRows.map((row, rowIndex) => {
-                                return (
-                                    <tr key={rowIndex} className="group transition-colors bg-white hover:bg-stone-50">
-                                        {rowSpans[rowIndex] > 0 && (
+                        <tbody>
+                            {calendarRows.map((row, rowIndex) => (
+                                <tr key={rowIndex} className="h-[70px]">
+                                    <td className="border border-zinc-400 text-center font-bold bg-zinc-50 w-16 text-lg">
+                                        {toChineseNum(row.weekNumber)}
+                                    </td>
+                                    {row.days.map((day, idx) => {
+                                        const { events: dayEvents, holiday } = getCellContent(day);
+                                        const displayEvents = dayEvents.filter(e => !e.title.startsWith("WEEKLY_REMARK:"));
+                                        const isToday = isSameDay(day, new Date());
+                                        const isMonthStart = day.getDate() === 1 || (rowIndex === 0 && idx === 0);
+                                        // 强化节假日判断：API数据优先，其次判断固定节日
+                                        const holidayName = holiday?.name;
+                                        const isNationalHoliday = holiday?.type === 2 || 
+                                                        (day.getMonth() === 9 && day.getDate() >= 1 && day.getDate() <= 7) || // 国庆
+                                                        (day.getMonth() === 0 && day.getDate() === 1); // 元旦
+                                        const isWeekend = idx >= 5;
+                                        const isCompensatoryWorkday = holiday?.type === 1; // 调休补班
+
+                                        const dateDisplay = isMonthStart 
+                                            ? `${day.getMonth() + 1}/${day.getDate()}`
+                                            : day.getDate();
+
+                                        // 统一放假颜色逻辑：法定节假日或周末，且不是补班
+                                        const cellBg = (isNationalHoliday || isWeekend) && !isCompensatoryWorkday
+                                            ? '#fde68a' // 修改为淡黄色（与周六日一致）
+                                            : getMonthBg(day.getMonth() + 1);
+
+                                        const specialIconType = specialIcons[formatDateKey(day)];
+                                        const SpecialIcon = specialIconType === 'star' ? Star :
+                                                          specialIconType === 'gift' ? Gift :
+                                                          specialIconType === 'graduation' ? GraduationCap :
+                                                          specialIconType === 'heart' ? Heart : null;
+
+                                        return (
                                             <td
-                                                rowSpan={rowSpans[rowIndex]}
-                                                className="bg-white align-top pt-8 border-r border-stone-100 relative"
+                                                key={idx}
+                                                className={`
+                                                    border border-zinc-400 text-center relative p-0 group
+                                                    ${isToday ? 'ring-2 ring-inset ring-blue-500 z-10' : ''}
+                                                    hover:bg-zinc-50 transition-colors cursor-pointer
+                                                `}
+                                                style={{ backgroundColor: cellBg }}
+                                                onClick={() => handleDateClick(day)}
                                             >
-                                                {/* Timeline connector */}
-                                                <div className="absolute right-0 top-0 bottom-0 w-[2px] bg-stone-100 hidden"></div>
-
-                                                <div className="sticky top-24 flex flex-col items-center justify-center min-h-[4rem] z-30 relative w-full">
-                                                    {/* Background Watermark */}
-                                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-5xl font-black text-stone-100 rotate-90 select-none pointer-events-none -z-10 opacity-60 font-serif translate-x-2">{row.month}</div>
-
-                                                    {/* Foreground Month */}
-                                                    <div className="w-10 h-10 rounded-full border-2 border-stone-800 flex items-center justify-center bg-white z-10 shadow-sm">
-                                                        <span className="text-xl font-bold text-stone-800 font-serif leading-none pt-0.5">{row.month}</span>
-                                                    </div>
-                                                    <div className="text-[10px] font-bold text-stone-400 mt-1 uppercase tracking-widest z-10">月</div>
-                                                </div>
-                                            </td>
-                                        )}
-
-                                        <td className="align-middle text-center bg-stone-50/30 border-r border-stone-100 border-dashed">
-                                            <div className="inline-flex w-7 h-7 rounded-full bg-stone-200/50 items-center justify-center text-sm font-bold text-stone-500 font-mono">
-                                                {row.weekNumber}
-                                            </div>
-                                        </td>
-
-                                        {row.days.map((day, idx) => {
-                                            const { events: dayEvents, holiday } = getCellContent(day);
-                                            const isWeekend = idx >= 5;
-                                            const isToday = isSameDay(day, new Date());
-                                            const isHoliday = holiday && holiday.type === 2;
-                                            const isWorkday = holiday && holiday.type === 1;
-
-                                            return (
-                                                <td
-                                                    key={idx}
-                                                    className={`
-                                                        align-top p-2 h-36 border-r border-stone-50 last:border-0 transition-colors
-                                                        ${isWeekend ? 'bg-orange-50/10' : ''}
-                                                        ${isToday ? 'bg-blue-50/40 ring-1 ring-inset ring-blue-200' : ''}
-                                                    `}
-                                                >
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <span className={`
-                                                             text-lg font-black w-9 h-9 flex items-center justify-center rounded-2xl transition-all
-                                                             ${isToday ? 'bg-blue-500 text-white shadow-lg shadow-blue-400 animate-today-pulse scale-110' :
-                                                                isHoliday ? 'text-red-500' :
-                                                                    isWeekend ? 'text-stone-300' : 'text-stone-700'}
-                                                         `}>
-                                                            {day.getDate()}
+                                                <div className="flex flex-col items-center justify-center min-h-[70px] py-2">
+                                                    <span className={`font-bold ${isMonthStart ? 'text-[14px]' : 'text-xl'} ${isToday ? 'text-blue-600' : ''}`}>
+                                                        {dateDisplay}
+                                                    </span>
+                                                    {(holidayName || isNationalHoliday) && (
+                                                        <span className="text-[11px] text-red-600 font-bold scale-90 leading-none mt-1">
+                                                            {holidayName || (day.getMonth() === 9 ? '国庆节' : '元旦')}
                                                         </span>
-
-                                                        <div className="flex gap-1.5">
-                                                            {holiday && (
-                                                                <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg border shadow-sm ${isHoliday ? 'bg-red-50 text-red-500 border-red-100' :
-                                                                    isWorkday ? 'bg-stone-100 text-stone-600 border-stone-200' : 'bg-stone-50 text-stone-400 border-stone-100'
-                                                                    }`}>
-                                                                    {holiday.name}
-                                                                </span>
-                                                            )}
-                                                            <div className="w-6 h-6 rounded-lg border border-transparent group-hover:bg-stone-100 group-hover:border-stone-200 flex items-center justify-center text-stone-300 transition-colors cursor-pointer" onClick={(e) => { e.stopPropagation(); handleDateClick(day); }}>
-                                                                <Plus size={14} />
-                                                            </div>
+                                                    )}
+                                                    {SpecialIcon && (
+                                                        <div className="mt-1">
+                                                            <SpecialIcon size={16} className={
+                                                                specialIconType === 'star' ? 'text-yellow-500' :
+                                                                specialIconType === 'gift' ? 'text-pink-500' :
+                                                                specialIconType === 'graduation' ? 'text-blue-500' :
+                                                                'text-red-500'
+                                                            } />
                                                         </div>
-                                                    </div>
-
-                                                    <div className="flex flex-col gap-1.5 px-0.5" onClick={() => handleDateClick(day)}>
-                                                        {dayEvents.filter(e => !e.title.startsWith("WEEKLY_REMARK:")).map((evt, evtIdx) => {
-                                                            const isImportant = /节|假|纪念日|开学|典礼|周年|测试|考/.test(evt.title);
-                                                            const isHolidayType = evt.type === 'holiday';
-                                                            const shouldUseGlow = isHolidayType || isImportant;
-
-                                                            return (
-                                                                <div
-                                                                    key={evt.id}
-                                                                    className={`
-                                                                        px-2.5 py-1.5 rounded-lg text-xs font-bold border break-words shadow-sm leading-snug
-                                                                        transition-all duration-300 hover:scale-105 hover:shadow-md cursor-default
-                                                                        animate-fade-in-up
-                                                                        ${shouldUseGlow ? 'bg-red-50 border-red-100 text-red-700 animate-holiday-glow ring-1 ring-red-100' :
-                                                                            evt.type === 'exam' ? 'bg-purple-50 border-purple-100 text-purple-700' :
-                                                                                'bg-white border-stone-200 text-stone-600 hover:border-blue-300 hover:text-blue-600'}
-                                                                    `}
-                                                                    style={{ animationDelay: `${evtIdx * 100}ms` }}
-                                                                    title={evt.title}
-                                                                >
-                                                                    {evt.title}
+                                                    )}
+                                                    {displayEvents.length > 0 && (
+                                                        <div className="absolute top-2 right-2 w-2.5 h-2.5 rounded-full bg-blue-500 border border-white shadow-sm"></div>
+                                                    )}
+                                                </div>
+                                                
+                                                {/* Hover Tooltip - 字体加大 */}
+                                                {displayEvents.length > 0 && (
+                                                    <div className="absolute invisible group-hover:visible z-[100] bottom-full left-1/2 -translate-x-1/2 mb-3 pointer-events-none animate-in fade-in slide-in-from-bottom-1">
+                                                        <div className="bg-zinc-900/95 backdrop-blur-md text-white text-[18px] font-bold py-3 px-5 rounded-2xl shadow-2xl whitespace-nowrap border border-white/20">
+                                                            {displayEvents.map((e, i) => (
+                                                                <div key={e.id} className="flex items-center gap-3 mb-2 last:mb-0">
+                                                                    <div className="w-3 h-3 rounded-full bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.6)]"></div>
+                                                                    {e.title}
                                                                 </div>
-                                                            );
-                                                        })}
+                                                            ))}
+                                                        </div>
+                                                        <div className="w-4 h-4 bg-zinc-900 rotate-45 absolute -bottom-2 left-1/2 -translate-x-1/2 border-r border-b border-white/20"></div>
                                                     </div>
-                                                </td>
-                                            );
-                                        })}
-
-                                        <td className="p-0 align-top relative bg-amber-50/10">
-                                            {/* Ruled Paper Lines */}
-                                            <div className="absolute inset-0 pointer-events-none ruled-paper opacity-50"></div>
-
-                                            <textarea
-                                                className="w-full h-full min-h-[9rem] bg-transparent resize-none border-none focus:ring-0 text-sm font-bold text-stone-600 placeholder-stone-300 rounded-none hover:bg-amber-50/20 focus:bg-amber-50/30 transition-colors p-5 pt-6 leading-[1.5rem] relative z-10"
-                                                placeholder="本周备忘录..."
-                                                spellCheck={false}
-                                                value={getWeeklyRemark(rowIndex)}
-                                                onChange={(e) => handleRemarkChange(rowIndex, e.target.value)}
-                                                onMouseDown={e => e.stopPropagation()}
-                                            />
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-
-                            <tr className="h-20">
-                                <td colSpan={10} className="text-center text-stone-300 text-xs py-8 tracking-widest uppercase">
-                                    - 学期结束 -
-                                </td>
-                            </tr>
+                                                )}
+                                            </td>
+                                        );
+                                    })}
+                                    <td className="border border-zinc-400 p-0 relative bg-white">
+                                        <textarea
+                                            className={`w-full h-full min-h-[70px] bg-transparent resize-none border-none focus:ring-0 text-[14px] p-3 leading-relaxed font-bold ${
+                                                /连休|休|假|暑假|寒假/.test(getWeeklyRemark(rowIndex)) ? 'text-red-500' : 'text-[#1e3a8a]'
+                                            }`}
+                                            value={getWeeklyRemark(rowIndex)}
+                                            onChange={(e) => handleRemarkChange(rowIndex, e.target.value)}
+                                            onMouseDown={e => e.stopPropagation()}
+                                        />
+                                    </td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 </div>
@@ -538,6 +693,67 @@ const SchoolCalendar = ({ onClose }: SchoolCalendarProps) => {
                                             </button>
                                         ))}
                                     </div>
+                                </div>
+                            </div>
+
+                            {/* Special Date Icon Selector */}
+                            <div className="bg-stone-50 rounded-[2rem] p-6 border border-stone-100 mt-4">
+                                <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] mb-4 block">特殊日期图标</label>
+                                <div className="flex gap-3">
+                                    {[
+                                        { type: 'star', label: '重要', icon: Star, color: 'text-yellow-500' },
+                                        { type: 'gift', label: '礼物', icon: Gift, color: 'text-pink-500' },
+                                        { type: 'graduation', label: '毕业', icon: GraduationCap, color: 'text-blue-500' },
+                                        { type: 'heart', label: '纪念', icon: Heart, color: 'text-red-500' }
+                                    ].map(item => {
+                                        const IconComponent = item.icon;
+                                        const dateKey = selectedDate ? formatDateKey(selectedDate) : '';
+                                        const isSelected = specialIcons[dateKey] === item.type;
+                                        return (
+                                            <button
+                                                key={item.type}
+                                                onClick={() => {
+                                                    if (selectedDate) {
+                                                        const dateKey = formatDateKey(selectedDate);
+                                                        if (isSelected) {
+                                                            // 移除图标
+                                                            const newIcons = { ...specialIcons };
+                                                            delete newIcons[dateKey];
+                                                            setSpecialIcons(newIcons);
+                                                        } else {
+                                                            // 设置图标
+                                                            setSpecialIcons({ ...specialIcons, [dateKey]: item.type });
+                                                        }
+                                                    }
+                                                }}
+                                                className={`flex-1 flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all
+                                                    ${isSelected 
+                                                        ? 'bg-white border-orange-300 shadow-md' 
+                                                        : 'bg-white border-stone-200 hover:border-stone-300 hover:shadow-sm'}
+                                                `}
+                                            >
+                                                <IconComponent size={24} className={isSelected ? item.color : 'text-stone-400'} />
+                                                <span className={`text-[10px] font-bold ${isSelected ? 'text-stone-700' : 'text-stone-400'}`}>
+                                                    {item.label}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                    <button
+                                        onClick={() => {
+                                            if (selectedDate) {
+                                                const dateKey = formatDateKey(selectedDate);
+                                                const newIcons = { ...specialIcons };
+                                                delete newIcons[dateKey];
+                                                setSpecialIcons(newIcons);
+                                            }
+                                        }}
+                                        className="flex-1 flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 border-stone-200 hover:border-stone-300 hover:shadow-sm bg-white transition-all"
+                                        title="清除图标"
+                                    >
+                                        <X size={24} className="text-stone-400" />
+                                        <span className="text-[10px] font-bold text-stone-400">清除</span>
+                                    </button>
                                 </div>
                             </div>
                         </div>

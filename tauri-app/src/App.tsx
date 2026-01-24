@@ -55,11 +55,6 @@ function MainApp() {
             setIsLoggedIn(true);
 
             if (fullInfo.teacher_unique_id) {
-              // Connect to WebSocket System
-              import('./utils/websocket').then(({ connectWS }) => {
-                connectWS(fullInfo.teacher_unique_id);
-              });
-
               localStorage.setItem('teacher_unique_id', fullInfo.teacher_unique_id);
               if (fullInfo.id_number) localStorage.setItem('id_number', fullInfo.id_number);
               if (fullInfo.name) localStorage.setItem('name', fullInfo.name);

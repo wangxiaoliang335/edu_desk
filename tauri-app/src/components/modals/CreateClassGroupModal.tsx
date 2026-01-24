@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Search, Users, User, Check } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
-import { sendMessageWS } from '../../utils/websocket';
+import { useWebSocket } from '../../context/WebSocketContext';
 import { getTIMGroups, checkGroupsExist, invalidateTIMGroupsCache } from '../../utils/tim';
 
 interface CreateClassGroupModalProps {
@@ -30,6 +30,7 @@ interface FriendItem {
 }
 
 const CreateClassGroupModal = ({ isOpen, onClose, onSuccess, userInfo }: CreateClassGroupModalProps) => {
+    const { sendMessage } = useWebSocket();
     const [searchTerm, setSearchTerm] = useState('');
 
     const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -262,7 +263,7 @@ const CreateClassGroupModal = ({ isOpen, onClose, onSuccess, userInfo }: CreateC
 
             console.log("[CreateClassGroup] Sending WS:", wsMessage);
             const msgStr = `to::${JSON.stringify(wsMessage)}`;
-            sendMessageWS(msgStr);
+            sendMessage(msgStr);
 
             const handleResponse = (e: any) => {
                 try {
